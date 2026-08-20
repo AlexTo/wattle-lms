@@ -1,0 +1,23 @@
+autoInstallPeers: true
+allowBuilds:
+  nx: true
+  '@swc/core': true
+  esbuild: true
+  sharp: true
+packages:
+  - packages/*
+onlyBuiltDependencies:
+  - '@swc/core'
+  - esbuild
+  - nx
+  - sharp
+catalogMode: strict
+catalog:
+  '@aws/nx-plugin': ^1.0.0-rc.73
+  nx: 23.1.1
+  '@nx/js': 23.1.1
+  '@nx/workspace': 23.1.1
+  typescript: ~6.0.3
+  '@biomejs/biome': 2.5.8
+  '@aws/nx-plugin-mcp': ^1.0.0-rc.73
+  husky: 9.1.7

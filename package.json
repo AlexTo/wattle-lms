@@ -1,0 +1,32 @@
+{
+  "name": "@lms/source",
+  "version": "0.0.0",
+  "license": "MIT",
+  "scripts": {
+    "dev": "nx run-many --target dev",
+    "build": "nx run-many --target build",
+    "lint": "nx run-many --target lint --configuration=fix",
+    "test": "nx run-many --target test --all",
+    "trivy": "nx run-many --target trivy --all",
+    "build:skip-lint": "nx run-many --target build --configuration=skip-lint",
+    "build:all": "nx run-many --target build --all",
+    "affected:all": "nx affected --target build",
+    "prepare": "husky"
+  },
+  "private": true,
+  "dependencies": {
+    "@aws/nx-plugin": "catalog:"
+  },
+  "devDependencies": {
+    "@aws/nx-plugin-mcp": "catalog:",
+    "@biomejs/biome": "catalog:",
+    "@nx/js": "catalog:",
+    "@nx/workspace": "catalog:",
+    "@swc/helpers": "~0.5.18",
+    "husky": "catalog:",
+    "nx": "catalog:",
+    "tslib": "^2.3.0",
+    "typescript": "catalog:"
+  },
+  "type": "module"
+}
