@@ -6,6 +6,8 @@ allowBuilds:
   sharp: true
 packages:
   - packages/*
+  - packages/databases/*
+  - packages/common/*
 onlyBuiltDependencies:
   - '@swc/core'
   - esbuild
@@ -21,3 +23,15 @@ catalog:
   '@biomejs/biome': 2.5.8
   '@aws/nx-plugin-mcp': ^1.0.0-rc.73
   husky: 9.1.7
+  vite: 8.2.1
+  vitest: 4.1.10
+  '@vitest/coverage-v8': 4.1.10
+  '@aws-sdk/client-dynamodb': 3.1111.0
+  tsx: 4.23.12
+  constructs: 10.8.1
+  aws-cdk-lib: 2.265.0
+  '@types/node': 26.2.0
+  electrodb: 3.9.3
+  '@aws-lambda-powertools/parameters': 2.34.0
+  '@aws-sdk/client-appconfigdata': 3.1111.0
+  '@types/aws-lambda': 8.10.162

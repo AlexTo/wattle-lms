@@ -1,0 +1,77 @@
+{
+  "name": "@lms/core-table",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/databases/core-table/src",
+  "projectType": "library",
+  "tags": [],
+  "metadata": {
+    "generator": "ts#dynamodb",
+    "ports": [8000],
+    "iac": "cdk"
+  },
+  "targets": {
+    "build": {
+      "dependsOn": ["lint", "compile", "test"]
+    },
+    "compile": {
+      "executor": "nx:run-commands",
+      "outputs": ["{workspaceRoot}/dist/{projectRoot}/tsc"],
+      "options": {
+        "command": "tsc --build tsconfig.lib.json",
+        "cwd": "{projectRoot}"
+      }
+    },
+    "format": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": ["biome"],
+      "options": {
+        "command": "biome format {projectRoot}"
+      },
+      "configurations": {
+        "fix": {
+          "command": "biome format --write {projectRoot}"
+        },
+        "skip-lint": {
+          "command": "node -e \"\""
+        }
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": ["biome"],
+      "dependsOn": ["format"],
+      "options": {
+        "command": "biome lint {projectRoot}"
+      },
+      "configurations": {
+        "fix": {
+          "command": "biome check --write {projectRoot}"
+        },
+        "skip-lint": {
+          "command": "node -e \"\""
+        }
+      }
+    },
+    "pull-image": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsx ../../common/scripts/src/dynamodb/pull-image.ts",
+        "cwd": "{projectRoot}"
+      }
+    },
+    "dev": {
+      "executor": "nx:run-commands",
+      "continuous": true,
+      "options": {
+        "commands": [
+          "tsx ../../common/scripts/src/dynamodb/start-container.ts",
+          "tsx ../../common/scripts/src/dynamodb/create-local-table.ts"
+        ],
+        "parallel": true,
+        "cwd": "{projectRoot}"
+      }
+    }
+  }
+}

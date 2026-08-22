@@ -2,9 +2,21 @@
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
   "analytics": false,
   "namedInputs": {
-    "default": ["{projectRoot}/**/*", "sharedGlobals"],
-    "production": ["default"],
-    "sharedGlobals": []
+    "default": [
+      "{projectRoot}/**/*",
+      "sharedGlobals",
+      {
+        "dependentTasksOutputFiles": "**/*",
+        "transitive": true
+      }
+    ],
+    "production": [
+      "default",
+      "!{projectRoot}/**/?(*.)+(spec|test).[jt]s?(x)?(.snap)",
+      "!{projectRoot}/tsconfig.spec.json"
+    ],
+    "sharedGlobals": [],
+    "biome": ["default", "{workspaceRoot}/biome.json"]
   },
   "plugins": [
     {
@@ -14,17 +26,44 @@
           "targetName": "typecheck"
         },
         "build": {
-          "targetName": "build",
+          "targetName": "compile",
           "configName": "tsconfig.lib.json",
           "buildDepsName": "build-deps",
           "watchDepsName": "watch-deps"
         }
       }
+    },
+    {
+      "plugin": "@nx/vitest",
+      "options": {
+        "testTargetName": "test",
+        "ciTargetName": "test-ci",
+        "testMode": "watch"
+      }
     }
   ],
   "targetDefaults": {
     "compile": {
-      "syncGenerators": ["@nx/js:typescript-sync", "@aws/nx-plugin:ts#sync"]
+      "cache": true,
+      "syncGenerators": ["@nx/js:typescript-sync", "@aws/nx-plugin:ts#sync"],
+      "inputs": ["default"]
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "inputs": ["default"]
+    },
+    "@nx/vitest:test": {
+      "cache": true,
+      "inputs": ["default", "^production"],
+      "configurations": {
+        "update-snapshot": {
+          "args": "--update"
+        }
+      }
+    },
+    "build": {
+      "cache": true,
+      "inputs": ["default"]
     }
   }
 }

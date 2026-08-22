@@ -1,0 +1,11 @@
+{
+  "name": "@lms/common-scripts",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "catalog:",
+    "tslib": "^2.3.0"
+  },
+  "devDependencies": {}
+}

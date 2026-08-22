@@ -1,0 +1,24 @@
+{
+  "runtimeConfigKey": "CoreTable",
+  "localDev": {
+    "port": 8000,
+    "tableName": "lms-core-table",
+    "image": "public.ecr.aws/aws-dynamodb-local/aws-dynamodb-local:latest",
+    "containerName": "lms-dynamodb",
+    "containerEngine": "docker"
+  },
+  "tableConfig": {
+    "globalSecondaryIndexes": [
+      {
+        "indexName": "gsi1pk-gsi1sk-index",
+        "partitionKey": "gsi1pk",
+        "sortKey": "gsi1sk"
+      },
+      {
+        "indexName": "gsi2pk-gsi2sk-index",
+        "partitionKey": "gsi2pk",
+        "sortKey": "gsi2sk"
+      }
+    ]
+  }
+}

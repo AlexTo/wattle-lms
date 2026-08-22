@@ -1,0 +1,14 @@
+{
+  "name": "@lms/common-constructs",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "aws-cdk-lib": "catalog:",
+    "constructs": "catalog:",
+    "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:"
+  }
+}

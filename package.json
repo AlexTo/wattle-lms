@@ -22,15 +22,22 @@
     "@biomejs/biome": "catalog:",
     "@commitlint/config-conventional": "^21.0.1",
     "@nx/js": "catalog:",
+    "@nx/vitest": "23.1.1",
     "@nx/workspace": "catalog:",
     "@swc/helpers": "~0.5.18",
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
     "commitizen": "4.3.2",
     "commitlint": "^21.0.1",
     "husky": "catalog:",
+    "jsdom": "^27.1.0",
     "lint-staged": "^17.0.5",
     "nx": "catalog:",
     "tslib": "^2.3.0",
-    "typescript": "catalog:"
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
   },
   "type": "module"
 }
