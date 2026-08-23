@@ -20,21 +20,26 @@ import type { StagesConfig } from './stages.types.js';
 
 export default {
   projects: {
-    // Example: map stages for a specific infra project
-    // 'packages/infra': {
-    //   stages: {
-    //     'my-app-dev': {
-    //       credentials: { type: 'profile', profile: 'dev-account' },
-    //       region: 'us-east-1',
-    //       // account is optional — if omitted, CDK infers from the profile
-    //     },
-    //     'my-app-prod': {
-    //       credentials: { type: 'assumeRole', assumeRole: 'arn:aws:iam::<account-id>:role/DeployRole' },
-    //       region: 'us-west-2',
-    //       account: '<account-id>',
-    //     },
-    //   },
-    // },
+    'packages/infra': {
+      stages: {
+        // No credentials/region set yet — deploys use your active AWS CLI
+        // credentials and CDK_DEFAULT_REGION until these are configured.
+        development: {
+          components: {
+            identity: { enableWaf: false, enableMfa: false },
+            coreApi: { enableWaf: false },
+            studentPortal: { enableWaf: false, enableKmsEncryption: false },
+          },
+        },
+        production: {
+          components: {
+            identity: { enableWaf: true, enableMfa: true },
+            coreApi: { enableWaf: true },
+            studentPortal: { enableWaf: true, enableKmsEncryption: true },
+          },
+        },
+      },
+    },
   },
   shared: {
     stages: {

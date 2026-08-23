@@ -33,16 +33,58 @@ export type AssumeRoleCredentials = {
 export type StageCredentials = ProfileCredentials | AssumeRoleCredentials;
 
 /**
+ * Per-stage settings for the Cognito user pool / identity construct.
+ */
+export type IdentityComponentConfig = {
+  /** Protect the Cognito user pool with AWS WAF */
+  enableWaf?: boolean;
+  /** Require MFA on the Cognito user pool */
+  enableMfa?: boolean;
+};
+
+/**
+ * Per-stage settings for the core API construct.
+ */
+export type CoreApiComponentConfig = {
+  /** Protect the API Gateway with AWS WAF */
+  enableWaf?: boolean;
+};
+
+/**
+ * Per-stage settings for the student portal static website construct.
+ */
+export type StudentPortalComponentConfig = {
+  /** Protect the CloudFront distribution with AWS WAF */
+  enableWaf?: boolean;
+  /** Use customer-managed KMS encryption instead of the cheaper S3-managed default */
+  enableKmsEncryption?: boolean;
+};
+
+/**
+ * Component-level settings consuming apps use to configure their constructs
+ * per stage, keyed by component name. Omitted components/flags fall back to
+ * whatever default the app itself chooses.
+ */
+export type StageComponents = {
+  identity?: IdentityComponentConfig;
+  coreApi?: CoreApiComponentConfig;
+  studentPortal?: StudentPortalComponentConfig;
+};
+
+/**
  * Configuration for a single CDK stage.
- * Includes credentials, region, and optionally account.
+ * Credentials/region/account are optional — omit them to fall back to the
+ * active AWS CLI/environment credentials (see resolveStage).
  */
 export type StageConfig = {
-  /** How to authenticate when deploying this stage */
-  credentials: StageCredentials;
-  /** AWS region for this stage (e.g., 'us-east-1') */
-  region: string;
+  /** How to authenticate when deploying this stage. Omit to use environment/CLI credentials. */
+  credentials?: StageCredentials;
+  /** AWS region for this stage (e.g., 'us-east-1'). Omit to use CDK_DEFAULT_REGION. */
+  region?: string;
   /** AWS account ID. If omitted, CDK infers it from the active credentials. */
   account?: string;
+  /** Component-level toggles for this stage */
+  components?: StageComponents;
 };
 
 /**

@@ -21,3 +21,14 @@ export function resolveStage(
   if (!shared && !project) return undefined;
   return { ...shared, ...project } as StageConfig;
 }
+
+/**
+ * Lists the stage names configured for a given project, so apps can
+ * instantiate one CDK Stage per entry instead of hardcoding each stage name.
+ *
+ * @param projectPath - Project path relative to workspace root (e.g., 'packages/infra')
+ * @returns Stage names defined under `projects[projectPath].stages`
+ */
+export function listStageNames(projectPath: string): string[] {
+  return Object.keys(config.projects?.[projectPath]?.stages ?? {});
+}

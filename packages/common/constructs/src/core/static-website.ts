@@ -18,7 +18,7 @@ import {
 } from 'aws-cdk-lib/aws-cloudfront';
 import { S3BucketOrigin } from 'aws-cdk-lib/aws-cloudfront-origins';
 import { Effect, PolicyStatement, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
-import { Key } from 'aws-cdk-lib/aws-kms';
+import { IKey, Key } from 'aws-cdk-lib/aws-kms';
 import {
   CfnDelivery,
   CfnDeliveryDestination,
@@ -74,6 +74,30 @@ export interface StaticWebsiteProps {
    * When provided, viewers are required to use TLS 1.2 or later.
    */
   readonly certificate?: ICertificate;
+  /**
+   * Whether to protect the CloudFront distribution with an AWS WAF Web ACL.
+   *
+   * @default true
+   */
+  readonly enableWaf?: boolean;
+  /**
+   * Server-side encryption for the website and distribution log buckets.
+   *
+   * @default BucketEncryption.KMS
+   */
+  readonly encryption?: BucketEncryption;
+  /**
+   * KMS key used to encrypt the website and distribution log buckets. Only used when `encryption` is
+   * `BucketEncryption.KMS`. When not provided, a new key is created.
+   */
+  readonly encryptionKey?: IKey;
+  /**
+   * Whether the automatically created KMS key has rotation enabled. Only applies when `encryption` is
+   * `BucketEncryption.KMS` and no `encryptionKey` is supplied.
+   *
+   * @default true
+   */
+  readonly enableKeyRotation?: boolean;
 }
 
 /**
@@ -97,17 +121,22 @@ export class StaticWebsite extends Construct {
       websiteName,
       domainNames,
       certificate,
+      enableWaf = true,
+      encryption = BucketEncryption.KMS,
+      encryptionKey,
+      enableKeyRotation = true,
     }: StaticWebsiteProps,
   ) {
     super(scope, id);
 
-    const websiteKey = new Key(this, 'WebsiteKey', {
-      enableKeyRotation: true,
-    });
+    const websiteKey: IKey | undefined =
+      encryption === BucketEncryption.KMS
+        ? (encryptionKey ?? new Key(this, 'WebsiteKey', { enableKeyRotation }))
+        : undefined;
 
     // Allow CloudWatch Logs to use the website key for server access log delivery.
     const stack = Stack.of(this);
-    websiteKey.addToResourcePolicy(
+    websiteKey?.addToResourcePolicy(
       new PolicyStatement({
         effect: Effect.ALLOW,
         principals: [
@@ -141,7 +170,7 @@ export class StaticWebsite extends Construct {
       enforceSSL: true,
       autoDeleteObjects: true,
       removalPolicy: RemovalPolicy.DESTROY,
-      encryption: BucketEncryption.KMS,
+      encryption,
       encryptionKey: websiteKey,
       objectOwnership: ObjectOwnership.BUCKET_OWNER_ENFORCED,
       publicReadAccess: false,
@@ -158,7 +187,7 @@ export class StaticWebsite extends Construct {
       accessLogs,
     );
     // Web ACL
-    const wafStack = new CloudfrontWebAcl(this, 'waf');
+    const wafStack = enableWaf ? new CloudfrontWebAcl(this, 'waf') : undefined;
 
     // Bucket holding CloudFront standard access logs. CloudFront delivers its
     // own logs to S3 only, so this bucket is retained; its S3 server access
@@ -167,7 +196,7 @@ export class StaticWebsite extends Construct {
       enforceSSL: true,
       autoDeleteObjects: true,
       removalPolicy: RemovalPolicy.DESTROY,
-      encryption: BucketEncryption.KMS,
+      encryption,
       encryptionKey: websiteKey,
       objectOwnership: ObjectOwnership.BUCKET_OWNER_PREFERRED,
       publicReadAccess: false,
@@ -220,7 +249,7 @@ export class StaticWebsite extends Construct {
       this,
       'CloudfrontDistribution',
       {
-        webAclId: wafStack.wafArn,
+        webAclId: wafStack?.wafArn,
         enableLogging: true,
         logBucket: logBucket,
         ...(certificate
