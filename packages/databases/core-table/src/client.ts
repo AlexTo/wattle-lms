@@ -1,7 +1,7 @@
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { getAppConfig } from '@aws-lambda-powertools/parameters/appconfig';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { readFileSync } from 'fs';
-import { join, dirname } from 'path';
+import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 // Generated: must match runtimeConfigKey in config.json

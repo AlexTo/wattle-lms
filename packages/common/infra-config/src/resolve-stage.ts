@@ -1,5 +1,5 @@
-import type { StageConfig, StagesConfig } from './stages.types.js';
 import stagesConfig from './stages.config.js';
+import type { StageConfig, StagesConfig } from './stages.types.js';
 
 // Widen the narrow `as const` type to StagesConfig for dynamic key access
 const config: StagesConfig = stagesConfig;

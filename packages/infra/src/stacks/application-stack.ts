@@ -5,6 +5,7 @@ import {
   UserIdentity,
 } from '@lms/common-constructs';
 import { Stack, StackProps } from 'aws-cdk-lib';
+import { Mfa } from 'aws-cdk-lib/aws-cognito';
 import { Construct } from 'constructs';
 
 export class ApplicationStack extends Stack {
@@ -13,6 +14,7 @@ export class ApplicationStack extends Stack {
 
     const identity = new UserIdentity(this, 'Identity', {
       enableWaf: false,
+      mfa: Mfa.OFF,
     });
 
     const coreTable = new CoreTable(this, 'CoreTable');

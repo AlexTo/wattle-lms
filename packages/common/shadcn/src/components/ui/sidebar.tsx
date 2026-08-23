@@ -1,12 +1,5 @@
 'use client';
 
-import * as React from 'react';
-import { cva, type VariantProps } from 'class-variance-authority';
-import { PanelLeftIcon } from 'lucide-react';
-import { Slot } from 'radix-ui';
-
-import { useIsMobile } from '@lms/common-shadcn/hooks/use-mobile';
-import { cn } from '@lms/common-shadcn/lib/utils';
 import { Button } from '@lms/common-shadcn/components/ui/button';
 import { Input } from '@lms/common-shadcn/components/ui/input';
 import { Separator } from '@lms/common-shadcn/components/ui/separator';
@@ -24,6 +17,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@lms/common-shadcn/components/ui/tooltip';
+import { useIsMobile } from '@lms/common-shadcn/hooks/use-mobile';
+import { cn } from '@lms/common-shadcn/lib/utils';
+import { cva, type VariantProps } from 'class-variance-authority';
+import { PanelLeftIcon } from 'lucide-react';
+import { Slot } from 'radix-ui';
+import * as React from 'react';
 
 const SIDEBAR_COOKIE_NAME = 'sidebar_state';
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;

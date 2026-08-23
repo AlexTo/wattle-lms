@@ -1,12 +1,12 @@
-import { spawnSync } from 'child_process';
 import stagesConfig from '@lms/common-infra-config';
-import { parseStageName } from './stage-parser.js';
+import { spawnSync } from 'child_process';
+import { buildCdkCommand } from './cdk-command.js';
 import {
-  lookupCredentials,
   buildChildEnv,
   describeCredentials,
+  lookupCredentials,
 } from './credentials.js';
-import { buildCdkCommand } from './cdk-command.js';
+import { parseStageName } from './stage-parser.js';
 
 const log = (msg: string) => console.error(`[infra-deploy] ${msg}`);
 
