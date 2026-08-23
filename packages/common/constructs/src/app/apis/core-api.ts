@@ -1,37 +1,37 @@
-import { Construct } from 'constructs';
-import * as url from 'url';
-import { Distribution } from 'aws-cdk-lib/aws-cloudfront';
-import {
-  Code,
-  Runtime,
-  Function,
-  FunctionProps,
-  Tracing,
-} from 'aws-cdk-lib/aws-lambda';
-import { RuntimeConfig } from '../../core/runtime-config.js';
-import {
-  AuthorizationType,
-  LambdaIntegration,
-  ResponseTransferMode,
-  CognitoUserPoolsAuthorizer,
-} from 'aws-cdk-lib/aws-apigateway';
+import { AppRouter, appRouter } from '@lms/core-api';
 import { Aspects, Duration } from 'aws-cdk-lib';
 import {
+  AuthorizationType,
+  CognitoUserPoolsAuthorizer,
+  LambdaIntegration,
+  ResponseTransferMode,
+} from 'aws-cdk-lib/aws-apigateway';
+import { Distribution } from 'aws-cdk-lib/aws-cloudfront';
+import { IUserPool } from 'aws-cdk-lib/aws-cognito';
+import {
+  AnyPrincipal,
+  Effect,
   PolicyDocument,
   PolicyStatement,
-  Effect,
-  AnyPrincipal,
 } from 'aws-cdk-lib/aws-iam';
-import { IUserPool } from 'aws-cdk-lib/aws-cognito';
+import {
+  Code,
+  Function,
+  FunctionProps,
+  Runtime,
+  Tracing,
+} from 'aws-cdk-lib/aws-lambda';
+import { Construct } from 'constructs';
+import * as url from 'url';
+import { AddCorsPreflightAspect, RestApi } from '../../core/api/rest-api.js';
+import { Procedures, routerToOperations } from '../../core/api/trpc-utils.js';
 import {
   ApiIntegrations,
   IntegrationBuilder,
   RestApiIntegration,
 } from '../../core/api/utils.js';
 import { findCloudFrontDomainNames } from '../../core/cloudfront.js';
-import { AddCorsPreflightAspect, RestApi } from '../../core/api/rest-api.js';
-import { Procedures, routerToOperations } from '../../core/api/trpc-utils.js';
-import { AppRouter, appRouter } from '@lms/core-api';
+import { RuntimeConfig } from '../../core/runtime-config.js';
 
 // String union type for all API operation names
 type Operations = Procedures<AppRouter>;

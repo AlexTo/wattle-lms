@@ -1,10 +1,10 @@
-import { Construct } from 'constructs';
 import { AttributeType, ProjectionType } from 'aws-cdk-lib/aws-dynamodb';
-import { DynamoDBTable, DynamoDBTableProps } from '../../core/dynamodb.js';
-import { findWorkspaceRoot } from '../../core/workspace.js';
+import { Construct } from 'constructs';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
+import { DynamoDBTable, DynamoDBTableProps } from '../../core/dynamodb.js';
+import { findWorkspaceRoot } from '../../core/workspace.js';
 
 const { runtimeConfigKey, tableConfig } = JSON.parse(
   readFileSync(

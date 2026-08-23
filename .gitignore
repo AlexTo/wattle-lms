@@ -40,3 +40,4 @@ Thumbs.db
 .grit
 vitest.config.*.timestamp*
 runtime-config.json
+vite.config.*.timestamp*

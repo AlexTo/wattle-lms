@@ -1,5 +1,5 @@
-import { initTRPC } from '@trpc/server';
 import { Metrics, MetricUnit } from '@aws-lambda-powertools/metrics';
+import { initTRPC } from '@trpc/server';
 
 export interface IMetricsContext {
   metrics?: Metrics;

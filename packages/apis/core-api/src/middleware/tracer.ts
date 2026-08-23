@@ -1,5 +1,5 @@
-import { initTRPC } from '@trpc/server';
 import { Tracer } from '@aws-lambda-powertools/tracer';
+import { initTRPC } from '@trpc/server';
 import { Subsegment } from 'aws-xray-sdk-core';
 
 export interface ITracerContext {

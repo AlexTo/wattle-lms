@@ -12,7 +12,14 @@
     "auth": "cognito",
     "infra": "rest-lambda",
     "integrationPattern": "isolated",
-    "iac": "cdk"
+    "iac": "cdk",
+    "components": [
+      {
+        "generator": "ts#dynamodb#trpc-connection",
+        "path": "packages/databases/core-table",
+        "name": "@lms/core-table"
+      }
+    ]
   },
   "targets": {
     "build": {
@@ -38,6 +45,12 @@
     },
     "dev": {
       "executor": "nx:run-commands",
+      "dependsOn": [
+        {
+          "projects": ["@lms/core-table"],
+          "target": "dev"
+        }
+      ],
       "continuous": true,
       "options": {
         "commands": ["tsx --watch src/local-server.ts"],

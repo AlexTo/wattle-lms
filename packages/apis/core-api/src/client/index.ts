@@ -1,4 +1,4 @@
-import { createTRPCClient, httpLink, HTTPLinkOptions } from '@trpc/client';
+import { createTRPCClient, HTTPLinkOptions, httpLink } from '@trpc/client';
 import { AppRouter } from '../router.js';
 
 export interface CoreApiClientConfig {

@@ -1,6 +1,6 @@
 import { createHTTPServer } from '@trpc/server/adapters/standalone';
-import { appRouter } from './router.js';
 import cors from 'cors';
+import { appRouter } from './router.js';
 
 const PORT = 2022;
 

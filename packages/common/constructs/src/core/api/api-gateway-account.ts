@@ -1,5 +1,3 @@
-import { Construct } from 'constructs';
-import * as url from 'url';
 import { CustomResource, Duration, RemovalPolicy, Stack } from 'aws-cdk-lib';
 import {
   ManagedPolicy,
@@ -9,6 +7,8 @@ import {
 } from 'aws-cdk-lib/aws-iam';
 import { Code, Function, Runtime } from 'aws-cdk-lib/aws-lambda';
 import { Provider } from 'aws-cdk-lib/custom-resources';
+import { Construct } from 'constructs';
+import * as url from 'url';
 
 const ApiGatewayAccountKey = '__ApiGatewayAccount__';
 

@@ -1,5 +1,5 @@
-import { IConstruct } from 'constructs';
 import { CfnResource } from 'aws-cdk-lib';
+import { IConstruct } from 'constructs';
 
 /**
  * Suppresses a set of rules for a construct tree.

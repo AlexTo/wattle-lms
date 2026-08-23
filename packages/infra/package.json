@@ -1,0 +1,15 @@
+{
+  "name": "@lms/infra",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "aws-cdk-lib": "catalog:",
+    "constructs": "catalog:",
+    "source-map-support": "catalog:",
+    "tslib": "^2.3.0",
+    "@lms/common-constructs": "workspace:*",
+    "@lms/common-infra-config": "workspace:*"
+  },
+  "devDependencies": {}
+}

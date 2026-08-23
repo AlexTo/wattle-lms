@@ -1,5 +1,5 @@
-import { initTRPC } from '@trpc/server';
 import { Logger } from '@aws-lambda-powertools/logger';
+import { initTRPC } from '@trpc/server';
 
 export interface ILoggerContext {
   logger?: Logger;

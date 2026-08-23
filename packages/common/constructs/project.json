@@ -14,7 +14,8 @@
         "compile",
         "test",
         "@lms/core-table:build",
-        "@lms/core-api:build"
+        "@lms/core-api:build",
+        "@lms/student-portal:build"
       ]
     },
     "compile": {

@@ -1,4 +1,4 @@
-import { Construct } from 'constructs';
+import { RemovalPolicy } from 'aws-cdk-lib';
 import {
   AttributeType,
   BillingMode,
@@ -6,9 +6,9 @@ import {
   TableEncryption,
   TableProps,
 } from 'aws-cdk-lib/aws-dynamodb';
-import { RemovalPolicy } from 'aws-cdk-lib';
 import { Grant, IGrantable } from 'aws-cdk-lib/aws-iam';
 import { Key } from 'aws-cdk-lib/aws-kms';
+import { Construct } from 'constructs';
 import { RuntimeConfig } from './runtime-config.js';
 
 type _DynamoDBTableProps = Omit<

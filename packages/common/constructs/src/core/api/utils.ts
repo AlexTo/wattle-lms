@@ -1,7 +1,7 @@
 import { Integration, MethodOptions } from 'aws-cdk-lib/aws-apigateway';
 import {
-  HttpRouteIntegration,
   AddRoutesOptions,
+  HttpRouteIntegration,
 } from 'aws-cdk-lib/aws-apigatewayv2';
 
 /**

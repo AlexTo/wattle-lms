@@ -14,6 +14,18 @@
     },
     {
       "path": "./packages/apis/core-api"
+    },
+    {
+      "path": "./packages/websites/student-portal"
+    },
+    {
+      "path": "./packages/common/shadcn"
+    },
+    {
+      "path": "./packages/infra"
+    },
+    {
+      "path": "./packages/common/infra-config"
     }
   ]
 }

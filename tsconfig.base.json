@@ -34,6 +34,21 @@
       ],
       "@lms/core-api": [
         "./packages/apis/core-api/src/index.ts"
+      ],
+      "@lms/student-portal": [
+        "./packages/websites/student-portal/src/index.ts"
+      ],
+      "@lms/common-shadcn": [
+        "./packages/common/shadcn/src/index.ts"
+      ],
+      "@lms/common-shadcn/*": [
+        "./packages/common/shadcn/src/*"
+      ],
+      "@lms/infra": [
+        "./packages/infra/src/index.ts"
+      ],
+      "@lms/common-infra-config": [
+        "./packages/common/infra-config/src/index.ts"
       ]
     }
   }

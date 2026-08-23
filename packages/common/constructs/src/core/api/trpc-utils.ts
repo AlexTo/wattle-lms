@@ -1,6 +1,6 @@
-import { TRPCRouterRecord, AnyTRPCRouter } from '@trpc/server';
-import { OperationDetails } from './utils.js';
+import { AnyTRPCRouter, TRPCRouterRecord } from '@trpc/server';
 import { HttpMethod } from 'aws-cdk-lib/aws-apigatewayv2';
+import { OperationDetails } from './utils.js';
 
 /**
  * Helper type that recursively extracts procedure names from a tRPC router.

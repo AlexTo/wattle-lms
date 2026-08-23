@@ -1,6 +1,6 @@
 import {
-  CreateAWSLambdaContextOptions,
   awsLambdaStreamingRequestHandler,
+  CreateAWSLambdaContextOptions,
 } from '@trpc/server/adapters/aws-lambda';
 import type { APIGatewayProxyEvent } from 'aws-lambda';
 import { appRouter } from './router.js';
