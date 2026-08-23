@@ -31,6 +31,9 @@
       ],
       "@lms/common-constructs": [
         "./packages/common/constructs/src/index.ts"
+      ],
+      "@lms/core-api": [
+        "./packages/apis/core-api/src/index.ts"
       ]
     }
   }

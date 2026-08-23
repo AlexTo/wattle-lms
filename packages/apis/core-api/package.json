@@ -1,0 +1,25 @@
+{
+  "name": "@lms/core-api",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@aws-lambda-powertools/logger": "catalog:",
+    "@aws-lambda-powertools/metrics": "catalog:",
+    "@aws-lambda-powertools/parameters": "catalog:",
+    "@aws-lambda-powertools/tracer": "catalog:",
+    "@aws-sdk/client-appconfigdata": "catalog:",
+    "@aws-sdk/credential-providers": "catalog:",
+    "@trpc/client": "catalog:",
+    "@trpc/server": "catalog:",
+    "aws-xray-sdk-core": "catalog:",
+    "aws4fetch": "catalog:",
+    "tslib": "^2.3.0",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "catalog:",
+    "@types/cors": "catalog:",
+    "cors": "catalog:"
+  }
+}

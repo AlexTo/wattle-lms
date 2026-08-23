@@ -4,9 +4,13 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@aws-sdk/client-api-gateway": "catalog:",
+    "@aws-sdk/client-iam": "catalog:",
+    "@trpc/server": "catalog:",
     "aws-cdk-lib": "catalog:",
     "constructs": "catalog:",
-    "tslib": "^2.3.0"
+    "tslib": "^2.3.0",
+    "@lms/core-api": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "catalog:"

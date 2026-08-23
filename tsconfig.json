@@ -11,6 +11,9 @@
     },
     {
       "path": "./packages/common/constructs"
+    },
+    {
+      "path": "./packages/apis/core-api"
     }
   ]
 }

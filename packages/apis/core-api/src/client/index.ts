@@ -1,0 +1,19 @@
+import { createTRPCClient, httpLink, HTTPLinkOptions } from '@trpc/client';
+import { AppRouter } from '../router.js';
+
+export interface CoreApiClientConfig {
+  readonly url: string;
+  readonly token: string;
+}
+
+export const createCoreApiClient = (config: CoreApiClientConfig) => {
+  const linkOptions: HTTPLinkOptions<any> = {
+    url: config.url,
+    headers: {
+      Authorization: `Bearer ${config.token}`,
+    },
+  };
+  return createTRPCClient<AppRouter>({
+    links: [httpLink(linkOptions)],
+  });
+};

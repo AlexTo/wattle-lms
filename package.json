@@ -33,6 +33,7 @@
     "jsdom": "^27.1.0",
     "lint-staged": "^17.0.5",
     "nx": "catalog:",
+    "rolldown": "catalog:",
     "tslib": "^2.3.0",
     "tsx": "catalog:",
     "typescript": "catalog:",

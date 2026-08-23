@@ -1,0 +1,38 @@
+import {
+  CreateAWSLambdaContextOptions,
+  awsLambdaStreamingRequestHandler,
+} from '@trpc/server/adapters/aws-lambda';
+import type { APIGatewayProxyEvent } from 'aws-lambda';
+import { appRouter } from './router.js';
+
+export const handler = awslambda.streamifyResponse(
+  awsLambdaStreamingRequestHandler({
+    router: appRouter,
+    createContext: (ctx: CreateAWSLambdaContextOptions<APIGatewayProxyEvent>) =>
+      ctx,
+    responseMeta: ({ ctx }) => ({
+      headers: {
+        'Access-Control-Allow-Origin': getAllowedOrigin(ctx?.event),
+        'Access-Control-Allow-Methods': '*',
+      },
+    }),
+  }),
+);
+
+/**
+ * Restricts CORS origins to localhost and the domains specified in
+ * the ALLOWED_ORIGINS environment variable if set, or * otherwise.
+ * Customise using `restrictCorsTo` in your API CDK construct
+ */
+const getAllowedOrigin = (event: APIGatewayProxyEvent | undefined) => {
+  const origin = event?.headers?.origin ?? event?.headers?.Origin;
+  const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') ?? [];
+  const isLocalHost =
+    origin && new Set(['localhost', '127.0.0.1']).has(new URL(origin).hostname);
+  const isAllowedOrigin = origin && allowedOrigins.includes(origin);
+  let corsOrigin = '*';
+  if (allowedOrigins.length > 0 && !isLocalHost) {
+    corsOrigin = isAllowedOrigin ? origin : allowedOrigins[0];
+  }
+  return corsOrigin;
+};

@@ -2,8 +2,8 @@
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": ".",
-    "outDir": "../../../dist/packages/common/constructs/tsc",
-    "tsBuildInfoFile": "../../../dist/packages/common/constructs/tsc/tsconfig.lib.tsbuildinfo",
+    "outDir": "../../../dist/packages/apis/core-api/tsc",
+    "tsBuildInfoFile": "../../../dist/packages/apis/core-api/tsc/tsconfig.lib.tsbuildinfo",
     "emitDeclarationOnly": false,
     "types": [
       "node"
@@ -12,11 +12,7 @@
   "include": [
     "src/**/*.ts"
   ],
-  "references": [
-    {
-      "path": "../../apis/core-api/tsconfig.lib.json"
-    }
-  ],
+  "references": [],
   "exclude": [
     "vite.config.ts",
     "vite.config.mts",
