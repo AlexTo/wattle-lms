@@ -51,6 +51,14 @@ export type CoreApiComponentConfig = {
 };
 
 /**
+ * Per-stage settings for the core DynamoDB table construct.
+ */
+export type CoreTableComponentConfig = {
+  /** Use customer-managed KMS encryption instead of the cheaper AWS-owned default */
+  enableKmsEncryption?: boolean;
+};
+
+/**
  * Per-stage settings for the student portal static website construct.
  */
 export type StudentPortalComponentConfig = {
@@ -68,6 +76,7 @@ export type StudentPortalComponentConfig = {
 export type StageComponents = {
   identity?: IdentityComponentConfig;
   coreApi?: CoreApiComponentConfig;
+  coreTable?: CoreTableComponentConfig;
   studentPortal?: StudentPortalComponentConfig;
 };
 

@@ -28,6 +28,7 @@ export default {
           components: {
             identity: { enableWaf: false, enableMfa: false },
             coreApi: { enableWaf: false },
+            coreTable: { enableKmsEncryption: false },
             studentPortal: { enableWaf: false, enableKmsEncryption: false },
           },
         },
@@ -35,6 +36,7 @@ export default {
           components: {
             identity: { enableWaf: true, enableMfa: true },
             coreApi: { enableWaf: true },
+            coreTable: { enableKmsEncryption: true },
             studentPortal: { enableWaf: true, enableKmsEncryption: true },
           },
         },

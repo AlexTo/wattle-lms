@@ -9,6 +9,7 @@ export interface ApplicationStageProps extends StageProps {
   /** Passed through to ApplicationStack to control per-component settings. */
   readonly identity?: ApplicationStackProps['identity'];
   readonly coreApi?: ApplicationStackProps['coreApi'];
+  readonly coreTable?: ApplicationStackProps['coreTable'];
   readonly studentPortal?: ApplicationStackProps['studentPortal'];
 }
 
@@ -19,7 +20,13 @@ export class ApplicationStage extends Stage {
   constructor(
     scope: Construct,
     id: string,
-    { identity, coreApi, studentPortal, ...props }: ApplicationStageProps,
+    {
+      identity,
+      coreApi,
+      coreTable,
+      studentPortal,
+      ...props
+    }: ApplicationStageProps,
   ) {
     super(scope, id, props);
 
@@ -27,6 +34,7 @@ export class ApplicationStage extends Stage {
       crossRegionReferences: true,
       identity,
       coreApi,
+      coreTable,
       studentPortal,
     });
   }

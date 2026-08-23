@@ -7,7 +7,7 @@ import {
   TableProps,
 } from 'aws-cdk-lib/aws-dynamodb';
 import { Grant, IGrantable } from 'aws-cdk-lib/aws-iam';
-import { Key } from 'aws-cdk-lib/aws-kms';
+import { IKey, Key } from 'aws-cdk-lib/aws-kms';
 import { Construct } from 'constructs';
 import { RuntimeConfig } from './runtime-config.js';
 
@@ -27,6 +27,19 @@ export interface DynamoDBTableProps extends _DynamoDBTableProps {
    * RuntimeConfig key used under the `dynamodb` namespace.
    */
   readonly runtimeConfigKey: string;
+
+  /**
+   * Server-side encryption for the table.
+   *
+   * @default TableEncryption.CUSTOMER_MANAGED
+   */
+  readonly encryption?: TableEncryption;
+
+  /**
+   * KMS key used to encrypt the table. Only used when `encryption` is
+   * `TableEncryption.CUSTOMER_MANAGED`. When not provided, a new key is created.
+   */
+  readonly encryptionKey?: IKey;
 
   /**
    * Whether to enable automatic key rotation on the KMS key used to encrypt the table.
@@ -49,13 +62,19 @@ export abstract class DynamoDBTable extends Construct {
       pointInTimeRecoverySpecification = { pointInTimeRecoveryEnabled: true },
       deletionProtection = true,
       removalPolicy = RemovalPolicy.RETAIN,
+      encryption = TableEncryption.CUSTOMER_MANAGED,
+      encryptionKey,
       enableKeyRotation = true,
       ...rest
     }: DynamoDBTableProps,
   ) {
     super(scope, id);
 
-    const key = new Key(this, 'EncryptionKey', { enableKeyRotation });
+    const key: IKey | undefined =
+      encryption === TableEncryption.CUSTOMER_MANAGED
+        ? (encryptionKey ??
+          new Key(this, 'EncryptionKey', { enableKeyRotation }))
+        : undefined;
 
     this.table = new Table(this, runtimeConfigKey, {
       ...rest,
@@ -66,7 +85,7 @@ export abstract class DynamoDBTable extends Construct {
       pointInTimeRecoverySpecification,
       deletionProtection,
       encryptionKey: key,
-      encryption: TableEncryption.CUSTOMER_MANAGED,
+      encryption,
       removalPolicy,
     });
 
