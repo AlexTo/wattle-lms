@@ -1,0 +1,25 @@
+{
+  "migrations": [
+    {
+      "version": "1.0.0-rc.74",
+      "description": "Extract the duplicated _SessionIdMiddleware class in py#agent's main.py into a shared middleware/session_id_middleware.py module",
+      "implementation": "./src/migrations/latest/py-agent-session-id-middleware-extraction/migration",
+      "package": "@aws/nx-plugin",
+      "name": "latest-py-agent-session-id-middleware-extraction"
+    },
+    {
+      "version": "1.0.0-rc.75",
+      "description": "Extract the duplicated session-id Express middleware in ts#agent's ag-ui/a2a index.ts into a shared middleware/session-id-middleware.ts module",
+      "implementation": "./src/migrations/latest/ts-agent-session-id-middleware-extraction/migration",
+      "package": "@aws/nx-plugin",
+      "name": "latest-ts-agent-session-id-middleware-extraction"
+    },
+    {
+      "version": "1.0.0-rc.76",
+      "description": "Sync vended dependency versions and the tracked plugin version to those vended by this release",
+      "implementation": "./src/utils/version-upgrade-migration/migration",
+      "package": "@aws/nx-plugin",
+      "name": "sync-vended-versions"
+    }
+  ]
+}
