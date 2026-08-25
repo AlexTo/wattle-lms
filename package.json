@@ -2,7 +2,7 @@
   "name": "@wattle/source",
   "version": "0.0.0",
   "license": "MIT",
-  "packageManager": "pnpm@10.34.3",
+  "packageManager": "pnpm@11.22.0",
   "scripts": {
     "dev": "nx run-many --target dev",
     "build": "nx run-many --target build",
