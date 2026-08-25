@@ -20,10 +20,14 @@
   "devDependencies": {
     "@aws/nx-plugin-mcp": "catalog:",
     "@biomejs/biome": "catalog:",
+    "@commitlint/config-conventional": "^21.0.1",
     "@nx/js": "catalog:",
     "@nx/workspace": "catalog:",
     "@swc/helpers": "~0.5.18",
+    "commitizen": "4.3.2",
+    "commitlint": "^21.0.1",
     "husky": "catalog:",
+    "lint-staged": "^17.0.5",
     "nx": "catalog:",
     "tslib": "^2.3.0",
     "typescript": "catalog:"

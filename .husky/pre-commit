@@ -2,3 +2,18 @@ if ! git config --get-all secrets.patterns >/dev/null 2>&1; then
   bash .git-secrets/git-secrets --register-aws
 fi
 bash .git-secrets/git-secrets --pre_commit_hook
+
+PRE_SHA="$(git diff HEAD --ignore-space-at-eol | shasum -a 256  --tag)"
+
+FORCE_COLOR=1 pnpm lint-staged
+
+POST_SHA="$(git diff HEAD --ignore-space-at-eol | shasum -a 256  --tag)"
+
+if [ "$PRE_SHA" != "$POST_SHA" ]
+then
+	RED='\033[0;31m'
+	NC='\033[0m' # No Color
+	echo "${RED}Pre-commit modified your working directory${NC}"
+	echo "${RED}Please verify and stage changed, then retry git commit${NC}"
+	exit 1
+fi
