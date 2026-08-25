@@ -1,0 +1,21 @@
+{
+  "name": "@wattle/common-shadcn",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@vitest/coverage-v8": "catalog:",
+    "class-variance-authority": "catalog:",
+    "clsx": "catalog:",
+    "lucide-react": "catalog:",
+    "radix-ui": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "tailwind-merge": "catalog:",
+    "tslib": "^2.3.0",
+    "tw-animate-css": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "devDependencies": {}
+}

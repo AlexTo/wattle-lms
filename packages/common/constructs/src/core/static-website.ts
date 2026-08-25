@@ -1,0 +1,444 @@
+import {
+  CfnOutput,
+  CfnResource,
+  Duration,
+  Lazy,
+  Names,
+  RemovalPolicy,
+  Stack,
+} from 'aws-cdk-lib';
+import { ICertificate } from 'aws-cdk-lib/aws-certificatemanager';
+import {
+  Distribution,
+  HeadersFrameOption,
+  HeadersReferrerPolicy,
+  ResponseHeadersPolicy,
+  SecurityPolicyProtocol,
+  ViewerProtocolPolicy,
+} from 'aws-cdk-lib/aws-cloudfront';
+import { S3BucketOrigin } from 'aws-cdk-lib/aws-cloudfront-origins';
+import { Effect, PolicyStatement, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
+import { IKey, Key } from 'aws-cdk-lib/aws-kms';
+import {
+  CfnDelivery,
+  CfnDeliveryDestination,
+  CfnDeliverySource,
+  LogGroup,
+  RetentionDays,
+} from 'aws-cdk-lib/aws-logs';
+import {
+  BlockPublicAccess,
+  Bucket,
+  BucketEncryption,
+  IBucket,
+  ObjectOwnership,
+} from 'aws-cdk-lib/aws-s3';
+import {
+  BucketDeployment,
+  CacheControl,
+  Source,
+} from 'aws-cdk-lib/aws-s3-deployment';
+import { CfnWebACL } from 'aws-cdk-lib/aws-wafv2';
+import { Construct } from 'constructs';
+import { suppressRules } from './checkov.js';
+import { RuntimeConfig } from './runtime-config.js';
+
+const DEFAULT_RUNTIME_CONFIG_FILENAME = 'runtime-config.json';
+
+// Content-Security-Policy enforced on all responses. Restricts scripts and
+// framing to mitigate XSS and clickjacking, while permitting HTTPS/WSS calls
+// (connect-src) to AWS service endpoints such as API Gateway, Cognito and
+// Bedrock AgentCore which are only known at deploy time. Edit this to tighten
+// connect-src to your specific origins once they are known.
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "font-src 'self' data:",
+  "connect-src 'self' https: wss:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
+
+export interface StaticWebsiteProps {
+  readonly websiteName: string;
+  readonly websiteFilePath: string;
+  /**
+   * Custom domain names for the CloudFront distribution. Requires `certificate`.
+   */
+  readonly domainNames?: string[];
+  /**
+   * ACM certificate for the custom domain names. Must be in us-east-1.
+   * When provided, viewers are required to use TLS 1.2 or later.
+   */
+  readonly certificate?: ICertificate;
+  /**
+   * Whether to protect the CloudFront distribution with an AWS WAF Web ACL.
+   *
+   * @default true
+   */
+  readonly enableWaf?: boolean;
+  /**
+   * Server-side encryption for the website and distribution log buckets.
+   *
+   * @default BucketEncryption.KMS
+   */
+  readonly encryption?: BucketEncryption;
+  /**
+   * KMS key used to encrypt the website and distribution log buckets. Only used when `encryption` is
+   * `BucketEncryption.KMS`. When not provided, a new key is created.
+   */
+  readonly encryptionKey?: IKey;
+  /**
+   * Whether the automatically created KMS key has rotation enabled. Only applies when `encryption` is
+   * `BucketEncryption.KMS` and no `encryptionKey` is supplied.
+   *
+   * @default true
+   */
+  readonly enableKeyRotation?: boolean;
+}
+
+/**
+ * Deploys a Static Website using by default a private S3 bucket as an origin and Cloudfront as the entrypoint.
+ *
+ * This construct configures a webAcl containing rules that are generally applicable to web applications. This
+ * provides protection against exploitation of a wide range of vulnerabilities, including some of the high risk
+ * and commonly occurring vulnerabilities described in OWASP publications such as OWASP Top 10.
+ *
+ */
+export class StaticWebsite extends Construct {
+  public readonly websiteBucket: IBucket;
+  public readonly cloudFrontDistribution: Distribution;
+  public readonly bucketDeployment: BucketDeployment;
+
+  constructor(
+    scope: Construct,
+    id: string,
+    {
+      websiteFilePath,
+      websiteName,
+      domainNames,
+      certificate,
+      enableWaf = true,
+      encryption = BucketEncryption.KMS,
+      encryptionKey,
+      enableKeyRotation = true,
+    }: StaticWebsiteProps,
+  ) {
+    super(scope, id);
+
+    const websiteKey: IKey | undefined =
+      encryption === BucketEncryption.KMS
+        ? (encryptionKey ?? new Key(this, 'WebsiteKey', { enableKeyRotation }))
+        : undefined;
+
+    // Allow CloudWatch Logs to use the website key for server access log delivery.
+    const stack = Stack.of(this);
+    websiteKey?.addToResourcePolicy(
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        principals: [
+          new ServicePrincipal(`logs.${stack.region}.amazonaws.com`),
+        ],
+        actions: [
+          'kms:Encrypt',
+          'kms:Decrypt',
+          'kms:ReEncrypt*',
+          'kms:GenerateDataKey*',
+          'kms:DescribeKey',
+        ],
+        resources: ['*'],
+        conditions: {
+          ArnLike: {
+            'kms:EncryptionContext:aws:logs:arn': `arn:aws:logs:${stack.region}:${stack.account}:log-group:*`,
+          },
+        },
+      }),
+    );
+
+    const accessLogs = new LogGroup(this, 'AccessLogs', {
+      retention: RetentionDays.ONE_YEAR,
+      encryptionKey: websiteKey,
+      removalPolicy: RemovalPolicy.DESTROY,
+    });
+
+    // S3 Bucket to hold website files
+    this.websiteBucket = new Bucket(this, 'WebsiteBucket', {
+      versioned: true,
+      enforceSSL: true,
+      autoDeleteObjects: true,
+      removalPolicy: RemovalPolicy.DESTROY,
+      encryption,
+      encryptionKey: websiteKey,
+      objectOwnership: ObjectOwnership.BUCKET_OWNER_ENFORCED,
+      publicReadAccess: false,
+      blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
+    });
+    suppressRules(
+      this.websiteBucket,
+      ['CKV_AWS_18'],
+      'Server access logs are delivered to CloudWatch Logs',
+    );
+    this.deliverAccessLogsToCloudWatch(
+      'Website',
+      this.websiteBucket,
+      accessLogs,
+    );
+    // Web ACL
+    const wafStack = enableWaf ? new CloudfrontWebAcl(this, 'waf') : undefined;
+
+    // Bucket holding CloudFront standard access logs. CloudFront delivers its
+    // own logs to S3 only, so this bucket is retained; its S3 server access
+    // logs are delivered to CloudWatch Logs.
+    const logBucket = new Bucket(this, 'DistributionLogBucket', {
+      enforceSSL: true,
+      autoDeleteObjects: true,
+      removalPolicy: RemovalPolicy.DESTROY,
+      encryption,
+      encryptionKey: websiteKey,
+      objectOwnership: ObjectOwnership.BUCKET_OWNER_PREFERRED,
+      publicReadAccess: false,
+      blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
+    });
+    suppressRules(
+      logBucket,
+      ['CKV_AWS_21'],
+      'Distribution log bucket does not need versioning enabled',
+    );
+    suppressRules(
+      logBucket,
+      ['CKV_AWS_18'],
+      'Server access logs are delivered to CloudWatch Logs',
+    );
+    this.deliverAccessLogsToCloudWatch('Distribution', logBucket, accessLogs);
+
+    // Security headers applied to all responses.
+    const responseHeadersPolicy = new ResponseHeadersPolicy(
+      this,
+      'ResponseHeadersPolicy',
+      {
+        securityHeadersBehavior: {
+          strictTransportSecurity: {
+            accessControlMaxAge: Duration.days(730),
+            includeSubdomains: true,
+            preload: true,
+            override: true,
+          },
+          contentTypeOptions: { override: true },
+          frameOptions: {
+            frameOption: HeadersFrameOption.DENY,
+            override: true,
+          },
+          referrerPolicy: {
+            referrerPolicy:
+              HeadersReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN,
+            override: true,
+          },
+          contentSecurityPolicy: {
+            contentSecurityPolicy: CONTENT_SECURITY_POLICY,
+            override: true,
+          },
+        },
+      },
+    );
+
+    const defaultRootObject = 'index.html';
+    this.cloudFrontDistribution = new Distribution(
+      this,
+      'CloudfrontDistribution',
+      {
+        webAclId: wafStack?.wafArn,
+        enableLogging: true,
+        logBucket: logBucket,
+        ...(certificate
+          ? {
+              certificate,
+              domainNames,
+              minimumProtocolVersion: SecurityPolicyProtocol.TLS_V1_2_2021,
+            }
+          : {}),
+        defaultBehavior: {
+          origin: S3BucketOrigin.withOriginAccessControl(this.websiteBucket),
+          viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          responseHeadersPolicy,
+        },
+        defaultRootObject,
+        errorResponses: [
+          {
+            httpStatus: 404, // We need to redirect "key not found errors" to index.html for single page apps
+            responseHttpStatus: 200,
+            responsePagePath: `/${defaultRootObject}`,
+          },
+          {
+            httpStatus: 403, // We need to redirect reloads from paths (e.g. /foo/bar) to index.html for single page apps
+            responseHttpStatus: 200,
+            responsePagePath: `/${defaultRootObject}`,
+          },
+        ],
+      },
+    );
+    if (!certificate) {
+      // See https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/DownloadDistValuesGeneral.html
+      suppressRules(
+        this.cloudFrontDistribution,
+        ['CKV_AWS_174'],
+        'Cloudfront default certificate does not use TLS 1.2',
+      );
+    }
+
+    // Deploy Website
+    this.bucketDeployment = new BucketDeployment(this, 'WebsiteDeployment', {
+      sources: [Source.asset(websiteFilePath)],
+      destinationBucket: this.websiteBucket,
+      // Files in the distribution's edge caches will be invalidated after files are uploaded to the destination bucket.
+      distribution: this.cloudFrontDistribution,
+      // Exclude the runtime config from this deployment's sync so its default pruning
+      // never deletes the file managed separately by RuntimeConfigDeployment below.
+      exclude: [DEFAULT_RUNTIME_CONFIG_FILENAME],
+      memoryLimit: 1024,
+    });
+
+    // Deploy runtime-config.json separately so it is never cached - clients
+    // must always fetch the latest configuration.
+    new BucketDeployment(this, 'RuntimeConfigDeployment', {
+      sources: [
+        Source.data(
+          DEFAULT_RUNTIME_CONFIG_FILENAME,
+          Lazy.string({
+            produce: () =>
+              Stack.of(this).toJsonString(
+                RuntimeConfig.ensure(this).get('connection'),
+              ),
+          }),
+        ),
+      ],
+      destinationBucket: this.websiteBucket,
+      distribution: this.cloudFrontDistribution,
+      cacheControl: [CacheControl.noCache()],
+      prune: false,
+      memoryLimit: 1024,
+    });
+
+    suppressRules(
+      Stack.of(this),
+      ['CKV_AWS_111'],
+      'CDK Bucket Deployment uses wildcard to deploy arbitrary assets',
+      (c) =>
+        CfnResource.isCfnResource(c) &&
+        c.cfnResourceType === 'AWS::IAM::Policy' &&
+        c.node.path.includes(`/Custom::CDKBucketDeployment`),
+    );
+
+    new CfnOutput(this, 'DistributionDomainName', {
+      value: this.cloudFrontDistribution.domainName,
+    });
+    new CfnOutput(this, `${websiteName}WebsiteBucketName`, {
+      value: this.websiteBucket.bucketName,
+    });
+  }
+
+  /**
+   * Delivers a bucket's S3 server access logs to a CloudWatch log group using
+   * CloudWatch Logs vended log delivery.
+   */
+  private deliverAccessLogsToCloudWatch(
+    id: string,
+    bucket: IBucket,
+    logGroup: LogGroup,
+  ) {
+    const source: CfnDeliverySource = new CfnDeliverySource(
+      this,
+      `${id}AccessLogsSource`,
+      {
+        name: Lazy.string({
+          produce: () => Names.uniqueResourceName(source, { maxLength: 60 }),
+        }),
+        logType: 'S3_SERVER_ACCESS_LOGS',
+        resourceArn: bucket.bucketArn,
+      },
+    );
+    const bucketPolicy = (bucket as Bucket).policy;
+    if (bucketPolicy) {
+      source.node.addDependency(bucketPolicy);
+    }
+    const destination: CfnDeliveryDestination = new CfnDeliveryDestination(
+      this,
+      `${id}AccessLogsDestination`,
+      {
+        name: Lazy.string({
+          produce: () =>
+            Names.uniqueResourceName(destination, { maxLength: 60 }),
+        }),
+        destinationResourceArn: logGroup.logGroupArn,
+      },
+    );
+    const delivery = new CfnDelivery(this, `${id}AccessLogsDelivery`, {
+      deliverySourceName: source.name,
+      deliveryDestinationArn: destination.attrArn,
+    });
+    delivery.addDependency(source);
+  }
+}
+
+export class CloudfrontWebAcl extends Stack {
+  public readonly wafArn;
+  constructor(scope: Construct, id: string) {
+    super(scope, id, {
+      env: {
+        region: 'us-east-1',
+        account: Stack.of(scope).account,
+      },
+      crossRegionReferences: true,
+    });
+
+    this.wafArn = new CfnWebACL(this, 'WebAcl', {
+      defaultAction: { allow: {} },
+      scope: 'CLOUDFRONT',
+      visibilityConfig: {
+        cloudWatchMetricsEnabled: true,
+        metricName: id,
+        sampledRequestsEnabled: true,
+      },
+      rules: [
+        {
+          name: 'CRSRule',
+          priority: 0,
+          statement: {
+            managedRuleGroupStatement: {
+              name: 'AWSManagedRulesCommonRuleSet',
+              vendorName: 'AWS',
+            },
+          },
+          visibilityConfig: {
+            cloudWatchMetricsEnabled: true,
+            metricName: 'MetricForWebACLCDK-CRS',
+            sampledRequestsEnabled: true,
+          },
+          overrideAction: {
+            none: {},
+          },
+        },
+        {
+          name: 'KnownBadInputsRule',
+          priority: 1,
+          statement: {
+            managedRuleGroupStatement: {
+              name: 'AWSManagedRulesKnownBadInputsRuleSet',
+              vendorName: 'AWS',
+            },
+          },
+          visibilityConfig: {
+            cloudWatchMetricsEnabled: true,
+            metricName: 'MetricForWebACLCDK-CRS',
+            sampledRequestsEnabled: true,
+          },
+          overrideAction: {
+            none: {},
+          },
+        },
+      ],
+    }).attrArn;
+  }
+}

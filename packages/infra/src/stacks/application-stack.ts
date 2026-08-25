@@ -1,0 +1,108 @@
+import {
+  CoreApi,
+  CoreTable,
+  StudentPortal,
+  UserIdentity,
+  suppressRules,
+} from '@wattle/common-constructs';
+import type {
+  CoreApiComponentConfig,
+  CoreTableComponentConfig,
+  IdentityComponentConfig,
+  StudentPortalComponentConfig,
+} from '@wattle/common-infra-config';
+import { CfnResource, Stack, StackProps } from 'aws-cdk-lib';
+import { Mfa } from 'aws-cdk-lib/aws-cognito';
+import { TableEncryption } from 'aws-cdk-lib/aws-dynamodb';
+import { BucketEncryption } from 'aws-cdk-lib/aws-s3';
+import { Construct } from 'constructs';
+
+export interface ApplicationStackProps extends StackProps {
+  /** Settings for the Cognito user pool / identity construct. @default all enabled */
+  readonly identity?: IdentityComponentConfig;
+  /** Settings for the core API construct. @default all enabled */
+  readonly coreApi?: CoreApiComponentConfig;
+  /** Settings for the core DynamoDB table construct. @default all enabled */
+  readonly coreTable?: CoreTableComponentConfig;
+  /** Settings for the student portal static website construct. @default all enabled */
+  readonly studentPortal?: StudentPortalComponentConfig;
+}
+
+export class ApplicationStack extends Stack {
+  constructor(
+    scope: Construct,
+    id: string,
+    {
+      identity: identityConfig,
+      coreApi: coreApiConfig,
+      coreTable: coreTableConfig,
+      studentPortal: studentPortalConfig,
+      ...props
+    }: ApplicationStackProps,
+  ) {
+    super(scope, id, props);
+
+    const coreTableKmsEnabled = coreTableConfig?.enableKmsEncryption ?? true;
+    const studentPortalWafEnabled = studentPortalConfig?.enableWaf ?? true;
+    const studentPortalKmsEnabled =
+      studentPortalConfig?.enableKmsEncryption ?? true;
+
+    const identity = new UserIdentity(this, 'Identity', {
+      enableWaf: identityConfig?.enableWaf ?? true,
+      mfa: (identityConfig?.enableMfa ?? true) ? Mfa.REQUIRED : Mfa.OFF,
+    });
+
+    const coreTable = new CoreTable(this, 'CoreTable', {
+      encryption: coreTableKmsEnabled
+        ? TableEncryption.CUSTOMER_MANAGED
+        : TableEncryption.DEFAULT,
+      deletionProtection: coreTableConfig?.enableDeletionProtection ?? true,
+    });
+    if (!coreTableKmsEnabled) {
+      suppressRules(
+        coreTable.table,
+        ['CKV_AWS_119'],
+        'KMS CMK encryption disabled for this stage',
+      );
+    }
+
+    const integrations = CoreApi.defaultIntegrations(this).build();
+
+    const coreApi = new CoreApi(this, 'CoreApi', {
+      integrations,
+      identity,
+      enableWaf: coreApiConfig?.enableWaf ?? true,
+    });
+
+    Object.values(integrations).forEach(({ handler }) =>
+      coreTable.grantReadWriteData(handler),
+    );
+
+    const studentPortal = new StudentPortal(this, 'StudentPortal', {
+      enableWaf: studentPortalWafEnabled,
+      ...(studentPortalKmsEnabled
+        ? {}
+        : { encryption: BucketEncryption.S3_MANAGED }),
+    });
+    if (!studentPortalWafEnabled) {
+      suppressRules(
+        studentPortal.cloudFrontDistribution,
+        ['CKV_AWS_68'],
+        'WAF disabled for this stage',
+      );
+    }
+    if (!studentPortalKmsEnabled) {
+      suppressRules(
+        this,
+        ['CKV_AWS_158'],
+        'KMS encryption disabled for this stage',
+        (c) =>
+          CfnResource.isCfnResource(c) &&
+          c.cfnResourceType === 'AWS::Logs::LogGroup' &&
+          c.node.path.includes('/StudentPortal/AccessLogs'),
+      );
+    }
+
+    coreApi.restrictCorsTo(studentPortal);
+  }
+}

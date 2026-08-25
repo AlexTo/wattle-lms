@@ -1,0 +1,127 @@
+{
+  "name": "@wattle/infra",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/infra/src",
+  "projectType": "application",
+  "tags": [],
+  "metadata": {
+    "generator": "ts#infra",
+    "iac": "cdk"
+  },
+  "targets": {
+    "bootstrap": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "cdk bootstrap"
+      }
+    },
+    "build": {
+      "dependsOn": ["lint", "compile", "test", "synth", "checkov"]
+    },
+    "cdk": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "cdk"
+      }
+    },
+    "checkov": {
+      "cache": true,
+      "executor": "nx:run-commands",
+      "inputs": ["{workspaceRoot}/dist/{projectRoot}/cdk.out"],
+      "outputs": ["{workspaceRoot}/dist/{projectRoot}/checkov"],
+      "dependsOn": ["synth"],
+      "options": {
+        "command": "uvx --from checkov==3.3.11 checkov --config-file {projectRoot}/checkov.yml --directory dist/{projectRoot}/cdk.out --framework cloudformation"
+      }
+    },
+    "compile": {
+      "executor": "nx:run-commands",
+      "outputs": ["{workspaceRoot}/dist/{projectRoot}/tsc"],
+      "options": {
+        "command": "tsc --build tsconfig.lib.json",
+        "cwd": "{projectRoot}"
+      }
+    },
+    "deploy": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["^build", "compile"],
+      "options": {
+        "command": "tsx packages/common/scripts/src/infra/infra-deploy.ts packages/infra"
+      }
+    },
+    "deploy-ci": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "cdk deploy --require-approval=never --app ../../dist/{projectRoot}/cdk.out"
+      }
+    },
+    "deploy-sandbox": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["^build", "compile"],
+      "options": {
+        "command": "tsx packages/common/scripts/src/infra/infra-deploy.ts packages/infra \"wattle-infra-sandbox/*\""
+      }
+    },
+    "destroy": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["^build", "compile"],
+      "options": {
+        "command": "tsx packages/common/scripts/src/infra/infra-destroy.ts packages/infra"
+      }
+    },
+    "destroy-ci": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "cdk destroy --require-approval=never --app ../../dist/{projectRoot}/cdk.out"
+      }
+    },
+    "format": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": ["biome"],
+      "options": {
+        "command": "biome format {projectRoot}"
+      },
+      "configurations": {
+        "fix": {
+          "command": "biome format --write {projectRoot}"
+        },
+        "skip-lint": {
+          "command": "node -e \"\""
+        }
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": ["biome"],
+      "dependsOn": ["format"],
+      "options": {
+        "command": "biome lint {projectRoot}"
+      },
+      "configurations": {
+        "fix": {
+          "command": "biome check --write {projectRoot}"
+        },
+        "skip-lint": {
+          "command": "node -e \"\""
+        }
+      }
+    },
+    "synth": {
+      "cache": true,
+      "executor": "nx:run-commands",
+      "inputs": ["default"],
+      "outputs": ["{workspaceRoot}/dist/{projectRoot}/cdk.out"],
+      "dependsOn": ["^build", "compile"],
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "cdk synth"
+      }
+    }
+  }
+}

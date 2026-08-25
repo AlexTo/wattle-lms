@@ -2,5 +2,30 @@
   "extends": "./tsconfig.base.json",
   "compileOnSave": false,
   "files": [],
-  "references": []
+  "references": [
+    {
+      "path": "./packages/databases/core-table"
+    },
+    {
+      "path": "./packages/common/scripts"
+    },
+    {
+      "path": "./packages/common/constructs"
+    },
+    {
+      "path": "./packages/apis/core-api"
+    },
+    {
+      "path": "./packages/websites/student-portal"
+    },
+    {
+      "path": "./packages/common/shadcn"
+    },
+    {
+      "path": "./packages/infra"
+    },
+    {
+      "path": "./packages/common/infra-config"
+    }
+  ]
 }

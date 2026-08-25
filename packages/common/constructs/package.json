@@ -1,0 +1,18 @@
+{
+  "name": "@wattle/common-constructs",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-api-gateway": "catalog:",
+    "@aws-sdk/client-iam": "catalog:",
+    "@trpc/server": "catalog:",
+    "aws-cdk-lib": "catalog:",
+    "constructs": "catalog:",
+    "tslib": "^2.3.0",
+    "@wattle/core-api": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:"
+  }
+}

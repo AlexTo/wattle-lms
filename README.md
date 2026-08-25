@@ -1,4 +1,4 @@
-# lms
+# wattle
 
 ✨ Your new, shiny [Nx workspace](https://nx.dev) has been successfully created! ✨.
 

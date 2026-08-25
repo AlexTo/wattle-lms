@@ -5,7 +5,9 @@
     "emitDeclarationOnly": true,
     "importHelpers": true,
     "isolatedModules": true,
-    "lib": ["es2022"],
+    "lib": [
+      "es2022"
+    ],
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "noEmitOnError": true,
@@ -16,6 +18,38 @@
     "skipLibCheck": true,
     "strict": true,
     "target": "es2022",
-    "customConditions": ["@lms/source"]
+    "customConditions": [
+      "@wattle/source"
+    ],
+    "rootDir": ".",
+    "paths": {
+      "@wattle/core-table": [
+        "./packages/databases/core-table/src/index.ts"
+      ],
+      "@wattle/common-scripts": [
+        "./packages/common/scripts/src/index.ts"
+      ],
+      "@wattle/common-constructs": [
+        "./packages/common/constructs/src/index.ts"
+      ],
+      "@wattle/core-api": [
+        "./packages/apis/core-api/src/index.ts"
+      ],
+      "@wattle/student-portal": [
+        "./packages/websites/student-portal/src/index.ts"
+      ],
+      "@wattle/common-shadcn": [
+        "./packages/common/shadcn/src/index.ts"
+      ],
+      "@wattle/common-shadcn/*": [
+        "./packages/common/shadcn/src/*"
+      ],
+      "@wattle/infra": [
+        "./packages/infra/src/index.ts"
+      ],
+      "@wattle/common-infra-config": [
+        "./packages/common/infra-config/src/index.ts"
+      ]
+    }
   }
 }

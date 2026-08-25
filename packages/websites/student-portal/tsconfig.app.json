@@ -1,0 +1,50 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "../../../dist/packages/websites/student-portal/tsc",
+    "tsBuildInfoFile": "../../../dist/packages/websites/student-portal/tsc/tsconfig.lib.tsbuildinfo",
+    "jsx": "react-jsx",
+    "lib": [
+      "DOM"
+    ],
+    "types": [
+      "node",
+      "@nx/react/typings/cssmodule.d.ts",
+      "@nx/react/typings/image.d.ts",
+      "vite/client"
+    ],
+    "rootDir": "src",
+    "module": "esnext",
+    "moduleResolution": "bundler"
+  },
+  "exclude": [
+    "out-tsc",
+    "dist",
+    "src/**/*.spec.ts",
+    "src/**/*.test.ts",
+    "src/**/*.spec.tsx",
+    "src/**/*.test.tsx",
+    "src/**/*.spec.js",
+    "src/**/*.test.js",
+    "src/**/*.spec.jsx",
+    "src/**/*.test.jsx",
+    "vite.config.ts",
+    "vite.config.mts",
+    "vitest.config.ts",
+    "vitest.config.mts"
+  ],
+  "include": [
+    "src/**/*.js",
+    "src/**/*.jsx",
+    "src/**/*.ts",
+    "src/**/*.tsx"
+  ],
+  "references": [
+    {
+      "path": "../../apis/core-api/tsconfig.lib.json"
+    },
+    {
+      "path": "../../common/shadcn/tsconfig.lib.json"
+    }
+  ]
+}
