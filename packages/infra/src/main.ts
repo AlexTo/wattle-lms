@@ -1,5 +1,5 @@
-import { App } from '@lms/common-constructs';
-import { listStageNames, resolveStage } from '@lms/common-infra-config';
+import { App } from '@wattle/common-constructs';
+import { listStageNames, resolveStage } from '@wattle/common-infra-config';
 import { ApplicationStage } from './stages/application-stage.js';
 
 const app = new App();

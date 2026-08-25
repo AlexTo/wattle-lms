@@ -1,4 +1,4 @@
-import { cn } from '@lms/common-shadcn/lib/utils';
+import { cn } from '@wattle/common-shadcn/lib/utils';
 import { ChevronRight, MoreHorizontal } from 'lucide-react';
 import { Slot } from 'radix-ui';
 import * as React from 'react';

@@ -1,5 +1,5 @@
 {
-  "name": "@lms/student-portal",
+  "name": "@wattle/student-portal",
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "packages/websites/student-portal/src",
   "projectType": "application",
@@ -48,7 +48,7 @@
       "executor": "nx:run-commands",
       "dependsOn": [
         {
-          "projects": ["@lms/core-api"],
+          "projects": ["@wattle/core-api"],
           "target": "dev"
         }
       ],
@@ -94,10 +94,10 @@
     "load-runtime-config": {
       "executor": "nx:run-commands",
       "metadata": {
-        "description": "Load runtime config from your deployed stack for dev purposes. You must set your AWS CLI credentials whilst calling 'pnpm nx load-runtime-config @lms/student-portal'"
+        "description": "Load runtime config from your deployed stack for dev purposes. You must set your AWS CLI credentials whilst calling 'pnpm nx load-runtime-config @wattle/student-portal'"
       },
       "options": {
-        "command": "aws s3 cp s3://`aws cloudformation describe-stacks --query \"Stacks[?starts_with(StackName, 'lms-')][].Outputs[] | [?contains(OutputKey, 'StudentPortalWebsiteBucketName')].OutputValue\" --output text`/runtime-config.json \"{projectRoot}/public/runtime-config.json\""
+        "command": "aws s3 cp s3://`aws cloudformation describe-stacks --query \"Stacks[?starts_with(StackName, 'wattle-')][].Outputs[] | [?contains(OutputKey, 'StudentPortalWebsiteBucketName')].OutputValue\" --output text`/runtime-config.json \"{projectRoot}/public/runtime-config.json\""
       }
     }
   }

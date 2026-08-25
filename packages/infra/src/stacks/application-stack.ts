@@ -3,13 +3,13 @@ import {
   CoreTable,
   StudentPortal,
   UserIdentity,
-} from '@lms/common-constructs';
+} from '@wattle/common-constructs';
 import type {
   CoreApiComponentConfig,
   CoreTableComponentConfig,
   IdentityComponentConfig,
   StudentPortalComponentConfig,
-} from '@lms/common-infra-config';
+} from '@wattle/common-infra-config';
 import { Stack, StackProps } from 'aws-cdk-lib';
 import { Mfa } from 'aws-cdk-lib/aws-cognito';
 import { TableEncryption } from 'aws-cdk-lib/aws-dynamodb';

@@ -1,6 +1,6 @@
 'use client';
 
-import { cn } from '@lms/common-shadcn/lib/utils';
+import { cn } from '@wattle/common-shadcn/lib/utils';
 import { XIcon } from 'lucide-react';
 import { Dialog as SheetPrimitive } from 'radix-ui';
 import * as React from 'react';

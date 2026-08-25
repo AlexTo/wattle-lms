@@ -1,5 +1,5 @@
 {
-  "name": "@lms/infra",
+  "name": "@wattle/infra",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "packages/infra/src",
   "projectType": "application",
@@ -62,7 +62,7 @@
       "executor": "nx:run-commands",
       "dependsOn": ["^build", "compile"],
       "options": {
-        "command": "tsx packages/common/scripts/src/infra/infra-deploy.ts packages/infra \"lms-infra-sandbox/*\""
+        "command": "tsx packages/common/scripts/src/infra/infra-deploy.ts packages/infra \"wattle-infra-sandbox/*\""
       }
     },
     "destroy": {

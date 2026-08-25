@@ -1,5 +1,5 @@
 {
-  "name": "@lms/common-infra-config",
+  "name": "@wattle/common-infra-config",
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "packages/common/infra-config/src",
   "projectType": "library",

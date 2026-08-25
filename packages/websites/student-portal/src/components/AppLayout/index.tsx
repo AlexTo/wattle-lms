@@ -1,3 +1,4 @@
+import { Link, useLocation, useMatchRoute } from '@tanstack/react-router';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -5,14 +6,13 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
-} from '@lms/common-shadcn/components/ui/breadcrumb';
-import { Separator } from '@lms/common-shadcn/components/ui/separator';
+} from '@wattle/common-shadcn/components/ui/breadcrumb';
+import { Separator } from '@wattle/common-shadcn/components/ui/separator';
 import {
   SidebarInset,
   SidebarProvider,
   SidebarTrigger,
-} from '@lms/common-shadcn/components/ui/sidebar';
-import { Link, useLocation, useMatchRoute } from '@tanstack/react-router';
+} from '@wattle/common-shadcn/components/ui/sidebar';
 import * as React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from 'react-oidc-context';

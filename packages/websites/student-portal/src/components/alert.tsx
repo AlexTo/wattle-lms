@@ -2,7 +2,7 @@ import {
   AlertDescription,
   AlertTitle,
   Alert as ShadcnAlert,
-} from '@lms/common-shadcn/components/ui/alert';
+} from '@wattle/common-shadcn/components/ui/alert';
 import React from 'react';
 
 type AlertType = 'info' | 'error';

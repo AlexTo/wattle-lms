@@ -1,5 +1,5 @@
 {
-  "name": "@lms/core-table",
+  "name": "@wattle/core-table",
   "version": "0.0.1",
   "private": true,
   "type": "module",

@@ -5,7 +5,7 @@ export default defineConfig(() => ({
   cacheDir: '../../node_modules/.vite/packages/infra',
   test: {
     passWithNoTests: true,
-    name: '@lms/infra',
+    name: '@wattle/infra',
     watch: false,
     globals: true,
     environment: 'jsdom',

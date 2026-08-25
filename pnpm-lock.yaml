@@ -376,7 +376,7 @@ importers:
       '@aws-sdk/client-iam':
         specifier: 'catalog:'
         version: 3.1111.0
-      '@lms/core-api':
+      '@wattle/core-api':
         specifier: workspace:*
         version: link:../../apis/core-api
       '@trpc/server':
@@ -407,7 +407,7 @@ importers:
       '@aws-sdk/client-dynamodb':
         specifier: 'catalog:'
         version: 3.1111.0
-      '@lms/common-infra-config':
+      '@wattle/common-infra-config':
         specifier: workspace:*
         version: link:../infra-config
       tslib:
@@ -487,10 +487,10 @@ importers:
 
   packages/infra:
     dependencies:
-      '@lms/common-constructs':
+      '@wattle/common-constructs':
         specifier: workspace:*
         version: link:../common/constructs
-      '@lms/common-infra-config':
+      '@wattle/common-infra-config':
         specifier: workspace:*
         version: link:../common/infra-config
       aws-cdk-lib:
@@ -508,10 +508,10 @@ importers:
 
   packages/websites/student-portal:
     dependencies:
-      '@lms/common-shadcn':
+      '@wattle/common-shadcn':
         specifier: workspace:*
         version: link:../../common/shadcn
-      '@lms/core-api':
+      '@wattle/core-api':
         specifier: workspace:*
         version: link:../../apis/core-api
       '@tanstack/react-query':

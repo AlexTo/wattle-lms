@@ -1,5 +1,5 @@
 {
-  "name": "@lms/common-shadcn",
+  "name": "@wattle/common-shadcn",
   "version": "0.0.1",
   "private": true,
   "type": "module",

@@ -5,7 +5,7 @@ export default defineConfig(() => ({
   cacheDir: '../../../node_modules/.vite/packages/common/scripts',
   test: {
     passWithNoTests: true,
-    name: '@lms/common-scripts',
+    name: '@wattle/common-scripts',
     watch: false,
     globals: true,
     environment: 'jsdom',

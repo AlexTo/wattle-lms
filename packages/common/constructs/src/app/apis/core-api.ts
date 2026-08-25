@@ -1,4 +1,4 @@
-import { AppRouter, appRouter } from '@lms/core-api';
+import { AppRouter, appRouter } from '@wattle/core-api';
 import { Aspects, Duration } from 'aws-cdk-lib';
 import {
   AuthorizationType,

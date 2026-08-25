@@ -1,5 +1,5 @@
 {
-  "name": "@lms/common-constructs",
+  "name": "@wattle/common-constructs",
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "packages/common/constructs/src",
   "projectType": "library",
@@ -13,9 +13,9 @@
         "lint",
         "compile",
         "test",
-        "@lms/core-table:build",
-        "@lms/core-api:build",
-        "@lms/student-portal:build"
+        "@wattle/core-table:build",
+        "@wattle/core-api:build",
+        "@wattle/student-portal:build"
       ]
     },
     "compile": {

@@ -1,5 +1,5 @@
 {
-  "name": "@lms/core-api",
+  "name": "@wattle/core-api",
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "packages/apis/core-api/src",
   "projectType": "library",
@@ -17,7 +17,7 @@
       {
         "generator": "ts#dynamodb#trpc-connection",
         "path": "packages/databases/core-table",
-        "name": "@lms/core-table"
+        "name": "@wattle/core-table"
       }
     ]
   },
@@ -47,7 +47,7 @@
       "executor": "nx:run-commands",
       "dependsOn": [
         {
-          "projects": ["@lms/core-table"],
+          "projects": ["@wattle/core-table"],
           "target": "dev"
         }
       ],

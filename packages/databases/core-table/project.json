@@ -1,5 +1,5 @@
 {
-  "name": "@lms/core-table",
+  "name": "@wattle/core-table",
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "packages/databases/core-table/src",
   "projectType": "library",

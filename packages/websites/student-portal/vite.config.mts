@@ -38,7 +38,7 @@ export default defineConfig(() => ({
   },
   test: {
     passWithNoTests: true,
-    name: '@lms/student-portal',
+    name: '@wattle/student-portal',
     watch: false,
     globals: true,
     environment: 'jsdom',

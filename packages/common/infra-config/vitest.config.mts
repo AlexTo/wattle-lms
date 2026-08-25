@@ -5,7 +5,7 @@ export default defineConfig(() => ({
   cacheDir: '../../../node_modules/.vite/packages/common/infra-config',
   test: {
     passWithNoTests: true,
-    name: '@lms/common-infra-config',
+    name: '@wattle/common-infra-config',
     watch: false,
     globals: true,
     environment: 'jsdom',

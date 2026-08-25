@@ -30,7 +30,7 @@ export class ApplicationStage extends Stage {
   ) {
     super(scope, id, props);
 
-    new ApplicationStack(this, 'Application', {
+    new ApplicationStack(this, 'Wattle', {
       crossRegionReferences: true,
       identity,
       coreApi,

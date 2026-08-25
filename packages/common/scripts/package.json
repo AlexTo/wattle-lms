@@ -1,12 +1,12 @@
 {
-  "name": "@lms/common-scripts",
+  "name": "@wattle/common-scripts",
   "version": "0.0.1",
   "private": true,
   "type": "module",
   "dependencies": {
     "@aws-sdk/client-dynamodb": "catalog:",
     "tslib": "^2.3.0",
-    "@lms/common-infra-config": "workspace:*"
+    "@wattle/common-infra-config": "workspace:*"
   },
   "devDependencies": {
     "@aws-sdk/client-sts": "catalog:",

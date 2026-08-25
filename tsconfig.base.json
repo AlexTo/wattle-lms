@@ -19,35 +19,35 @@
     "strict": true,
     "target": "es2022",
     "customConditions": [
-      "@lms/source"
+      "@wattle/source"
     ],
     "rootDir": ".",
     "paths": {
-      "@lms/core-table": [
+      "@wattle/core-table": [
         "./packages/databases/core-table/src/index.ts"
       ],
-      "@lms/common-scripts": [
+      "@wattle/common-scripts": [
         "./packages/common/scripts/src/index.ts"
       ],
-      "@lms/common-constructs": [
+      "@wattle/common-constructs": [
         "./packages/common/constructs/src/index.ts"
       ],
-      "@lms/core-api": [
+      "@wattle/core-api": [
         "./packages/apis/core-api/src/index.ts"
       ],
-      "@lms/student-portal": [
+      "@wattle/student-portal": [
         "./packages/websites/student-portal/src/index.ts"
       ],
-      "@lms/common-shadcn": [
+      "@wattle/common-shadcn": [
         "./packages/common/shadcn/src/index.ts"
       ],
-      "@lms/common-shadcn/*": [
+      "@wattle/common-shadcn/*": [
         "./packages/common/shadcn/src/*"
       ],
-      "@lms/infra": [
+      "@wattle/infra": [
         "./packages/infra/src/index.ts"
       ],
-      "@lms/common-infra-config": [
+      "@wattle/common-infra-config": [
         "./packages/common/infra-config/src/index.ts"
       ]
     }

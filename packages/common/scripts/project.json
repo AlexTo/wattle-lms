@@ -1,5 +1,5 @@
 {
-  "name": "@lms/common-scripts",
+  "name": "@wattle/common-scripts",
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "packages/common/scripts/src",
   "projectType": "library",

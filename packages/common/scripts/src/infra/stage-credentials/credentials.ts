@@ -1,4 +1,7 @@
-import type { StageCredentials, StagesConfig } from '@lms/common-infra-config';
+import type {
+  StageCredentials,
+  StagesConfig,
+} from '@wattle/common-infra-config';
 
 /**
  * Looks up credentials for a given project + stage combination.

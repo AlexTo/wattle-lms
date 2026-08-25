@@ -5,7 +5,7 @@ export default defineConfig(() => ({
   cacheDir: '../../../node_modules/.vite/packages/databases/core-table',
   test: {
     passWithNoTests: true,
-    name: '@lms/core-table',
+    name: '@wattle/core-table',
     watch: false,
     globals: true,
     environment: 'jsdom',

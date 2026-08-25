@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router';
 import {
   Sidebar,
   SidebarContent,
@@ -7,8 +8,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-} from '@lms/common-shadcn/components/ui/sidebar';
-import { Link } from '@tanstack/react-router';
+} from '@wattle/common-shadcn/components/ui/sidebar';
 import { Home } from 'lucide-react';
 
 import Config from '../config';

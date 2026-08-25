@@ -1,24 +1,24 @@
 'use client';
 
-import { Button } from '@lms/common-shadcn/components/ui/button';
-import { Input } from '@lms/common-shadcn/components/ui/input';
-import { Separator } from '@lms/common-shadcn/components/ui/separator';
+import { Button } from '@wattle/common-shadcn/components/ui/button';
+import { Input } from '@wattle/common-shadcn/components/ui/input';
+import { Separator } from '@wattle/common-shadcn/components/ui/separator';
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from '@lms/common-shadcn/components/ui/sheet';
-import { Skeleton } from '@lms/common-shadcn/components/ui/skeleton';
+} from '@wattle/common-shadcn/components/ui/sheet';
+import { Skeleton } from '@wattle/common-shadcn/components/ui/skeleton';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '@lms/common-shadcn/components/ui/tooltip';
-import { useIsMobile } from '@lms/common-shadcn/hooks/use-mobile';
-import { cn } from '@lms/common-shadcn/lib/utils';
+} from '@wattle/common-shadcn/components/ui/tooltip';
+import { useIsMobile } from '@wattle/common-shadcn/hooks/use-mobile';
+import { cn } from '@wattle/common-shadcn/lib/utils';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { PanelLeftIcon } from 'lucide-react';
 import { Slot } from 'radix-ui';

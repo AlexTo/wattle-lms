@@ -5,7 +5,7 @@ export default defineConfig(() => ({
   cacheDir: '../../../node_modules/.vite/packages/common/constructs',
   test: {
     passWithNoTests: true,
-    name: '@lms/common-constructs',
+    name: '@wattle/common-constructs',
     watch: false,
     globals: true,
     environment: 'jsdom',

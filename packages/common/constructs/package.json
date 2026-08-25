@@ -1,5 +1,5 @@
 {
-  "name": "@lms/common-constructs",
+  "name": "@wattle/common-constructs",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "aws-cdk-lib": "catalog:",
     "constructs": "catalog:",
     "tslib": "^2.3.0",
-    "@lms/core-api": "workspace:*"
+    "@wattle/core-api": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "catalog:"

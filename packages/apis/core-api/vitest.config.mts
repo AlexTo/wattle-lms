@@ -5,7 +5,7 @@ export default defineConfig(() => ({
   cacheDir: '../../../node_modules/.vite/packages/apis/core-api',
   test: {
     passWithNoTests: true,
-    name: '@lms/core-api',
+    name: '@wattle/core-api',
     watch: false,
     globals: true,
     environment: 'jsdom',

@@ -279,7 +279,7 @@ export class UserIdentity extends Construct {
     new UserPoolDomain(this, 'UserPoolDomain', {
       userPool,
       cognitoDomain: {
-        domainPrefix: `lms-${Stack.of(this).account}`,
+        domainPrefix: `wattle-${Stack.of(this).account}`,
       },
       managedLoginVersion: ManagedLoginVersion.NEWER_MANAGED_LOGIN,
     });

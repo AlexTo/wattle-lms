@@ -5,7 +5,7 @@ export default defineConfig(() => ({
   cacheDir: '../../../node_modules/.vite/packages/common/shadcn',
   test: {
     passWithNoTests: true,
-    name: '@lms/common-shadcn',
+    name: '@wattle/common-shadcn',
     watch: false,
     globals: true,
     environment: 'jsdom',

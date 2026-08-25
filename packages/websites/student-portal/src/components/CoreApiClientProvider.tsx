@@ -1,4 +1,3 @@
-import { AppRouter } from '@lms/core-api';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   createTRPCClient,
@@ -8,6 +7,7 @@ import {
   TRPCClient,
 } from '@trpc/client';
 import { createTRPCOptionsProxy } from '@trpc/tanstack-react-query';
+import { AppRouter } from '@wattle/core-api';
 import { EventSourcePolyfill } from 'event-source-polyfill';
 import { createContext, FC, PropsWithChildren, useMemo } from 'react';
 import { useAuth } from 'react-oidc-context';
