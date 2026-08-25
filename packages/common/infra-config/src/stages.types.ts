@@ -56,6 +56,8 @@ export type CoreApiComponentConfig = {
 export type CoreTableComponentConfig = {
   /** Use customer-managed KMS encryption instead of the cheaper AWS-owned default */
   enableKmsEncryption?: boolean;
+  /** Prevent the table from being deleted while the stack is deployed */
+  enableDeletionProtection?: boolean;
 };
 
 /**

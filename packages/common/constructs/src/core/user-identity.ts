@@ -155,7 +155,7 @@ export class UserIdentity extends Construct {
       standardThreatProtectionMode: StandardThreatProtectionMode.AUDIT_ONLY,
       mfaSecondFactor,
       signInCaseSensitive: false,
-      signInAliases: { username: true, email: true },
+      signInAliases: { username: false, email: true },
       accountRecovery: AccountRecovery.EMAIL_ONLY,
       selfSignUpEnabled: true,
       standardAttributes: {
