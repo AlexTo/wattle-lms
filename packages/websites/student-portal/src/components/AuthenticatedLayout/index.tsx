@@ -49,7 +49,7 @@ const getBreadcrumbs = (
   });
 };
 
-const AppLayout = ({ children }: { children: React.ReactNode }) => {
+const AuthenticatedLayout = ({ children }: { children: React.ReactNode }) => {
   const [activeBreadcrumbs, setActiveBreadcrumbs] = React.useState<
     { href: string; text: string }[]
   >([{ text: '/', href: '/' }]);
@@ -119,4 +119,4 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-export default AppLayout;
+export default AuthenticatedLayout;

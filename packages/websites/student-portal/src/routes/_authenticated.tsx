@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, redirect } from '@tanstack/react-router';
-import AppLayout from '../components/AppLayout';
+import AuthenticatedLayout from '../components/AuthenticatedLayout';
 
 export const Route = createFileRoute('/_authenticated')({
   beforeLoad: ({ context }) => {
@@ -10,8 +10,8 @@ export const Route = createFileRoute('/_authenticated')({
     }
   },
   component: () => (
-    <AppLayout>
+    <AuthenticatedLayout>
       <Outlet />
-    </AppLayout>
+    </AuthenticatedLayout>
   ),
 });
