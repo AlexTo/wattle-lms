@@ -1,5 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { Button } from '@wattle/common-shadcn/components/ui/button';
+import { useAuth } from 'react-oidc-context';
+import { UserMenu } from '../../components/UserMenu';
 import Config from '../../config';
 
 export const Route = createFileRoute('/_public/')({
@@ -7,6 +9,8 @@ export const Route = createFileRoute('/_public/')({
 });
 
 function RouteComponent() {
+  const { isAuthenticated } = useAuth();
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="flex items-center justify-between border-b px-6 py-4">
@@ -20,9 +24,18 @@ function RouteComponent() {
             {Config.applicationName}
           </span>
         </div>
-        <Button asChild>
-          <Link to="/signin">Sign In</Link>
-        </Button>
+        {isAuthenticated ? (
+          <div className="flex items-center gap-3">
+            <Button variant="outline" asChild>
+              <Link to="/dashboard">Dashboard</Link>
+            </Button>
+            <UserMenu />
+          </div>
+        ) : (
+          <Button asChild>
+            <Link to="/signin">Sign In</Link>
+          </Button>
+        )}
       </header>
       <main className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
         <h1 className="text-2xl font-semibold">Welcome</h1>
