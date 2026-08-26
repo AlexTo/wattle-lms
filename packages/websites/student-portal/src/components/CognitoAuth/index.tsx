@@ -1,4 +1,4 @@
-import React, { PropsWithChildren, useEffect } from 'react';
+import React, { PropsWithChildren } from 'react';
 import { AuthProvider, AuthProviderProps, useAuth } from 'react-oidc-context';
 import { useRuntimeConfig } from '../../hooks/useRuntimeConfig';
 import { Alert } from '../alert';
@@ -45,16 +45,6 @@ const CognitoAuth: React.FC<PropsWithChildren> = ({ children }) => {
 const CognitoAuthInternal: React.FC<PropsWithChildren> = ({ children }) => {
   const auth = useAuth();
 
-  useEffect(() => {
-    if (!auth.isAuthenticated && !auth.isLoading) {
-      auth.signinRedirect();
-    }
-  }, [auth]);
-
-  if (auth.isAuthenticated) {
-    return children;
-  }
-
   if (auth.error) {
     return (
       <Alert type="error" header="Configuration error">
@@ -66,7 +56,11 @@ const CognitoAuthInternal: React.FC<PropsWithChildren> = ({ children }) => {
     );
   }
 
-  return <Spinner />;
+  if (auth.isLoading) {
+    return <Spinner />;
+  }
+
+  return children;
 };
 
 export default CognitoAuth;
