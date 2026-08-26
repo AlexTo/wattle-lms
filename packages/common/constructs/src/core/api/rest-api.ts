@@ -64,6 +64,21 @@ export interface RestApiProps<
    * @default { rateLimit: 10000, burstLimit: 5000 }
    */
   readonly throttle?: ThrottleSettings;
+  /**
+   * Whether to encrypt the API access log group with a customer-managed KMS key.
+   * When disabled, CloudWatch Logs still encrypts log data at rest using an
+   * AWS-owned key.
+   *
+   * @default true
+   */
+  readonly enableKmsEncryption?: boolean;
+  /**
+   * Whether to enable automatic key rotation on the KMS key used to encrypt
+   * the access log group. Only used when `enableKmsEncryption` is `true`.
+   *
+   * @default true
+   */
+  readonly enableKeyRotation?: boolean;
 }
 
 /**
@@ -99,6 +114,8 @@ export class RestApi<
       integrations,
       enableWaf = true,
       throttle = { rateLimit: 10000, burstLimit: 5000 },
+      enableKmsEncryption = true,
+      enableKeyRotation = true,
       ...props
     }: RestApiProps<TIntegrations, TOperation>,
   ) {
@@ -109,10 +126,10 @@ export class RestApi<
     const account = ApiGatewayAccount.ensure(this);
 
     // KMS key for encrypting logs at rest, usable by CloudWatch Logs
-    const logsKey = new Key(this, 'LogsKey', {
-      enableKeyRotation: true,
-    });
-    logsKey.grantEncryptDecrypt(
+    const logsKey = enableKmsEncryption
+      ? new Key(this, 'LogsKey', { enableKeyRotation })
+      : undefined;
+    logsKey?.grantEncryptDecrypt(
       new ServicePrincipal(`logs.${Stack.of(this).region}.amazonaws.com`),
     );
 

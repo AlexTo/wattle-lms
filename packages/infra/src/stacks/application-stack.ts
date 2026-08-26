@@ -2,8 +2,8 @@ import {
   CoreApi,
   CoreTable,
   StudentPortal,
-  UserIdentity,
   suppressRules,
+  UserIdentity,
 } from '@wattle/common-constructs';
 import type {
   CoreApiComponentConfig,
@@ -43,6 +43,7 @@ export class ApplicationStack extends Stack {
     super(scope, id, props);
 
     const coreTableKmsEnabled = coreTableConfig?.enableKmsEncryption ?? true;
+    const coreApiKmsEnabled = coreApiConfig?.enableKmsEncryption ?? true;
     const studentPortalWafEnabled = studentPortalConfig?.enableWaf ?? true;
     const studentPortalKmsEnabled =
       studentPortalConfig?.enableKmsEncryption ?? true;
@@ -56,6 +57,7 @@ export class ApplicationStack extends Stack {
       encryption: coreTableKmsEnabled
         ? TableEncryption.CUSTOMER_MANAGED
         : TableEncryption.DEFAULT,
+      enableKeyRotation: coreTableConfig?.enableKeyRotation ?? true,
       deletionProtection: coreTableConfig?.enableDeletionProtection ?? true,
     });
     if (!coreTableKmsEnabled) {
@@ -72,7 +74,20 @@ export class ApplicationStack extends Stack {
       integrations,
       identity,
       enableWaf: coreApiConfig?.enableWaf ?? true,
+      enableKmsEncryption: coreApiKmsEnabled,
+      enableKeyRotation: coreApiConfig?.enableKeyRotation ?? true,
     });
+    if (!coreApiKmsEnabled) {
+      suppressRules(
+        this,
+        ['CKV_AWS_158'],
+        'KMS encryption disabled for this stage',
+        (c) =>
+          CfnResource.isCfnResource(c) &&
+          c.cfnResourceType === 'AWS::Logs::LogGroup' &&
+          c.node.path.includes('/CoreApi/AccessLogs'),
+      );
+    }
 
     Object.values(integrations).forEach(({ handler }) =>
       coreTable.grantReadWriteData(handler),
@@ -80,6 +95,7 @@ export class ApplicationStack extends Stack {
 
     const studentPortal = new StudentPortal(this, 'StudentPortal', {
       enableWaf: studentPortalWafEnabled,
+      enableKeyRotation: studentPortalConfig?.enableKeyRotation ?? true,
       ...(studentPortalKmsEnabled
         ? {}
         : { encryption: BucketEncryption.S3_MANAGED }),
