@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
+import { getUserIdentity } from './user-profile';
 
 export const UserMenu = () => {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -17,6 +18,7 @@ export const UserMenu = () => {
   }, []);
   const auth = useAuth();
   const { user, removeUser } = auth;
+  const { displayName, initials } = getUserIdentity(user?.profile);
 
   // Cognito's `end_session_endpoint` doesn't honour the OIDC-standard
   // `post_logout_redirect_uri` param that `signoutRedirect()` sends - it
@@ -52,14 +54,12 @@ export const UserMenu = () => {
         aria-label="Open user menu"
         aria-expanded={menuOpen}
       >
-        {(user?.profile?.['cognito:username'] as any)
-          ?.charAt?.(0)
-          ?.toUpperCase?.()}
+        {initials}
       </button>
       {menuOpen && (
         <div className="bg-popover text-popover-foreground absolute right-0 top-12 w-36 overflow-hidden rounded-md border shadow-md">
           <div className="px-3 py-2 text-sm font-semibold">
-            Hi, {user?.profile?.['cognito:username'] as any}!
+            Hi, {displayName}!
           </div>
           <div className="bg-border/70 h-px w-full" role="separator" />
           <button
