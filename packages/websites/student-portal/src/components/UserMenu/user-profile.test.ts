@@ -12,16 +12,9 @@ describe('getUserIdentity', () => {
         profile({
           given_name: 'Ada',
           family_name: 'Lovelace',
-          'cognito:username': 'ada123',
         }),
       ),
     ).toEqual({ displayName: 'Ada Lovelace', initials: 'AL' });
-  });
-
-  it('falls back to the Cognito username', () => {
-    expect(
-      getUserIdentity(profile({ 'cognito:username': 'student-one' })),
-    ).toEqual({ displayName: 'student-one', initials: 'S' });
   });
 
   it('handles an unavailable profile', () => {

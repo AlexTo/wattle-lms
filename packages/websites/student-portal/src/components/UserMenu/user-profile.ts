@@ -30,9 +30,7 @@ export const getUserIdentity = (
 ): UserIdentity => {
   const givenName = getClaim(profile, 'given_name');
   const familyName = getClaim(profile, 'family_name');
-  const username = getClaim(profile, 'cognito:username');
-  const fullName = `${givenName} ${familyName}`.trim();
-  const displayName = fullName || username;
+  const displayName = `${givenName} ${familyName}`.trim();
 
   return {
     displayName,
