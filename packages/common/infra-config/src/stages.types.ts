@@ -48,6 +48,10 @@ export type IdentityComponentConfig = {
 export type CoreApiComponentConfig = {
   /** Protect the API Gateway with AWS WAF */
   enableWaf?: boolean;
+  /** Use customer-managed KMS encryption instead of the cheaper AWS-owned default for the access log group */
+  enableKmsEncryption?: boolean;
+  /** Enable automatic key rotation on the access log group's KMS key. Only used when `enableKmsEncryption` is true */
+  enableKeyRotation?: boolean;
 };
 
 /**
@@ -56,6 +60,8 @@ export type CoreApiComponentConfig = {
 export type CoreTableComponentConfig = {
   /** Use customer-managed KMS encryption instead of the cheaper AWS-owned default */
   enableKmsEncryption?: boolean;
+  /** Enable automatic key rotation on the table's KMS key. Only used when `enableKmsEncryption` is true */
+  enableKeyRotation?: boolean;
   /** Prevent the table from being deleted while the stack is deployed */
   enableDeletionProtection?: boolean;
 };
@@ -68,6 +74,8 @@ export type StudentPortalComponentConfig = {
   enableWaf?: boolean;
   /** Use customer-managed KMS encryption instead of the cheaper S3-managed default */
   enableKmsEncryption?: boolean;
+  /** Enable automatic key rotation on the website bucket's KMS key. Only used when `enableKmsEncryption` is true */
+  enableKeyRotation?: boolean;
 };
 
 /**

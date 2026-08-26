@@ -24,10 +24,10 @@ export default {
       stages: {
         // No credentials/region set yet — deploys use your active AWS CLI
         // credentials and CDK_DEFAULT_REGION until these are configured.
-        development: {
+        'wattle-development': {
           components: {
             identity: { enableWaf: false, enableMfa: false },
-            coreApi: { enableWaf: false },
+            coreApi: { enableWaf: false, enableKmsEncryption: false },
             coreTable: {
               enableKmsEncryption: false,
               enableDeletionProtection: false,
@@ -35,15 +35,24 @@ export default {
             studentPortal: { enableWaf: false, enableKmsEncryption: false },
           },
         },
-        production: {
+        'wattle-production': {
           components: {
             identity: { enableWaf: true, enableMfa: true },
-            coreApi: { enableWaf: true },
+            coreApi: {
+              enableWaf: true,
+              enableKmsEncryption: true,
+              enableKeyRotation: true,
+            },
             coreTable: {
               enableKmsEncryption: true,
+              enableKeyRotation: true,
               enableDeletionProtection: true,
             },
-            studentPortal: { enableWaf: true, enableKmsEncryption: true },
+            studentPortal: {
+              enableWaf: true,
+              enableKmsEncryption: true,
+              enableKeyRotation: true,
+            },
           },
         },
       },

@@ -60,6 +60,21 @@ export interface CoreApiProps<
    * @default true
    */
   enableWaf?: boolean;
+  /**
+   * Whether to encrypt the API access log group with a customer-managed KMS key.
+   * When disabled, CloudWatch Logs still encrypts log data at rest using an
+   * AWS-owned key.
+   *
+   * @default true
+   */
+  enableKmsEncryption?: boolean;
+  /**
+   * Whether to enable automatic key rotation on the KMS key used to encrypt
+   * the access log group. Only used when `enableKmsEncryption` is `true`.
+   *
+   * @default true
+   */
+  enableKeyRotation?: boolean;
 }
 
 /**
