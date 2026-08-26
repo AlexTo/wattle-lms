@@ -14,10 +14,9 @@ import {
   SidebarTrigger,
 } from '@wattle/common-shadcn/components/ui/sidebar';
 import * as React from 'react';
-import { useEffect, useRef, useState } from 'react';
-import { useAuth } from 'react-oidc-context';
 import Config from '../../config';
 import { AppSidebar } from '../app-sidebar';
+import { UserMenu } from '../UserMenu';
 
 const getBreadcrumbs = (
   matchRoute: ReturnType<typeof useMatchRoute>,
@@ -50,21 +49,7 @@ const getBreadcrumbs = (
   });
 };
 
-const AppLayout = ({ children }: { children: React.ReactNode }) => {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as any)) {
-        setMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-  const { user, removeUser, signoutRedirect, clearStaleState } = useAuth();
+const AuthenticatedLayout = ({ children }: { children: React.ReactNode }) => {
   const [activeBreadcrumbs, setActiveBreadcrumbs] = React.useState<
     { href: string; text: string }[]
   >([{ text: '/', href: '/' }]);
@@ -102,44 +87,8 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
               </div>
             </div>
           </div>
-          <div className="ml-auto flex items-center gap-3" ref={menuRef}>
-            <button
-              type="button"
-              onClick={() => setMenuOpen((open) => !open)}
-              className="focus-visible:ring-ring/60 bg-muted text-muted-foreground flex size-10 items-center justify-center rounded-full border border-border/60 font-semibold shadow-sm outline-none transition hover:bg-muted/80 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-background cursor-pointer"
-              aria-label="Open user menu"
-              aria-expanded={menuOpen}
-            >
-              {(user?.profile?.['cognito:username'] as any)
-                ?.charAt?.(0)
-                ?.toUpperCase?.()}
-            </button>
-            {menuOpen && (
-              <div className="bg-popover text-popover-foreground absolute right-4 top-14 w-36 overflow-hidden rounded-md border shadow-md">
-                <div className="px-3 py-2 text-sm font-semibold">
-                  Hi, {user?.profile?.['cognito:username'] as any}!
-                </div>
-                <div className="bg-border/70 h-px w-full" role="separator" />
-                <button
-                  type="button"
-                  className="hover:bg-muted w-full px-3 py-2 text-left text-sm cursor-pointer"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    removeUser();
-                    signoutRedirect({
-                      post_logout_redirect_uri: window.location.origin,
-                      extraQueryParams: {
-                        redirect_uri: window.location.origin,
-                        response_type: 'code',
-                      },
-                    });
-                    clearStaleState();
-                  }}
-                >
-                  Sign out
-                </button>
-              </div>
-            )}
+          <div className="ml-auto flex items-center gap-3">
+            <UserMenu />
           </div>
         </header>
         <div className="flex flex-1 flex-col gap-6 p-6 pt-4">
@@ -170,4 +119,4 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-export default AppLayout;
+export default AuthenticatedLayout;
