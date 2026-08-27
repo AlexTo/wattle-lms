@@ -26,6 +26,9 @@
     },
     {
       "path": "./packages/common/infra-config"
+    },
+    {
+      "path": "./packages/events"
     }
   ]
 }

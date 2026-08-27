@@ -27,6 +27,7 @@ class MetricsAspect implements IAspect {
         'g62',
         'g10',
         'g8',
+        'g21',
       ];
       node.templateOptions.description =
         `${node.templateOptions.description ?? ''} (${id}) (version:${version}) (tag:${tags.join(',')})`.trim();
