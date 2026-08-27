@@ -1,0 +1,2 @@
+@import '../../../common/shadcn/src/styles/globals.css';
+@source './**/*.{ts,tsx}';
