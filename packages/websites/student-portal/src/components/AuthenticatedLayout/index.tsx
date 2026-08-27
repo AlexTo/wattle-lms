@@ -7,12 +7,14 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from '@wattle/common-shadcn/components/ui/breadcrumb';
+import { Input } from '@wattle/common-shadcn/components/ui/input';
 import { Separator } from '@wattle/common-shadcn/components/ui/separator';
 import {
   SidebarInset,
   SidebarProvider,
   SidebarTrigger,
 } from '@wattle/common-shadcn/components/ui/sidebar';
+import { Search } from 'lucide-react';
 import * as React from 'react';
 import Config from '../../config';
 import { AppSidebar } from '../app-sidebar';
@@ -67,7 +69,9 @@ const AuthenticatedLayout = ({ children }: { children: React.ReactNode }) => {
   }, [matchRoute, pathname, search]);
 
   return (
-    <SidebarProvider>
+    <SidebarProvider
+      style={{ '--sidebar-width': '13rem' } as React.CSSProperties}
+    >
       <AppSidebar />
       <SidebarInset>
         <header className="supports-backdrop-blur:bg-background/60 sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-background/80 px-4 backdrop-blur">
@@ -87,7 +91,20 @@ const AuthenticatedLayout = ({ children }: { children: React.ReactNode }) => {
               </div>
             </div>
           </div>
-          <div className="ml-auto flex items-center gap-3">
+          <form
+            className="relative ml-auto hidden w-full max-w-md sm:block"
+            role="search"
+            onSubmit={(event) => event.preventDefault()}
+          >
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="search"
+              aria-label="Search courses and activities"
+              placeholder="Search courses and activities"
+              className="bg-background/80 pl-9"
+            />
+          </form>
+          <div className="flex items-center gap-3">
             <UserMenu />
           </div>
         </header>
