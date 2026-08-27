@@ -49,6 +49,9 @@
       ],
       "@wattle/common-infra-config": [
         "./packages/common/infra-config/src/index.ts"
+      ],
+      "@wattle/events": [
+        "./packages/events/src/index.ts"
       ]
     }
   }

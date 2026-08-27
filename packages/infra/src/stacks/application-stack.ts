@@ -1,6 +1,7 @@
 import {
   CoreApi,
   CoreTable,
+  EventsPostConfirmation,
   StudentPortal,
   suppressRules,
   UserIdentity,
@@ -12,8 +13,9 @@ import type {
   StudentPortalComponentConfig,
 } from '@wattle/common-infra-config';
 import { CfnResource, Stack, StackProps } from 'aws-cdk-lib';
-import { Mfa } from 'aws-cdk-lib/aws-cognito';
+import { Mfa, UserPoolOperation } from 'aws-cdk-lib/aws-cognito';
 import { TableEncryption } from 'aws-cdk-lib/aws-dynamodb';
+import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
 import { BucketEncryption } from 'aws-cdk-lib/aws-s3';
 import { Construct } from 'constructs';
 
@@ -52,6 +54,32 @@ export class ApplicationStack extends Stack {
       enableWaf: identityConfig?.enableWaf ?? true,
       mfa: (identityConfig?.enableMfa ?? true) ? Mfa.REQUIRED : Mfa.OFF,
     });
+
+    // Adds every self-signed-up user to the `student` group
+    const postConfirmation = new EventsPostConfirmation(
+      this,
+      'PostConfirmation',
+    );
+    // Scoped to any pool in this account/region rather than this specific
+    // pool's ARN: referencing the pool here would create a circular
+    // CloudFormation dependency, since the pool's LambdaConfig already
+    // depends on this function
+    postConfirmation.addToRolePolicy(
+      new PolicyStatement({
+        actions: ['cognito-idp:AdminAddUserToGroup'],
+        resources: [
+          Stack.of(this).formatArn({
+            service: 'cognito-idp',
+            resource: 'userpool',
+            resourceName: '*',
+          }),
+        ],
+      }),
+    );
+    identity.userPool.addTrigger(
+      UserPoolOperation.POST_CONFIRMATION,
+      postConfirmation,
+    );
 
     const coreTable = new CoreTable(this, 'CoreTable', {
       encryption: coreTableKmsEnabled

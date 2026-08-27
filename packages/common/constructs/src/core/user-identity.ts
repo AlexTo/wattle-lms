@@ -10,6 +10,7 @@ import { Distribution } from 'aws-cdk-lib/aws-cloudfront';
 import {
   AccountRecovery,
   CfnManagedLoginBranding,
+  CfnUserPoolGroup,
   FeaturePlan,
   ManagedLoginVersion,
   Mfa,
@@ -39,6 +40,18 @@ const WEB_CLIENT_ID = 'WebClient';
 
 /** Local dev server origins permitted to complete the sign-in redirect */
 const LOCAL_CALLBACK_URLS = ['http://localhost:4200', 'http://localhost:4300'];
+
+/**
+ * The set of portal roles provisioned as Cognito user pool groups. Lower
+ * precedence values win when a user is ever placed in more than one group.
+ */
+const USER_POOL_GROUPS = [
+  { name: 'admin', precedence: 0 },
+  { name: 'instructor', precedence: 1 },
+  { name: 'student', precedence: 2 },
+] as const;
+
+export type UserRole = (typeof USER_POOL_GROUPS)[number]['name'];
 
 export interface UserIdentityProps {
   /**
@@ -74,6 +87,7 @@ export class UserIdentity extends Construct {
   public readonly userPool: UserPool;
   public readonly userPoolClient: UserPoolClient;
   public readonly userPoolDomain: UserPoolDomain;
+  public readonly userPoolGroups: Record<UserRole, CfnUserPoolGroup>;
 
   /** The WAFv2 Web ACL associated with the user pool, if WAF is enabled */
   public readonly webAcl?: CfnWebACL;
@@ -91,6 +105,7 @@ export class UserIdentity extends Construct {
 
     this.region = Stack.of(this).region;
     this.userPool = this.createUserPool(mfa, mfaSecondFactor);
+    this.userPoolGroups = this.createUserPoolGroups(this.userPool);
 
     if (enableWaf) {
       this.webAcl = this.createWebAcl(
@@ -184,6 +199,22 @@ export class UserIdentity extends Construct {
     }
     return userPool;
   };
+
+  private createUserPoolGroups = (userPool: UserPool) =>
+    Object.fromEntries(
+      USER_POOL_GROUPS.map(({ name, precedence }) => [
+        name,
+        new CfnUserPoolGroup(
+          this,
+          `${name.charAt(0).toUpperCase()}${name.slice(1)}Group`,
+          {
+            userPoolId: userPool.userPoolId,
+            groupName: name,
+            precedence,
+          },
+        ),
+      ]),
+    ) as Record<UserRole, CfnUserPoolGroup>;
 
   private createWebAcl = (
     id: string,
