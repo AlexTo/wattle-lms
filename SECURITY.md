@@ -15,4 +15,4 @@ Wattle LMS ships with security controls enabled by default, and only relaxes the
 - Infrastructure security scanning with [Checkov](https://www.checkov.io) (`infra:checkov`, part of the `build` target)
 - Credential scanning with `git-secrets` on every commit (`.husky/pre-commit`)
 
-The `wattle-production` stage is the hardened baseline; deploy it (rather than `wattle-development`) for anything beyond local iteration.
+The `wattle-production` stage is the hardened baseline; deploy it (rather than `wattle-development`) for anything beyond fast, cheap iteration.
