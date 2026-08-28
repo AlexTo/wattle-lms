@@ -1,1 +1,4 @@
-// Scripts (infra-deploy, infra-destroy) are the public interface of this package.
+/**
+ * Copyright Wattle LMS Contributors. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */

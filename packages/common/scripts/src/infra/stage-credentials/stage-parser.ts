@@ -1,11 +1,6 @@
 /**
- * Extracts the CDK stage name from the first positional argument.
- *
- * Examples:
- *   parseStageName('my-app-dev/*')  → 'my-app-dev'
- *   parseStageName('my-app-dev')    → 'my-app-dev'
- *   parseStageName('--verbose')     → undefined (flag, not a stage)
- *   parseStageName(undefined)       → undefined
+ * Copyright Wattle LMS Contributors. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
  */
 export function parseStageName(
   firstArg: string | undefined,

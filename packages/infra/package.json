@@ -11,5 +11,6 @@
     "@wattle/common-constructs": "workspace:*",
     "@wattle/common-infra-config": "workspace:*"
   },
-  "devDependencies": {}
+  "devDependencies": {},
+  "license": "Apache-2.0"
 }

@@ -21,5 +21,6 @@
     "@types/aws-lambda": "catalog:",
     "@types/cors": "catalog:",
     "cors": "catalog:"
-  }
+  },
+  "license": "Apache-2.0"
 }

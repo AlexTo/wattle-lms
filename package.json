@@ -1,7 +1,7 @@
 {
   "name": "@wattle/source",
   "version": "0.0.0",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "packageManager": "pnpm@11.22.0",
   "scripts": {
     "dev": "nx run-many --target dev",
@@ -58,5 +58,8 @@
     "vite": "catalog:",
     "vitest": "catalog:"
   },
-  "type": "module"
+  "type": "module",
+  "nx": {
+    "includedScripts": []
+  }
 }

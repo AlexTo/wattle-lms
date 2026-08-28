@@ -1,3 +1,7 @@
+/**
+ * Copyright Wattle LMS Contributors. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { defineCollection } from 'astro:content';
 import { docsLoader } from '@astrojs/starlight/loaders';
 import { docsSchema } from '@astrojs/starlight/schema';

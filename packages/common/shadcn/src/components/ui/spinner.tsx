@@ -1,3 +1,7 @@
+/**
+ * Copyright Wattle LMS Contributors. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { cn } from '@wattle/common-shadcn/lib/utils';
 import { Loader2Icon } from 'lucide-react';
 

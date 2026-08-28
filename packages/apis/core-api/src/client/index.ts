@@ -1,3 +1,7 @@
+/**
+ * Copyright Wattle LMS Contributors. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { createTRPCClient, HTTPLinkOptions, httpLink } from '@trpc/client';
 import { AppRouter } from '../router.js';
 

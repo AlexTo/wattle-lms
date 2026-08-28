@@ -17,5 +17,6 @@
     "vite": "catalog:",
     "vitest": "catalog:"
   },
-  "devDependencies": {}
+  "devDependencies": {},
+  "license": "Apache-2.0"
 }

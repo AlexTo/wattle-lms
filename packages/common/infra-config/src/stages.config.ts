@@ -1,20 +1,6 @@
 /**
- * Stage configuration for CDK deployments.
- *
- * This file maps CDK stage names to their deployment settings. When you run
- * `pnpm nx run <project>:deploy <stage-name>/*`, the infra-deploy script
- * automatically resolves and applies the correct credentials.
- *
- * Project keys are the project path relative to the workspace root
- * (e.g., 'packages/infra').
- *
- * Stage names must match the CDK stage identifiers defined in your main.ts —
- * the first argument to `new ApplicationStage(app, '<stage-name>', ...)`.
- * For example, if main.ts has `new ApplicationStage(app, 'my-app-dev', ...)`
- * then the stage name here is 'my-app-dev'.
- *
- * We recommend committing this file so the team shares a single source of truth.
- * If it contains personal profile names, you can add it to .gitignore instead.
+ * Copyright Wattle LMS Contributors. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
  */
 import type { StagesConfig } from './stages.types.js';
 

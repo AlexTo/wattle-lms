@@ -1,17 +1,6 @@
 /**
- * Translate documentation files using a Strands agent powered by Claude on
- * Amazon Bedrock.
- *
- * Configuration lives in ./translate.config.json (sibling to this file).
- * Run from the project root:
- *
- *   pnpm nx translate @wattle/docs -- --all
- *   pnpm nx translate @wattle/docs            # only files changed since last translate commit
- *
- * The driver works out which source docs to translate and spawns one Strands
- * agent per (file × target language). Each agent gets the `fileEditor` tool and
- * the paths it needs — the source file, the target file, and a diff of what
- * changed — then reads, translates and writes the file itself.
+ * Copyright Wattle LMS Contributors. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
  */
 import { Command } from 'commander';
 import fs from 'fs-extra';

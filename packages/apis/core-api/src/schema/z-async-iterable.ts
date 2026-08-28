@@ -1,3 +1,7 @@
+/**
+ * Copyright Wattle LMS Contributors. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { isTrackedEnvelope, type TrackedEnvelope, tracked } from '@trpc/server';
 import { z } from 'zod';
 

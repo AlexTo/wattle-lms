@@ -1,3 +1,7 @@
+/**
+ * Copyright Wattle LMS Contributors. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { Construct } from 'constructs';
 import * as url from 'url';
 import { StaticWebsite, StaticWebsiteProps } from '../../core/index.js';

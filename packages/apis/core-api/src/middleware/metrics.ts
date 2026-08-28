@@ -1,3 +1,7 @@
+/**
+ * Copyright Wattle LMS Contributors. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { Metrics, MetricUnit } from '@aws-lambda-powertools/metrics';
 import { initTRPC } from '@trpc/server';
 

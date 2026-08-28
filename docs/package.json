@@ -16,5 +16,6 @@
   },
   "devDependencies": {
     "@types/fs-extra": "catalog:"
-  }
+  },
+  "license": "Apache-2.0"
 }

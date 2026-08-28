@@ -1,3 +1,7 @@
+/**
+ * Copyright Wattle LMS Contributors. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import React, { PropsWithChildren } from 'react';
 import { AuthProvider, AuthProviderProps, useAuth } from 'react-oidc-context';
 import { useRuntimeConfig } from '../../hooks/useRuntimeConfig';
