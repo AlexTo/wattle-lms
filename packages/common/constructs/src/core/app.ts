@@ -1,5 +1,5 @@
 /**
- * Copyright Alex To. All Rights Reserved.
+ * Copyright Wattle LMS Contributors. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
 import { App as _App, AppProps, Aspects, IAspect, Stack } from 'aws-cdk-lib';

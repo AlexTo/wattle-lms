@@ -1,5 +1,5 @@
 /**
- * Copyright Alex To. All Rights Reserved.
+ * Copyright Wattle LMS Contributors. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -21,11 +21,11 @@ export default {
     },
     source: {
       spdx: 'Apache-2.0',
-      copyrightHolder: 'Alex To',
+      copyrightHolder: 'Wattle LMS Contributors',
       header: {
         content: {
           lines: [
-            'Copyright Alex To. All Rights Reserved.',
+            'Copyright Wattle LMS Contributors. All Rights Reserved.',
             'SPDX-License-Identifier: Apache-2.0',
           ],
         },
