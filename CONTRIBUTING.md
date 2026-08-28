@@ -65,7 +65,7 @@ This project has adopted the [Contributor Covenant](CODE_OF_CONDUCT.md). Please 
 
 ## Security Issue Notifications
 
-If you discover a potential security issue, please report it privately rather than opening a public GitHub issue, using GitHub's [private vulnerability reporting](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing/privately-reporting-a-security-vulnerability).
+See [SECURITY.md](SECURITY.md) for how to report a potential security issue. Please do not open a public GitHub issue for it.
 
 ## Licensing
 
