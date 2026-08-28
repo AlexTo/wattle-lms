@@ -52,6 +52,9 @@
       ],
       "@wattle/events": [
         "./packages/events/src/index.ts"
+      ],
+      "@wattle/instructor-portal": [
+        "./packages/websites/instructor-portal/src/index.ts"
       ]
     }
   }

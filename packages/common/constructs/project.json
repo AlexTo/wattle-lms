@@ -16,7 +16,8 @@
         "@wattle/core-table:build",
         "@wattle/core-api:build",
         "@wattle/student-portal:build",
-        "@wattle/events:build"
+        "@wattle/events:build",
+        "@wattle/instructor-portal:build"
       ]
     },
     "compile": {

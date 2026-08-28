@@ -2,6 +2,7 @@ import {
   CoreApi,
   CoreTable,
   EventsPostConfirmation,
+  InstructorPortal,
   StudentPortal,
   suppressRules,
   UserIdentity,
@@ -10,6 +11,7 @@ import type {
   CoreApiComponentConfig,
   CoreTableComponentConfig,
   IdentityComponentConfig,
+  InstructorPortalComponentConfig,
   StudentPortalComponentConfig,
 } from '@wattle/common-infra-config';
 import { CfnResource, Stack, StackProps } from 'aws-cdk-lib';
@@ -28,6 +30,8 @@ export interface ApplicationStackProps extends StackProps {
   readonly coreTable?: CoreTableComponentConfig;
   /** Settings for the student portal static website construct. @default all enabled */
   readonly studentPortal?: StudentPortalComponentConfig;
+  /** Settings for the instructor portal static website construct. @default all enabled */
+  readonly instructorPortal?: InstructorPortalComponentConfig;
 }
 
 export class ApplicationStack extends Stack {
@@ -39,6 +43,7 @@ export class ApplicationStack extends Stack {
       coreApi: coreApiConfig,
       coreTable: coreTableConfig,
       studentPortal: studentPortalConfig,
+      instructorPortal: instructorPortalConfig,
       ...props
     }: ApplicationStackProps,
   ) {
@@ -49,6 +54,10 @@ export class ApplicationStack extends Stack {
     const studentPortalWafEnabled = studentPortalConfig?.enableWaf ?? true;
     const studentPortalKmsEnabled =
       studentPortalConfig?.enableKmsEncryption ?? true;
+    const instructorPortalWafEnabled =
+      instructorPortalConfig?.enableWaf ?? true;
+    const instructorPortalKmsEnabled =
+      instructorPortalConfig?.enableKmsEncryption ?? true;
 
     const identity = new UserIdentity(this, 'Identity', {
       enableWaf: identityConfig?.enableWaf ?? true,
@@ -147,6 +156,32 @@ export class ApplicationStack extends Stack {
       );
     }
 
-    coreApi.restrictCorsTo(studentPortal);
+    const instructorPortal = new InstructorPortal(this, 'InstructorPortal', {
+      enableWaf: instructorPortalWafEnabled,
+      enableKeyRotation: instructorPortalConfig?.enableKeyRotation ?? true,
+      ...(instructorPortalKmsEnabled
+        ? {}
+        : { encryption: BucketEncryption.S3_MANAGED }),
+    });
+    if (!instructorPortalWafEnabled) {
+      suppressRules(
+        instructorPortal.cloudFrontDistribution,
+        ['CKV_AWS_68'],
+        'WAF disabled for this stage',
+      );
+    }
+    if (!instructorPortalKmsEnabled) {
+      suppressRules(
+        this,
+        ['CKV_AWS_158'],
+        'KMS encryption disabled for this stage',
+        (c) =>
+          CfnResource.isCfnResource(c) &&
+          c.cfnResourceType === 'AWS::Logs::LogGroup' &&
+          c.node.path.includes('/InstructorPortal/AccessLogs'),
+      );
+    }
+
+    coreApi.restrictCorsTo(studentPortal, instructorPortal);
   }
 }

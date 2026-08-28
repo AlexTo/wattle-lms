@@ -1,0 +1,17 @@
+{
+  "name": "@wattle/instructor-portal",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@tanstack/react-router": "catalog:",
+    "lucide-react": "catalog:",
+    "oidc-client-ts": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-oidc-context": "catalog:",
+    "tailwindcss": "catalog:",
+    "@wattle/common-shadcn": "workspace:*"
+  },
+  "devDependencies": {}
+}
