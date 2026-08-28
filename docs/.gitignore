@@ -1,0 +1,5 @@
+# generated types / build cache
+.astro/
+
+# translation diffs written during a translate run
+.translate-diffs/

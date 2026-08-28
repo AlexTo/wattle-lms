@@ -1,0 +1,20 @@
+{
+  "name": "@wattle/docs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@astrojs/starlight": "catalog:",
+    "@strands-agents/sdk": "catalog:",
+    "astro": "catalog:",
+    "commander": "catalog:",
+    "fast-glob": "catalog:",
+    "fs-extra": "catalog:",
+    "simple-git": "catalog:",
+    "starlight-blog": "catalog:",
+    "astro-contributors": "catalog:"
+  },
+  "devDependencies": {
+    "@types/fs-extra": "catalog:"
+  }
+}

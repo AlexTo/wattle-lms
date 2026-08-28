@@ -1,0 +1,94 @@
+name: CI
+
+concurrency:
+  group: ci-${{ github.ref }}
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CI: "true"
+  NX_DAEMON: "true"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    outputs:
+      latest_commit: ${{ steps.git_remote.outputs.latest_commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      # infra:checkov (part of the build target) invokes checkov via `uvx`, so
+      # uv needs to be on PATH — same as pr-checks.yml's build leg.
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: latest
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm nx run-many --target lint --all
+
+      - name: Test
+        run: pnpm nx run-many --target test --all
+
+      - name: Build
+        run: pnpm nx run-many --target build --all
+
+      - name: Check for mutations
+        run: git diff --ignore-space-at-eol --exit-code
+
+      - name: Check for new commits
+        id: git_remote
+        run: echo "latest_commit=$(git ls-remote origin -h ${{ github.ref }} | cut -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload docs artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: docs-artifact
+          path: docs/dist
+
+  deploy_docs:
+    name: Deploy Docs
+    runs-on: ubuntu-latest
+    needs: [build]
+    # Guards against a race where a newer commit landed on main and started
+    # its own run while this one was still building.
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' && needs.build.outputs.latest_commit == github.sha }}
+    steps:
+      - name: Download docs artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: docs-artifact
+          path: docs-site
+
+      - name: Setup Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
+        with:
+          path: "docs-site"
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5

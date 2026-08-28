@@ -1,0 +1,34 @@
+---
+title: docs
+description: docsのドキュメント。
+template: splash
+hero:
+  title: docs
+  tagline: AstroとStarlightで構築されたプロジェクトドキュメント。
+  actions:
+    - text: はじめる
+      link: /jp/guides/getting-started
+      icon: right-arrow
+---
+
+import { CardGrid, Card } from '@astrojs/starlight/components';
+import { ContributorList } from 'astro-contributors';
+
+<CardGrid>
+  <Card title="Guides" icon="open-book">
+    docsのリファレンスドキュメント。
+  </Card>
+  <Card title="Blog" icon="pencil">
+    チームからのニュースとアップデート。
+  </Card>
+  <Card title="Snippets" icon="seti:config">
+    ドキュメント全体で使用される再利用可能なコンテンツフラグメント。
+  </Card>
+  <Card title="Localised" icon="translate">
+    ローカライゼーションは最初から設定されています — `astro.config.mjs`でターゲットロケールを追加してください。
+  </Card>
+</CardGrid>
+
+## 素晴らしいコントリビューターの皆様に感謝します！
+
+<ContributorList githubRepo="AlexTo/Wattle-LMS" />

@@ -1,0 +1,62 @@
+---
+title: 快速开始
+description: 运行您的新 Astro + Starlight 文档站点。
+---
+
+import Link from '@components/link.astro';
+import Snippet from '@components/snippet.astro';
+
+欢迎来到 **docs**！本站点使用 [Astro](https://astro.build/) 和
+[Starlight](https://starlight.astro.build/) 文档主题构建。
+
+## 本地运行
+
+```bash
+pnpm nx start @wattle/docs
+```
+
+## 生产构建
+
+```bash
+pnpm nx build @wattle/docs
+```
+
+## 添加语言
+
+在 `astro.config.mjs` 的 `locales` 块中添加一个条目，并在 `src/content/docs/<locale>/` 下创建匹配的
+目录。Starlight 将自动识别新语言。
+
+:::note[保持翻译配置同步]
+当您添加新语言时，还需要将其代码添加到 `scripts/translate.config.json` 中的 `targetLanguages`，
+以便 `translate` 任务保持其更新。
+:::
+
+## 语言感知链接
+
+当您想要链接到文档**内部**的另一个页面时，请使用生成的 `Link` 组件——它会自动解析当前语言，
+因此单一的真实来源可以在每种语言中生成正确的 URL：
+
+```mdx
+import Link from '@components/link.astro';
+
+<Link path="guides/getting-started">Read the getting-started guide</Link>
+```
+
+这是组件的实际效果：<Link path="guides/getting-started">返回本页</Link>。
+
+对于常规外部链接，只需使用普通的 Markdown `[label](url)`。
+
+## 使用片段
+
+片段是存储在 `src/content/docs/<locale>/snippets/` 中的可重用 MDX 片段。
+使用 `Snippet` 组件在任何页面中包含一个片段：
+
+```mdx
+import Snippet from '@components/snippet.astro';
+
+<Snippet name="example" />
+```
+
+以下是内联渲染的示例片段：
+
+<Snippet name="example" />

@@ -1,0 +1,51 @@
+{
+  "extends": "astro/tsconfigs/strict",
+  "include": [
+    ".astro/types.d.ts",
+    "**/*"
+  ],
+  "exclude": [
+    "dist"
+  ],
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@components/*": [
+        "src/components/*"
+      ],
+      "@assets/*": [
+        "src/content/docs/assets/*"
+      ],
+      "@wattle/core-table": [
+        "../packages/databases/core-table/src/index.ts"
+      ],
+      "@wattle/common-scripts": [
+        "../packages/common/scripts/src/index.ts"
+      ],
+      "@wattle/common-constructs": [
+        "../packages/common/constructs/src/index.ts"
+      ],
+      "@wattle/core-api": [
+        "../packages/apis/core-api/src/index.ts"
+      ],
+      "@wattle/student-portal": [
+        "../packages/websites/student-portal/src/index.ts"
+      ],
+      "@wattle/common-shadcn": [
+        "../packages/common/shadcn/src/index.ts"
+      ],
+      "@wattle/common-shadcn/*": [
+        "../packages/common/shadcn/src/*"
+      ],
+      "@wattle/infra": [
+        "../packages/infra/src/index.ts"
+      ],
+      "@wattle/common-infra-config": [
+        "../packages/common/infra-config/src/index.ts"
+      ],
+      "@wattle/events": [
+        "../packages/events/src/index.ts"
+      ]
+    }
+  }
+}

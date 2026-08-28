@@ -1,0 +1,34 @@
+---
+title: docs
+description: docs를 위한 문서입니다.
+template: splash
+hero:
+  title: docs
+  tagline: Astro와 Starlight로 구축된 프로젝트 문서입니다.
+  actions:
+    - text: 시작하기
+      link: /ko/guides/getting-started
+      icon: right-arrow
+---
+
+import { CardGrid, Card } from '@astrojs/starlight/components';
+import { ContributorList } from 'astro-contributors';
+
+<CardGrid>
+  <Card title="Guides" icon="open-book">
+    docs를 위한 참조 문서입니다.
+  </Card>
+  <Card title="Blog" icon="pencil">
+    팀의 소식과 업데이트입니다.
+  </Card>
+  <Card title="Snippets" icon="seti:config">
+    문서 전체에서 사용되는 재사용 가능한 콘텐츠 조각입니다.
+  </Card>
+  <Card title="Localised" icon="translate">
+    로컬라이제이션이 기본적으로 구성되어 있습니다 — `astro.config.mjs`에서 대상 로케일을 추가하세요.
+  </Card>
+</CardGrid>
+
+## 놀라운 기여자분들께 감사드립니다!
+
+<ContributorList githubRepo="AlexTo/Wattle-LMS" />
