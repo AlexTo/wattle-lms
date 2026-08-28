@@ -1,35 +1,51 @@
-# Contributing to Wattle LMS
+# Contributing Guidelines
 
-Thanks for your interest in contributing. This is a young project, so please open an issue to discuss any significant change before sending a PR — it saves both of us wasted work if the approach needs adjusting.
+Thank you for your interest in contributing to Wattle LMS. Whether it's a bug report, new feature, correction, or additional documentation, we greatly value feedback and contributions.
 
-## Reporting bugs / requesting features
+Please read through this document before submitting any issues or pull requests to ensure we have all the necessary information to effectively respond to your bug report or contribution. This is a young project, so for anything beyond a small fix, please open an issue to discuss the approach first; we'd hate for your time to be wasted.
 
-Use the GitHub issue tracker. Check existing open (and recently closed) issues first. Useful details: reproduction steps, the stage/environment you hit it in (`wattle-development` vs `wattle-production`, local vs deployed), and anything unusual about your setup.
+## Reporting Bugs/Feature Requests
 
-## Contributing via pull requests
+We welcome you to use the GitHub issue tracker to report bugs or suggest features.
 
-1. Work against the latest `main`.
-2. Check open/recently-merged PRs so you're not duplicating effort.
-3. Install dependencies: `pnpm i`.
-4. Make your change, focused on what you're contributing — a bug fix doesn't need a drive-by reformat.
-5. Run the full gate locally before pushing: `pnpm build` (this chains lint → compile → test → bundle/synth/checkov per project). For a faster loop while iterating, target one project or run `pnpm nx affected --target <lint|test|build>` to only touch what your change affects — CI's PR checks use `nx affected` the same way.
-6. Commit with `git commit` as usual — the `prepare-commit-msg` hook runs [Commitizen](https://commitizen.github.io/cz-cli/) interactively to build a [Conventional Commits](https://www.conventionalcommits.org)-formatted message for you, and `commitlint` enforces it on `commit-msg`. PR titles follow the same convention.
-7. Open the PR and keep an eye on CI (`pr-checks.yml` runs lint/test/build against your changes; `ci.yml` re-runs everything on `main` after merge).
+When filing an issue, please check existing open, or recently closed, issues to make sure somebody else hasn't already reported it. Please try to include as much information as you can. Details like these are incredibly useful:
 
-## Adding a new project or component
+- A reproducible test case or series of steps
+- The stage/environment you hit it in (`wattle-development` vs `wattle-production`, local vs deployed)
+- Any modifications you've made relevant to the bug
+- Anything unusual about your environment or setup
 
-Prefer the [Nx Plugin for AWS](https://awslabs.github.io/nx-plugin-for-aws) generators over hand-scaffolding — that's how every existing package in this repo (`core-api`, `core-table`, both portals, `infra`) was created, and it keeps generated projects consistent and eligible for future `nx migrate` upgrades. If you have the `nx-plugin-for-aws` MCP server available, use `list-generators` / `generator-guide` to find the right one; otherwise check the [generator docs](https://awslabs.github.io/nx-plugin-for-aws/en/guides/).
+## Contributing via Pull Requests
 
-## Code style and license headers
+Contributions via pull requests are much appreciated. Before sending us a pull request, please ensure that:
 
-- [Biome](https://biomejs.dev) formats and lints (single quotes, trailing commas, 80-col width) — `pnpm lint` runs it with `--configuration=fix`.
-- Every source file (except generated output, translated docs, and `.astro` files) carries an Apache-2.0 SPDX header. This is written by the `license#sync` Nx sync generator, configured in [aws-nx-plugin.config.mts](aws-nx-plugin.config.mts) — don't hand-edit headers, `pnpm lint`/`pnpm build` keep them in sync.
+1. You are working against the latest source on the `main` branch.
+2. You check existing open, and recently merged, pull requests to make sure someone else hasn't already addressed the problem.
+3. You open an issue to discuss any significant work.
 
-## Documentation
+To send us a pull request, please:
 
-Docs live in `docs/` (Astro + Starlight, deployed to GitHub Pages). Only author English content, under `docs/src/content/docs/en/` — other locales are generated from it, not hand-written.
+1. Fork the repository, and install dependencies with `pnpm i`.
+2. Modify the source; please focus on the specific change you are contributing. If you also reformat unrelated code, it will be hard for us to review your change.
+3. Run the full build locally before pushing: `pnpm build` (this chains lint, compile, test, and bundle/synth/checkov per project). For a faster loop while iterating, target one project, or run `pnpm nx affected --target <lint|test|build>` to only touch what your change affects, the same way CI's PR checks do.
+4. Commit using `git commit` as usual; the `prepare-commit-msg` hook runs [Commitizen](https://commitizen.github.io/cz-cli/) to build a [Conventional Commits](https://www.conventionalcommits.org) message interactively, and `commitlint` enforces it on `commit-msg`. PR titles follow the same convention.
+5. Send us a pull request, and keep an eye on CI. `pr-checks.yml` runs lint/test/build against your changes; stay involved if anything reports a failure.
 
-To translate your changes locally (requires AWS credentials with Bedrock access):
+GitHub provides additional documentation on [forking a repository](https://help.github.com/articles/fork-a-repo/) and [creating a pull request](https://help.github.com/articles/creating-a-pull-request/).
+
+### Adding a New Project or Component
+
+Prefer the [Nx Plugin for AWS](https://awslabs.github.io/nx-plugin-for-aws) generators over hand-scaffolding. That's how every existing package in this repo (`core-api`, `core-table`, both portals, `infra`) was created, and it keeps generated projects consistent and eligible for future `nx migrate` upgrades. If you have the `nx-plugin-for-aws` MCP server available, use `list-generators` / `generator-guide` to find the right one; otherwise check the [generator docs](https://awslabs.github.io/nx-plugin-for-aws/en/guides/).
+
+### Code Style and License Headers
+
+[Biome](https://biomejs.dev) formats and lints this codebase (single quotes, trailing commas, 80-column width); `pnpm lint` runs it with `--configuration=fix`. Every source file, except generated output, translated docs, and `.astro` files, carries an Apache-2.0 SPDX header, written by the `license#sync` Nx sync generator (configured in [aws-nx-plugin.config.mts](aws-nx-plugin.config.mts)). Please don't hand-edit headers; `pnpm lint` and `pnpm build` keep them in sync for you.
+
+### Writing Documentation
+
+Docs live in `docs/` (Astro + Starlight, deployed to GitHub Pages). Please only author English content, under `docs/src/content/docs/en/`; other locales are generated from it, not hand-written.
+
+To translate your changes locally, with AWS credentials configured for Bedrock access:
 
 ```sh
 pnpm nx run @wattle/docs:translate            # translate files changed vs main
@@ -37,8 +53,16 @@ pnpm nx run @wattle/docs:translate -- --all   # translate everything
 pnpm nx run @wattle/docs:translate -- --dry-run
 ```
 
-There's no CI workflow that runs this automatically yet — if your PR touches English docs, run the translation locally and commit the result, or flag in the PR that translations are pending.
+There is no CI workflow that runs this automatically yet. If your PR touches English docs, please run the translation locally and commit the result, or note in the PR that translations are pending.
+
+## Finding Contributions to Work On
+
+Looking at the existing issues is a great way to find something to contribute. Take a look at any [`good first issue`](https://github.com/AlexTo/wattle-lms/labels/good%20first%20issue) or [`help wanted`](https://github.com/AlexTo/wattle-lms/labels/help%20wanted) issues to get started.
+
+## Security Issue Notifications
+
+If you discover a potential security issue, please report it privately rather than opening a public GitHub issue, using GitHub's [private vulnerability reporting](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing/privately-reporting-a-security-vulnerability).
 
 ## Licensing
 
-Apache License 2.0 — see [LICENSE](LICENSE). By contributing, you agree your contribution is licensed under the same terms.
+See the [LICENSE](LICENSE) file for our project's licensing (Apache License 2.0). We will ask you to confirm the licensing of your contribution.

@@ -83,4 +83,4 @@ Apache License 2.0, see [LICENSE](LICENSE).
 
 ## Contributing
 
-Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+Contributions are welcome, see [CONTRIBUTING.md](CONTRIBUTING.md).
