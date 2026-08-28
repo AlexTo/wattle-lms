@@ -7,6 +7,12 @@
       alt="Apache 2.0 License"
     />
   </a>
+  <a href="https://codecov.io/github/AlexTo/wattle-lms">
+    <img
+      src="https://codecov.io/github/AlexTo/wattle-lms/graph/badge.svg?token=LOOB6GNM8P"
+      alt="Codecov coverage"
+    />
+  </a>
   <a href="https://github.com/AlexTo/wattle-lms/actions/workflows/ci.yml">
     <img
       src="https://github.com/AlexTo/wattle-lms/actions/workflows/ci.yml/badge.svg"
