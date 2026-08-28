@@ -186,6 +186,13 @@ export class ApplicationStack extends Stack {
       );
     }
 
-    coreApi.restrictCorsTo(studentPortal, instructorPortal);
+    coreApi.restrictCorsTo(
+      studentPortal,
+      instructorPortal,
+      'http://localhost:4200',
+      'http://localhost:4300',
+      'http://localhost:4201',
+      'http://localhost:4301',
+    );
   }
 }

@@ -43,7 +43,12 @@ import { RuntimeConfig } from './runtime-config.js';
 const WEB_CLIENT_ID = 'WebClient';
 
 /** Local dev server origins permitted to complete the sign-in redirect */
-const LOCAL_CALLBACK_URLS = ['http://localhost:4200', 'http://localhost:4300'];
+const LOCAL_CALLBACK_URLS = [
+  'http://localhost:4200',
+  'http://localhost:4300',
+  'http://localhost:4201',
+  'http://localhost:4301',
+];
 
 /**
  * The set of portal roles provisioned as Cognito user pool groups. Lower
