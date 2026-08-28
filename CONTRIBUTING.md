@@ -59,6 +59,10 @@ There is no CI workflow that runs this automatically yet. If your PR touches Eng
 
 Looking at the existing issues is a great way to find something to contribute. Take a look at any [`good first issue`](https://github.com/AlexTo/wattle-lms/labels/good%20first%20issue) or [`help wanted`](https://github.com/AlexTo/wattle-lms/labels/help%20wanted) issues to get started.
 
+## Code of Conduct
+
+This project has adopted the [Contributor Covenant](CODE_OF_CONDUCT.md). Please read it before participating, and report unacceptable behavior as described there.
+
 ## Security Issue Notifications
 
 If you discover a potential security issue, please report it privately rather than opening a public GitHub issue, using GitHub's [private vulnerability reporting](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing/privately-reporting-a-security-vulnerability).
