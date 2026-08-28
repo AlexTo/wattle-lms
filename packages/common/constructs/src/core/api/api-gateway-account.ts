@@ -1,3 +1,7 @@
+/**
+ * Copyright Alex To. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { CustomResource, Duration, RemovalPolicy, Stack } from 'aws-cdk-lib';
 import {
   ManagedPolicy,

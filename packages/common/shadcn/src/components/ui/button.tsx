@@ -1,3 +1,7 @@
+/**
+ * Copyright Alex To. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { cn } from '@wattle/common-shadcn/lib/utils';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { Slot } from 'radix-ui';

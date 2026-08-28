@@ -1,3 +1,7 @@
+/**
+ * Copyright Alex To. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { getAppConfig } from '@aws-lambda-powertools/parameters/appconfig';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { readFileSync } from 'fs';

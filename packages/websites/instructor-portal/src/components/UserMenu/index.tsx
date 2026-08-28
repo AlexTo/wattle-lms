@@ -1,3 +1,7 @@
+/**
+ * Copyright Alex To. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
 import { getUserIdentity } from './user-profile';

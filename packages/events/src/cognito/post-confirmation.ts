@@ -1,3 +1,7 @@
+/**
+ * Copyright Alex To. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { Logger } from '@aws-lambda-powertools/logger';
 import { injectLambdaContext } from '@aws-lambda-powertools/logger/middleware';
 import { Metrics } from '@aws-lambda-powertools/metrics';

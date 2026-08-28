@@ -1,9 +1,6 @@
 /**
- * Type definitions for stage and project configuration.
- *
- * These types are used by both stages.config.ts and the infra-deploy/
- * infra-destroy scripts. They live in a shared package so any
- * project in the workspace can import them.
+ * Copyright Alex To. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 /** Use an AWS CLI profile from ~/.aws/config */

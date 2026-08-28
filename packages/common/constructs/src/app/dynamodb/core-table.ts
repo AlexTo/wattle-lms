@@ -1,3 +1,7 @@
+/**
+ * Copyright Alex To. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { AttributeType, ProjectionType } from 'aws-cdk-lib/aws-dynamodb';
 import { Construct } from 'constructs';
 import { readFileSync } from 'fs';

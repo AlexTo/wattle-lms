@@ -1,3 +1,7 @@
+/**
+ * Copyright Alex To. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import stagesConfig from './stages.config.js';
 import type { StageConfig, StagesConfig } from './stages.types.js';
 

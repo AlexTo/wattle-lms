@@ -1,3 +1,7 @@
+/**
+ * Copyright Alex To. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { Integration, MethodOptions } from 'aws-cdk-lib/aws-apigateway';
 import {
   AddRoutesOptions,

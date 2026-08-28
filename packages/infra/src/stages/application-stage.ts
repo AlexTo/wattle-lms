@@ -1,3 +1,7 @@
+/**
+ * Copyright Alex To. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { Stage, StageProps } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import {

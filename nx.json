@@ -78,6 +78,9 @@
     "build": {
       "cache": true,
       "inputs": ["default"]
+    },
+    "lint": {
+      "syncGenerators": ["@aws/nx-plugin:license#sync"]
     }
   },
   "generators": {

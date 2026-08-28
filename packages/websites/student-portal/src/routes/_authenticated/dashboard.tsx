@@ -1,3 +1,7 @@
+/**
+ * Copyright Alex To. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { createFileRoute } from '@tanstack/react-router';
 import { Button } from '@wattle/common-shadcn/components/ui/button';
 import {

@@ -63,9 +63,15 @@
     },
     "lint": {
       "executor": "nx:run-commands",
+      "dependsOn": [
+        "format",
+        {
+          "projects": ["@wattle/source"],
+          "target": "license-check"
+        }
+      ],
       "cache": true,
       "inputs": ["biome"],
-      "dependsOn": ["format"],
       "options": {
         "command": "biome lint {projectRoot}"
       },

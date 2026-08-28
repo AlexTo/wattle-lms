@@ -1,3 +1,7 @@
+/**
+ * Copyright Alex To. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { App } from '@wattle/common-constructs';
 import { listStageNames, resolveStage } from '@wattle/common-infra-config';
 import { ApplicationStage } from './stages/application-stage.js';

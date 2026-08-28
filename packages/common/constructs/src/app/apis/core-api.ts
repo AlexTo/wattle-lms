@@ -1,3 +1,7 @@
+/**
+ * Copyright Alex To. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { AppRouter, appRouter } from '@wattle/core-api';
 import { Aspects, Duration } from 'aws-cdk-lib';
 import {

@@ -1,3 +1,7 @@
+/**
+ * Copyright Alex To. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 'use client';
 
 import { cn } from '@wattle/common-shadcn/lib/utils';

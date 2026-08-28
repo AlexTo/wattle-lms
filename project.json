@@ -1,0 +1,13 @@
+{
+  "targets": {
+    "license-check": {
+      "executor": "@aws/nx-plugin:license-check",
+      "cache": true,
+      "inputs": [
+        "{workspaceRoot}/pnpm-lock.yaml",
+        "{workspaceRoot}/aws-nx-plugin.config.mts"
+      ],
+      "options": {}
+    }
+  }
+}

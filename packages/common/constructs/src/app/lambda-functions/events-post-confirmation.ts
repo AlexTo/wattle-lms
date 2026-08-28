@@ -1,3 +1,7 @@
+/**
+ * Copyright Alex To. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { Duration } from 'aws-cdk-lib';
 import { Code, Function, Runtime, Tracing } from 'aws-cdk-lib/aws-lambda';
 import { Construct } from 'constructs';

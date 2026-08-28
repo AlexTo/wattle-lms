@@ -1,3 +1,7 @@
+/**
+ * Copyright Alex To. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { initTRPC } from '@trpc/server';
 import { CreateAWSLambdaContextOptions } from '@trpc/server/adapters/aws-lambda';
 import type { APIGatewayProxyEvent } from 'aws-lambda';

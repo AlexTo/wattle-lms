@@ -1,3 +1,7 @@
+/**
+ * Copyright Alex To. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 export * from './app.js';
 export * from './checkov.js';
 export * from './cloudfront.js';

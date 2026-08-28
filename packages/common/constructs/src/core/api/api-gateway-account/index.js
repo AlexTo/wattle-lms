@@ -1,8 +1,6 @@
 /**
- * Configures the account-level API Gateway CloudWatch Logs role required for
- * REST API access logging. The setting is a singleton per region per account,
- * so this handler only writes when no live role is already configured (the
- * first stack to deploy wins, others defer) and never resets it on delete.
+ * Copyright Alex To. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
  */
 const {
   APIGatewayClient,

@@ -1,4 +1,7 @@
-// @ts-check
+/**
+ * Copyright Alex To. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { defineConfig } from 'astro/config';
 
 import starlight from '@astrojs/starlight';

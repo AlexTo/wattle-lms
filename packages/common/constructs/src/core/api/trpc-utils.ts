@@ -1,3 +1,7 @@
+/**
+ * Copyright Alex To. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { AnyTRPCRouter, TRPCRouterRecord } from '@trpc/server';
 import { HttpMethod } from 'aws-cdk-lib/aws-apigatewayv2';
 import { OperationDetails } from './utils.js';

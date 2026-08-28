@@ -1,3 +1,7 @@
+/**
+ * Copyright Alex To. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { App as _App, AppProps, Aspects, IAspect, Stack } from 'aws-cdk-lib';
 import { IConstruct } from 'constructs';
 
@@ -29,6 +33,7 @@ class MetricsAspect implements IAspect {
         'g8',
         'g21',
         'g37',
+        'g14',
       ];
       node.templateOptions.description =
         `${node.templateOptions.description ?? ''} (${id}) (version:${version}) (tag:${tags.join(',')})`.trim();
