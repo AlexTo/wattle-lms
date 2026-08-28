@@ -1,0 +1,57 @@
+---
+title: はじめに
+description: 新しい Astro + Starlight ドキュメントサイトを実行します。
+---
+
+import Link from '@components/link.astro';
+import Snippet from '@components/snippet.astro';
+
+**docs**へようこそ！このサイトは[Astro](https://astro.build/)と[Starlight](https://starlight.astro.build/)ドキュメントテーマで構築されています。
+
+## ローカルで実行
+
+```bash
+pnpm nx start @wattle/docs
+```
+
+## 本番用にビルド
+
+```bash
+pnpm nx build @wattle/docs
+```
+
+## ロケールの追加
+
+`astro.config.mjs`の`locales`ブロックにエントリを追加し、`src/content/docs/<locale>/`の下に対応するディレクトリを作成します。Starlightは新しいロケールを自動的に認識します。
+
+:::note[翻訳設定を同期させる]
+新しいロケールを追加する際は、`scripts/translate.config.json`の`targetLanguages`にもそのコードを追加してください。そうすることで、`translate`タスクが最新の状態を保ちます。
+:::
+
+## ロケール対応リンク
+
+ドキュメント**内**の別のページにリンクする場合は、生成された`Link`コンポーネントを使用してください。現在のロケールを自動的に解決するため、単一の情報源がすべての言語で正しいURLを生成します：
+
+```mdx
+import Link from '@components/link.astro';
+
+<Link path="guides/getting-started">Read the getting-started guide</Link>
+```
+
+コンポーネントの動作例：<Link path="guides/getting-started">このページに戻る</Link>。
+
+通常の外部リンクには、通常のMarkdown `[label](url)`を使用してください。
+
+## スニペットの使用
+
+スニペットは`src/content/docs/<locale>/snippets/`に保存された再利用可能なMDXフラグメントです。`Snippet`コンポーネントを使用して、任意のページに含めることができます：
+
+```mdx
+import Snippet from '@components/snippet.astro';
+
+<Snippet name="example" />
+```
+
+以下は、インラインでレンダリングされたサンプルスニペットです：
+
+<Snippet name="example" />

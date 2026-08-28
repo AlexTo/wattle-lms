@@ -1,0 +1,64 @@
+---
+title: Começando
+description: Executando seu novo site de documentação Astro + Starlight.
+---
+
+import Link from '@components/link.astro';
+import Snippet from '@components/snippet.astro';
+
+Bem-vindo ao **docs**! Este site é construído com [Astro](https://astro.build/) e o
+tema de documentação [Starlight](https://starlight.astro.build/).
+
+## Executar localmente
+
+```bash
+pnpm nx start @wattle/docs
+```
+
+## Construir para produção
+
+```bash
+pnpm nx build @wattle/docs
+```
+
+## Adicionar um idioma
+
+Adicione uma entrada ao bloco `locales` em `astro.config.mjs` e crie um diretório
+correspondente em `src/content/docs/<locale>/`. Starlight irá detectar o novo idioma
+automaticamente.
+
+:::note[Mantenha a configuração de tradução sincronizada]
+Quando você adicionar um novo idioma, adicione também seu código a `targetLanguages` em
+`scripts/translate.config.json` para que a tarefa `translate` o mantenha atualizado.
+:::
+
+## Links com reconhecimento de idioma
+
+Use o componente `Link` gerado sempre que quiser criar um link para outra página
+**dentro** de sua documentação — ele resolve automaticamente o idioma atual, então uma única
+fonte de verdade produz a URL correta em todos os idiomas:
+
+```mdx
+import Link from '@components/link.astro';
+
+<Link path="guides/getting-started">Read the getting-started guide</Link>
+```
+
+Aqui está o componente em ação: <Link path="guides/getting-started">voltar para esta página</Link>.
+
+Para links externos regulares, basta usar Markdown comum `[label](url)`.
+
+## Usando snippets
+
+Snippets são fragmentos reutilizáveis de MDX armazenados em `src/content/docs/<locale>/snippets/`.
+Inclua um em qualquer página com o componente `Snippet`:
+
+```mdx
+import Snippet from '@components/snippet.astro';
+
+<Snippet name="example" />
+```
+
+Aqui está o snippet de exemplo renderizado inline:
+
+<Snippet name="example" />

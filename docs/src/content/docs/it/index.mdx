@@ -1,0 +1,34 @@
+---
+title: docs
+description: Documentazione per docs.
+template: splash
+hero:
+  title: docs
+  tagline: Documentazione del progetto realizzata con Astro e Starlight.
+  actions:
+    - text: Inizia
+      link: /it/guides/getting-started
+      icon: right-arrow
+---
+
+import { CardGrid, Card } from '@astrojs/starlight/components';
+import { ContributorList } from 'astro-contributors';
+
+<CardGrid>
+  <Card title="Guide" icon="open-book">
+    Documentazione di riferimento per docs.
+  </Card>
+  <Card title="Blog" icon="pencil">
+    Notizie e aggiornamenti dal team.
+  </Card>
+  <Card title="Snippets" icon="seti:config">
+    Frammenti di contenuto riutilizzabili utilizzati nella documentazione.
+  </Card>
+  <Card title="Localizzato" icon="translate">
+    La localizzazione è configurata di default — aggiungi le lingue di destinazione in `astro.config.mjs`.
+  </Card>
+</CardGrid>
+
+## Grazie ai nostri fantastici contributori!
+
+<ContributorList githubRepo="AlexTo/Wattle-LMS" />

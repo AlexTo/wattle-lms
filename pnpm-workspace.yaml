@@ -10,6 +10,7 @@ packages:
   - packages/common/*
   - packages/apis/*
   - packages/websites/*
+  - docs
 onlyBuiltDependencies:
   - '@swc/core'
   - esbuild
@@ -83,3 +84,13 @@ catalog:
   esbuild: 0.28.2
   '@aws-lambda-powertools/parser': 2.34.0
   '@middy/core': 7.7.4
+  astro: 7.1.1
+  '@astrojs/starlight': 0.41.7
+  starlight-blog: 0.28.0
+  '@strands-agents/sdk': 1.13.0
+  commander: 15.0.0
+  fast-glob: 3.3.3
+  fs-extra: 11.4.0
+  simple-git: 3.36.0
+  '@types/fs-extra': 11.0.4
+  astro-contributors: 0.9.0

@@ -1,0 +1,34 @@
+---
+title: docs
+description: Tài liệu cho docs.
+template: splash
+hero:
+  title: docs
+  tagline: Tài liệu dự án được xây dựng với Astro và Starlight.
+  actions:
+    - text: Bắt đầu
+      link: /vi/guides/getting-started
+      icon: right-arrow
+---
+
+import { CardGrid, Card } from '@astrojs/starlight/components';
+import { ContributorList } from 'astro-contributors';
+
+<CardGrid>
+  <Card title="Guides" icon="open-book">
+    Tài liệu tham khảo cho docs.
+  </Card>
+  <Card title="Blog" icon="pencil">
+    Tin tức và cập nhật từ nhóm phát triển.
+  </Card>
+  <Card title="Snippets" icon="seti:config">
+    Các đoạn nội dung có thể tái sử dụng được sử dụng trong tài liệu.
+  </Card>
+  <Card title="Localised" icon="translate">
+    Bản địa hóa được cấu hình sẵn — thêm các ngôn ngữ mục tiêu trong `astro.config.mjs`.
+  </Card>
+</CardGrid>
+
+## Cảm ơn những người đóng góp tuyệt vời của chúng tôi!
+
+<ContributorList githubRepo="AlexTo/Wattle-LMS" />

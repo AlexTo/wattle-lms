@@ -1,0 +1,62 @@
+---
+title: 시작하기
+description: 새로운 Astro + Starlight 문서 사이트를 실행합니다.
+---
+
+import Link from '@components/link.astro';
+import Snippet from '@components/snippet.astro';
+
+**docs**에 오신 것을 환영합니다! 이 사이트는 [Astro](https://astro.build/)와
+[Starlight](https://starlight.astro.build/) 문서 테마로 구축되었습니다.
+
+## 로컬에서 실행
+
+```bash
+pnpm nx start @wattle/docs
+```
+
+## 프로덕션용 빌드
+
+```bash
+pnpm nx build @wattle/docs
+```
+
+## 로케일 추가하기
+
+`astro.config.mjs`의 `locales` 블록에 항목을 추가하고 `src/content/docs/<locale>/` 아래에
+일치하는 디렉토리를 생성하세요. Starlight가 새 로케일을 자동으로 인식합니다.
+
+:::note[번역 설정을 동기화 상태로 유지하세요]
+새 로케일을 추가할 때 `scripts/translate.config.json`의 `targetLanguages`에도 해당 코드를
+추가하여 `translate` 작업이 최신 상태를 유지하도록 하세요.
+:::
+
+## 로케일 인식 링크
+
+문서 **내부**의 다른 페이지로 링크하려면 생성된 `Link` 컴포넌트를 사용하세요 — 현재 로케일을
+자동으로 해석하므로 단일 소스가 모든 언어에서 올바른 URL을 생성합니다:
+
+```mdx
+import Link from '@components/link.astro';
+
+<Link path="guides/getting-started">Read the getting-started guide</Link>
+```
+
+다음은 실제 동작하는 컴포넌트입니다: <Link path="guides/getting-started">이 페이지로 돌아가기</Link>.
+
+일반적인 외부 링크의 경우 일반 Markdown `[label](url)`을 사용하세요.
+
+## 스니펫 사용하기
+
+스니펫은 `src/content/docs/<locale>/snippets/`에 저장된 재사용 가능한 MDX 조각입니다.
+`Snippet` 컴포넌트를 사용하여 모든 페이지에 포함할 수 있습니다:
+
+```mdx
+import Snippet from '@components/snippet.astro';
+
+<Snippet name="example" />
+```
+
+다음은 인라인으로 렌더링된 예제 스니펫입니다:
+
+<Snippet name="example" />

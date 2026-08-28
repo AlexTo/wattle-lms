@@ -1,0 +1,63 @@
+---
+title: Démarrage
+description: Exécution de votre nouveau site de documentation Astro + Starlight.
+---
+
+import Link from '@components/link.astro';
+import Snippet from '@components/snippet.astro';
+
+Bienvenue sur **docs** ! Ce site est construit avec [Astro](https://astro.build/) et le
+thème de documentation [Starlight](https://starlight.astro.build/).
+
+## Exécuter localement
+
+```bash
+pnpm nx start @wattle/docs
+```
+
+## Construire pour la production
+
+```bash
+pnpm nx build @wattle/docs
+```
+
+## Ajouter une locale
+
+Ajoutez une entrée au bloc `locales` dans `astro.config.mjs` et créez un répertoire correspondant
+sous `src/content/docs/<locale>/`. Starlight détectera automatiquement la nouvelle locale.
+
+:::note[Gardez la configuration de traduction synchronisée]
+Lorsque vous ajoutez une nouvelle locale, ajoutez également son code à `targetLanguages` dans
+`scripts/translate.config.json` afin que la tâche `translate` la maintienne à jour.
+:::
+
+## Liens sensibles à la locale
+
+Utilisez le composant généré `Link` chaque fois que vous souhaitez créer un lien vers une autre page
+**à l'intérieur** de votre documentation — il résout automatiquement la locale actuelle, de sorte qu'une seule
+source de vérité produise la bonne URL dans chaque langue :
+
+```mdx
+import Link from '@components/link.astro';
+
+<Link path="guides/getting-started">Read the getting-started guide</Link>
+```
+
+Voici le composant en action : <Link path="guides/getting-started">retour à cette page</Link>.
+
+Pour les liens externes ordinaires, utilisez simplement le Markdown standard `[label](url)`.
+
+## Utilisation des snippets
+
+Les snippets sont des fragments réutilisables de MDX stockés dans `src/content/docs/<locale>/snippets/`.
+Incluez-en un dans n'importe quelle page avec le composant `Snippet` :
+
+```mdx
+import Snippet from '@components/snippet.astro';
+
+<Snippet name="example" />
+```
+
+Voici le snippet d'exemple rendu en ligne :
+
+<Snippet name="example" />
