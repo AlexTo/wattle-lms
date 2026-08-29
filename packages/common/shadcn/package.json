@@ -7,6 +7,7 @@
     "@vitest/coverage-v8": "catalog:",
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",
+    "embla-carousel-react": "catalog:",
     "lucide-react": "catalog:",
     "radix-ui": "catalog:",
     "react": "catalog:",

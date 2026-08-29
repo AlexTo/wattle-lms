@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { createFileRoute } from '@tanstack/react-router';
+import { Badge } from '@wattle/common-shadcn/components/ui/badge';
 import { Button } from '@wattle/common-shadcn/components/ui/button';
 import {
   Card,
@@ -12,6 +13,24 @@ import {
   CardTitle,
 } from '@wattle/common-shadcn/components/ui/card';
 import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from '@wattle/common-shadcn/components/ui/carousel';
+import { Progress } from '@wattle/common-shadcn/components/ui/progress';
+import { Separator } from '@wattle/common-shadcn/components/ui/separator';
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from '@wattle/common-shadcn/components/ui/toggle-group';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@wattle/common-shadcn/components/ui/tooltip';
+import {
   AlertCircle,
   ArrowRight,
   Bell,
@@ -19,8 +38,6 @@ import {
   BriefcaseBusiness,
   CalendarDays,
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
   Clock3,
   FileText,
   Flame,
@@ -30,7 +47,7 @@ import {
   Megaphone,
   Sparkles,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
 import { getUserIdentity } from '../../components/UserMenu/user-profile';
 
@@ -175,27 +192,17 @@ function RouteComponent() {
   const { user } = useAuth();
   const { displayName } = getUserIdentity(user?.profile);
   const firstName = displayName.split(' ')[0] || 'Alex';
-  const courseCarouselRef = useRef<HTMLDivElement>(null);
   const [learningView, setLearningView] = useState<'courses' | 'timeline'>(
     () =>
       window.localStorage.getItem('student-home-learning-view') === 'timeline'
         ? 'timeline'
         : 'courses',
   );
+  const [courseCategory, setCourseCategory] = useState('For you');
 
   useEffect(() => {
     window.localStorage.setItem('student-home-learning-view', learningView);
   }, [learningView]);
-
-  const scrollCourses = (direction: -1 | 1) => {
-    const carousel = courseCarouselRef.current;
-    if (!carousel) return;
-
-    carousel.scrollBy({
-      left: direction * carousel.clientWidth * 0.85,
-      behavior: 'smooth',
-    });
-  };
 
   return (
     <main className="w-full space-y-6 pb-8">
@@ -206,9 +213,9 @@ function RouteComponent() {
           <div>
             <div className="mb-2 flex flex-wrap items-center gap-2 text-sm font-medium text-primary-foreground/75">
               <span>Thursday, 27 August</span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-1 text-xs text-primary-foreground">
+              <Badge className="border-transparent bg-white/10 text-primary-foreground hover:bg-white/10">
                 <CheckCircle2 className="size-3.5" /> Active enrollment
-              </span>
+              </Badge>
             </div>
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
               Welcome back, {firstName}
@@ -221,14 +228,21 @@ function RouteComponent() {
             <div className="flex items-center gap-2">
               <Flame className="size-5 text-amber-500" />
               <p className="text-lg font-semibold">3 week streak</p>
-              <button
-                type="button"
-                className="text-muted-foreground transition-colors hover:text-foreground"
-                aria-label="About weekly learning streaks"
-                title="Complete learning on at least 3 days each week to continue your streak."
-              >
-                <Info className="size-4" />
-              </button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="text-muted-foreground transition-colors hover:text-foreground"
+                    aria-label="About weekly learning streaks"
+                  >
+                    <Info className="size-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  Complete learning on at least 3 days each week to continue
+                  your streak.
+                </TooltipContent>
+              </Tooltip>
             </div>
             <p className="mt-1 text-sm leading-5 text-muted-foreground">
               Complete learning on 3 days this week to keep your streak going.
@@ -289,49 +303,58 @@ function RouteComponent() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="grid gap-px bg-border p-0 md:grid-cols-2">
-            {todayTasks.map((task) => (
-              <article
-                key={task.title}
-                className="flex flex-col justify-between gap-4 bg-card p-5 sm:flex-row sm:items-center"
-              >
-                <div className="flex min-w-0 gap-3">
-                  <div
-                    className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${task.urgent ? 'bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-400' : 'bg-primary/10 text-primary'}`}
+          <CardContent className="grid p-0 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
+            {todayTasks.map((task, index) => (
+              <Fragment key={task.title}>
+                {index > 0 && (
+                  <>
+                    <Separator className="md:hidden" />
+                    <Separator
+                      orientation="vertical"
+                      className="hidden h-full md:block"
+                    />
+                  </>
+                )}
+                <article className="flex flex-col justify-between gap-4 bg-card p-5 sm:flex-row sm:items-center">
+                  <div className="flex min-w-0 gap-3">
+                    <div
+                      className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${task.urgent ? 'bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-400' : 'bg-primary/10 text-primary'}`}
+                    >
+                      {task.urgent ? (
+                        <AlertCircle className="size-5" />
+                      ) : (
+                        <BookOpen className="size-5" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <Badge
+                        variant={task.urgent ? 'destructive' : 'secondary'}
+                        className={`mb-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${task.urgent ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300' : 'bg-primary/10 text-primary'}`}
+                      >
+                        {task.status}
+                      </Badge>
+                      <h2 className="truncate text-sm font-semibold">
+                        {task.title}
+                      </h2>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {task.course}
+                      </p>
+                      <p
+                        className={`mt-1 flex items-center gap-1 text-xs ${task.urgent ? 'font-medium text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}
+                      >
+                        <Clock3 className="size-3" /> {task.timing}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant={task.urgent ? 'default' : 'outline'}
+                    className="shrink-0"
                   >
-                    {task.urgent ? (
-                      <AlertCircle className="size-5" />
-                    ) : (
-                      <BookOpen className="size-5" />
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <span
-                      className={`mb-1 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${task.urgent ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300' : 'bg-primary/10 text-primary'}`}
-                    >
-                      {task.status}
-                    </span>
-                    <h2 className="truncate text-sm font-semibold">
-                      {task.title}
-                    </h2>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {task.course}
-                    </p>
-                    <p
-                      className={`mt-1 flex items-center gap-1 text-xs ${task.urgent ? 'font-medium text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}
-                    >
-                      <Clock3 className="size-3" /> {task.timing}
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  size="sm"
-                  variant={task.urgent ? 'default' : 'outline'}
-                  className="shrink-0"
-                >
-                  {task.action} <ArrowRight />
-                </Button>
-              </article>
+                    {task.action} <ArrowRight />
+                  </Button>
+                </article>
+              </Fragment>
             ))}
           </CardContent>
         </Card>
@@ -351,136 +374,124 @@ function RouteComponent() {
                 Your courses for this semester
               </p>
             </div>
-            <div
-              className="inline-flex rounded-lg border bg-muted/40 p-1"
+            <ToggleGroup
+              type="single"
+              value={learningView}
+              onValueChange={(value) => {
+                if (value === 'courses' || value === 'timeline') {
+                  setLearningView(value);
+                }
+              }}
+              variant="outline"
+              className="rounded-lg bg-muted/40 p-1"
               aria-label="Learning view"
             >
-              <Button
-                variant={learningView === 'courses' ? 'secondary' : 'ghost'}
-                size="sm"
-                aria-pressed={learningView === 'courses'}
-                onClick={() => setLearningView('courses')}
-              >
+              <ToggleGroupItem value="courses" aria-label="Show courses">
                 <BookOpen /> Courses
-              </Button>
-              <Button
-                variant={learningView === 'timeline' ? 'secondary' : 'ghost'}
-                size="sm"
-                aria-pressed={learningView === 'timeline'}
-                onClick={() => setLearningView('timeline')}
-              >
+              </ToggleGroupItem>
+              <ToggleGroupItem value="timeline" aria-label="Show timeline">
                 <ListTodo /> Timeline
-              </Button>
-            </div>
+              </ToggleGroupItem>
+            </ToggleGroup>
           </div>
           {learningView === 'courses' ? (
-            <div className="group/carousel relative">
-              <div
-                ref={courseCarouselRef}
-                className="flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-smooth pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                aria-label="Enrolled courses"
-              >
+            <Carousel
+              opts={{ align: 'start' }}
+              className="group/carousel"
+              aria-label="Enrolled courses"
+            >
+              <CarouselContent className="-ml-4 pb-1">
                 {courses.map((course) => (
-                  <Card
+                  <CarouselItem
                     key={course.code}
-                    className="w-[85%] shrink-0 snap-start gap-4 py-5 transition-shadow hover:shadow-md sm:w-[calc((100%-1rem)/2)] lg:w-[calc((100%-2rem)/3)]"
+                    className="basis-[85%] pl-4 sm:basis-1/2 lg:basis-1/3"
                   >
-                    <CardHeader className="gap-4 px-5">
-                      <div
-                        className={`flex size-11 items-center justify-center rounded-xl ${course.surface}`}
-                      >
-                        <BookOpen className="size-5" />
-                      </div>
-                      <div>
-                        <p className="mb-1 text-xs font-semibold tracking-wide text-muted-foreground">
-                          {course.code}
-                        </p>
-                        <CardTitle className="min-h-10 text-base leading-5">
-                          {course.title}
-                        </CardTitle>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="mt-auto space-y-4 px-5">
-                      <CardDescription className="min-h-10 leading-5">
-                        {course.detail}
-                      </CardDescription>
-                      <div>
-                        <div className="mb-2 flex items-start gap-2 text-xs">
-                          <span className="min-w-0 flex-1 leading-4 text-muted-foreground">
-                            {course.completed} of {course.total} activities
-                            complete
-                          </span>
-                          <span
-                            className="shrink-0 font-semibold leading-4"
-                            aria-label={`${course.progress} percent`}
-                          >
-                            {course.progress}%
-                          </span>
+                    <Card className="h-full gap-4 py-5 transition-shadow hover:shadow-md">
+                      <CardHeader className="gap-4 px-5">
+                        <div
+                          className={`flex size-11 items-center justify-center rounded-xl ${course.surface}`}
+                        >
+                          <BookOpen className="size-5" />
                         </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-muted">
-                          <div
-                            className={`h-full rounded-full ${course.colour}`}
-                            style={{ width: `${course.progress}%` }}
+                        <div>
+                          <p className="mb-1 text-xs font-semibold tracking-wide text-muted-foreground">
+                            {course.code}
+                          </p>
+                          <CardTitle className="min-h-10 text-base leading-5">
+                            {course.title}
+                          </CardTitle>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="mt-auto space-y-4 px-5">
+                        <CardDescription className="min-h-10 leading-5">
+                          {course.detail}
+                        </CardDescription>
+                        <div>
+                          <div className="mb-2 flex items-start gap-2 text-xs">
+                            <span className="min-w-0 flex-1 leading-4 text-muted-foreground">
+                              {course.completed} of {course.total} activities
+                              complete
+                            </span>
+                            <span
+                              className="shrink-0 font-semibold leading-4"
+                              aria-label={`${course.progress} percent`}
+                            >
+                              {course.progress}%
+                            </span>
+                          </div>
+                          <Progress
+                            value={course.progress}
+                            aria-label={`${course.title} progress`}
+                            className="bg-muted"
+                            indicatorClassName={course.colour}
                           />
                         </div>
-                      </div>
-                      <Button className="h-auto min-h-9 w-full whitespace-normal px-3 py-2 leading-5">
-                        <span>Continue</span>
-                        <ArrowRight className="shrink-0" />
-                      </Button>
-                    </CardContent>
-                  </Card>
+                        <Button className="h-auto min-h-9 w-full whitespace-normal px-3 py-2 leading-5">
+                          <span>Continue</span>
+                          <ArrowRight className="shrink-0" />
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  </CarouselItem>
                 ))}
-              </div>
-              <button
-                type="button"
-                onClick={() => scrollCourses(-1)}
-                className="absolute left-2 top-1/2 z-10 flex size-10 -translate-y-1/2 items-center justify-center rounded-full border bg-background/95 text-foreground opacity-0 shadow-lg backdrop-blur-sm transition-all hover:scale-105 hover:bg-accent focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/carousel:opacity-100"
-                aria-label="Show previous courses"
-              >
-                <ChevronLeft className="size-6" />
-              </button>
-              <button
-                type="button"
-                onClick={() => scrollCourses(1)}
-                className="absolute right-2 top-1/2 z-10 flex size-10 -translate-y-1/2 items-center justify-center rounded-full border bg-background/95 text-foreground opacity-0 shadow-lg backdrop-blur-sm transition-all hover:scale-105 hover:bg-accent focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/carousel:opacity-100"
-                aria-label="Show more courses"
-              >
-                <ChevronRight className="size-6" />
-              </button>
-            </div>
+              </CarouselContent>
+              <CarouselPrevious className="left-2 opacity-0 group-hover/carousel:opacity-100 focus-visible:opacity-100" />
+              <CarouselNext className="right-2 opacity-0 group-hover/carousel:opacity-100 focus-visible:opacity-100" />
+            </Carousel>
           ) : (
             <Card className="gap-0 overflow-hidden py-0">
               <CardContent className="divide-y p-0">
-                {deadlines.map((task) => (
-                  <button
-                    key={task.title}
-                    type="button"
-                    className="flex w-full items-center gap-4 p-4 text-left transition-colors hover:bg-muted/50 sm:px-5"
-                  >
-                    <span className="flex size-11 shrink-0 flex-col items-center justify-center rounded-lg border bg-background">
-                      <span className="text-sm font-bold leading-4">
-                        {task.day}
-                      </span>
-                      <span className="text-[9px] font-semibold">
-                        {task.month}
-                      </span>
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="mb-1 flex flex-wrap items-center gap-2">
-                        <span className="truncate text-sm font-semibold">
-                          {task.title}
+                {deadlines.map((task, index) => (
+                  <Fragment key={task.title}>
+                    {index > 0 && <Separator />}
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-4 p-4 text-left transition-colors hover:bg-muted/50 sm:px-5"
+                    >
+                      <span className="flex size-11 shrink-0 flex-col items-center justify-center rounded-lg border bg-background">
+                        <span className="text-sm font-bold leading-4">
+                          {task.day}
                         </span>
-                        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold">
-                          {task.status}
+                        <span className="text-[9px] font-semibold">
+                          {task.month}
                         </span>
                       </span>
-                      <span className="block text-xs text-muted-foreground">
-                        {task.course} · {task.timing}
+                      <span className="min-w-0 flex-1">
+                        <span className="mb-1 flex flex-wrap items-center gap-2">
+                          <span className="truncate text-sm font-semibold">
+                            {task.title}
+                          </span>
+                          <Badge variant="secondary" className="text-[10px]">
+                            {task.status}
+                          </Badge>
+                        </span>
+                        <span className="block text-xs text-muted-foreground">
+                          {task.course} · {task.timing}
+                        </span>
                       </span>
-                    </span>
-                    <ArrowRight className="size-4 shrink-0 text-muted-foreground" />
-                  </button>
+                      <ArrowRight className="size-4 shrink-0 text-muted-foreground" />
+                    </button>
+                  </Fragment>
                 ))}
               </CardContent>
             </Card>
@@ -502,36 +513,38 @@ function RouteComponent() {
             </div>
           </CardHeader>
           <CardContent className="space-y-1 px-3">
-            {deadlines.map((deadline) => (
-              <button
-                key={deadline.title}
-                type="button"
-                className="group flex w-full gap-3 rounded-xl p-2 text-left transition-colors hover:bg-muted/70"
-              >
-                <span
-                  className={`flex size-12 shrink-0 flex-col items-center justify-center rounded-lg border ${deadline.urgent ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-300' : 'bg-background'}`}
+            {deadlines.map((deadline, index) => (
+              <Fragment key={deadline.title}>
+                {index > 0 && <Separator className="mx-2 w-auto" />}
+                <button
+                  type="button"
+                  className="group flex w-full gap-3 rounded-xl p-2 text-left transition-colors hover:bg-muted/70"
                 >
-                  <span className="text-base font-bold leading-4">
-                    {deadline.day}
-                  </span>
-                  <span className="text-[10px] font-semibold">
-                    {deadline.month}
-                  </span>
-                </span>
-                <span className="min-w-0 py-0.5">
-                  <span className="block truncate text-sm font-semibold">
-                    {deadline.title}
-                  </span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {deadline.course}
-                  </span>
                   <span
-                    className={`mt-1 flex items-center gap-1 text-xs ${deadline.urgent ? 'font-medium text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}
+                    className={`flex size-12 shrink-0 flex-col items-center justify-center rounded-lg border ${deadline.urgent ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-300' : 'bg-background'}`}
                   >
-                    <Clock3 className="size-3" /> {deadline.timing}
+                    <span className="text-base font-bold leading-4">
+                      {deadline.day}
+                    </span>
+                    <span className="text-[10px] font-semibold">
+                      {deadline.month}
+                    </span>
                   </span>
-                </span>
-              </button>
+                  <span className="min-w-0 py-0.5">
+                    <span className="block truncate text-sm font-semibold">
+                      {deadline.title}
+                    </span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {deadline.course}
+                    </span>
+                    <span
+                      className={`mt-1 flex items-center gap-1 text-xs ${deadline.urgent ? 'font-medium text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}
+                    >
+                      <Clock3 className="size-3" /> {deadline.timing}
+                    </span>
+                  </span>
+                </button>
+              </Fragment>
             ))}
           </CardContent>
           <div className="px-5">
@@ -564,9 +577,9 @@ function RouteComponent() {
                 <h3 className="text-sm font-semibold">
                   Semester census date reminder
                 </h3>
-                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
+                <Badge className="bg-primary/10 text-[10px] font-bold uppercase tracking-wide text-primary hover:bg-primary/10">
                   New
-                </span>
+                </Badge>
               </div>
               <p className="mt-1 text-sm leading-5 text-muted-foreground">
                 Review your enrollment before the census date on 31 August.
@@ -613,20 +626,27 @@ function RouteComponent() {
               A few suggestions based on your Data Analyst career goal
             </p>
           </div>
-          <div className="flex flex-wrap gap-2" aria-label="Course categories">
+          <ToggleGroup
+            type="single"
+            value={courseCategory}
+            onValueChange={(value) => value && setCourseCategory(value)}
+            spacing={2}
+            variant="outline"
+            className="flex flex-wrap"
+            aria-label="Course categories"
+          >
             {['For you', 'Business', 'Technology', 'Personal development'].map(
-              (category, index) => (
-                <Button
+              (category) => (
+                <ToggleGroupItem
                   key={category}
-                  variant={index === 0 ? 'secondary' : 'outline'}
-                  size="sm"
-                  aria-pressed={index === 0}
+                  value={category}
+                  aria-label={`Show ${category} courses`}
                 >
                   {category}
-                </Button>
+                </ToggleGroupItem>
               ),
             )}
-          </div>
+          </ToggleGroup>
         </div>
 
         <div className="grid gap-4 md:grid-cols-3">
