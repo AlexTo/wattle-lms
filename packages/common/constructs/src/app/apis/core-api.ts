@@ -104,7 +104,7 @@ export class CoreApi<
       pattern: 'isolated',
       operations: routerToOperations(appRouter),
       defaultIntegrationOptions: {
-        runtime: Runtime.NODEJS_LATEST,
+        runtime: Runtime.NODEJS_24_X,
         handler: 'index.handler',
         code: Code.fromAsset(
           url.fileURLToPath(

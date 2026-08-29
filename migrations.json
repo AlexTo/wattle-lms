@@ -1,21 +1,35 @@
 {
   "migrations": [
     {
-      "version": "1.0.0-rc.74",
-      "description": "Extract the duplicated _SessionIdMiddleware class in py#agent's main.py into a shared middleware/session_id_middleware.py module",
-      "implementation": "./src/migrations/latest/py-agent-session-id-middleware-extraction/migration",
+      "version": "1.0.0-rc.87",
+      "description": "Add a destroy-sandbox target to CDK infrastructure projects which destroys the sandbox stage, and drop the --require-approval flag from cdk destroy, which has no such option",
+      "implementation": "./src/migrations/latest/add-destroy-sandbox-target/migration",
       "package": "@aws/nx-plugin",
-      "name": "latest-py-agent-session-id-middleware-extraction"
+      "name": "latest-add-destroy-sandbox-target"
     },
     {
-      "version": "1.0.0-rc.75",
-      "description": "Extract the duplicated session-id Express middleware in ts#agent's ag-ui/a2a index.ts into a shared middleware/session-id-middleware.ts module",
-      "implementation": "./src/migrations/latest/ts-agent-session-id-middleware-extraction/migration",
+      "version": "1.0.0-rc.87",
+      "description": "Replace the MySQL RDS Proxy role's admin secret access with the rds-db:connect grant it needs for end-to-end IAM auth",
+      "implementation": "./src/migrations/latest/terraform-rdb-proxy-iam-connect-grant/migration",
       "package": "@aws/nx-plugin",
-      "name": "latest-ts-agent-session-id-middleware-extraction"
+      "name": "latest-terraform-rdb-proxy-iam-connect-grant"
     },
     {
-      "version": "1.0.0-rc.76",
+      "version": "1.0.0-rc.88",
+      "description": "Drop the exact CPython patch from .python-version to the Lambda runtime's major.minor",
+      "implementation": "./src/migrations/latest/python-version-drop-exact-patch/migration",
+      "package": "@aws/nx-plugin",
+      "name": "latest-python-version-drop-exact-patch"
+    },
+    {
+      "version": "1.0.0-rc.88",
+      "description": "Add an npm override pinning the express @nx/react resolves to the version generated websites use, so npm can satisfy its optional peer",
+      "implementation": "./src/migrations/latest/react-website-nx-react-express-override/migration",
+      "package": "@aws/nx-plugin",
+      "name": "latest-react-website-nx-react-express-override"
+    },
+    {
+      "version": "1.0.0-rc.88",
       "description": "Sync vended dependency versions and the tracked plugin version to those vended by this release",
       "implementation": "./src/utils/version-upgrade-migration/migration",
       "package": "@aws/nx-plugin",

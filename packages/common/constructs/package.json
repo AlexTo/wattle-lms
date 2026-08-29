@@ -7,10 +7,10 @@
     "@aws-sdk/client-api-gateway": "catalog:",
     "@aws-sdk/client-iam": "catalog:",
     "@trpc/server": "catalog:",
+    "@wattle/core-api": "workspace:*",
     "aws-cdk-lib": "catalog:",
     "constructs": "catalog:",
-    "tslib": "^2.3.0",
-    "@wattle/core-api": "workspace:*"
+    "tslib": "^2.3.0"
   },
   "devDependencies": {
     "@types/node": "catalog:"

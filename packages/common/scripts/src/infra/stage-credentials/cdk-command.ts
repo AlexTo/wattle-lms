@@ -9,6 +9,9 @@ export function buildCdkCommand(
   const hasRequireApproval = remainingArgs.some(
     (a) => a === '--require-approval' || a.startsWith('--require-approval='),
   );
-  const defaults = hasRequireApproval ? [] : ['--require-approval=never'];
+  const defaults =
+    action === 'destroy' || hasRequireApproval
+      ? []
+      : ['--require-approval=never'];
   return ['cdk', action, ...defaults, ...remainingArgs];
 }

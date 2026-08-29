@@ -11,7 +11,7 @@ export class EventsPostConfirmation extends Function {
   constructor(scope: Construct, id: string) {
     super(scope, id, {
       timeout: Duration.seconds(30),
-      runtime: Runtime.NODEJS_LATEST,
+      runtime: Runtime.NODEJS_24_X,
       handler: 'index.handler',
       code: Code.fromAsset(
         url.fileURLToPath(

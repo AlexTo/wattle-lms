@@ -50,7 +50,7 @@ export class ApiGatewayAccount extends Construct {
     cloudWatchRole.applyRemovalPolicy(RemovalPolicy.RETAIN);
 
     const onEvent = new Function(this, 'OnEvent', {
-      runtime: Runtime.NODEJS_LATEST,
+      runtime: Runtime.NODEJS_24_X,
       handler: 'index.handler',
       timeout: Duration.minutes(2),
       code: Code.fromAsset(
