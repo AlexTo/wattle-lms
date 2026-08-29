@@ -48,6 +48,8 @@ const LOCAL_CALLBACK_URLS = [
   'http://localhost:4300',
   'http://localhost:4201',
   'http://localhost:4301',
+  'http://localhost:4202',
+  'http://localhost:4302',
 ];
 
 /**

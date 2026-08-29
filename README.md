@@ -70,6 +70,7 @@ Most components (frontends, API) run locally against your machine, but a few, li
 ```sh
 pnpm nx load-runtime-config @wattle/student-portal
 pnpm nx load-runtime-config @wattle/instructor-portal
+pnpm nx load-runtime-config @wattle/admin-portal
 pnpm dev
 ```
 

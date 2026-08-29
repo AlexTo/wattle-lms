@@ -1,10 +1,11 @@
 {
-  "name": "@wattle/instructor-portal",
+  "name": "@wattle/admin-portal",
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "packages/websites/instructor-portal/src",
+  "sourceRoot": "packages/websites/admin-portal/src",
   "projectType": "application",
   "tags": [],
   "metadata": {
+    "ports": [4202],
     "generator": "ts#react-website",
     "ux": "shadcn",
     "framework": "react",
@@ -21,9 +22,15 @@
         "generator": "ts#react-website#auth",
         "path": "src/components/CognitoAuth",
         "iac": "cdk"
+      },
+      {
+        "generator": "ts#trpc-api#react-connection",
+        "path": "src/components/CoreApiClientProvider",
+        "name": "CoreApi",
+        "auth": "cognito",
+        "isRestApi": true
       }
-    ],
-    "ports": [4200]
+    ]
   },
   "targets": {
     "build": {
@@ -40,6 +47,12 @@
     },
     "dev": {
       "executor": "nx:run-commands",
+      "dependsOn": [
+        {
+          "projects": ["@wattle/core-api"],
+          "target": "dev"
+        }
+      ],
       "continuous": true,
       "options": {
         "command": "vite --mode local-dev",
@@ -88,10 +101,10 @@
     "load-runtime-config": {
       "executor": "nx:run-commands",
       "metadata": {
-        "description": "Load runtime config from your deployed stack for dev purposes. You must set your AWS CLI credentials whilst calling 'pnpm nx load-runtime-config @wattle/instructor-portal'"
+        "description": "Load runtime config from your deployed stack for dev purposes. You must set your AWS CLI credentials whilst calling 'pnpm nx load-runtime-config @wattle/admin-portal'"
       },
       "options": {
-        "command": "aws s3 cp s3://`aws cloudformation describe-stacks --query \"Stacks[?starts_with(StackName, 'wattle-')][].Outputs[] | [?contains(OutputKey, 'InstructorPortalWebsiteBucketName')].OutputValue\" --output text`/runtime-config.json \"{projectRoot}/public/runtime-config.json\""
+        "command": "aws s3 cp s3://`aws cloudformation describe-stacks --query \"Stacks[?starts_with(StackName, 'wattle-')][].Outputs[] | [?contains(OutputKey, 'AdminPortalWebsiteBucketName')].OutputValue\" --output text`/runtime-config.json \"{projectRoot}/public/runtime-config.json\""
       }
     }
   }

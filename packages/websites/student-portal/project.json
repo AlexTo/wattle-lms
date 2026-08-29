@@ -29,7 +29,8 @@
         "auth": "cognito",
         "isRestApi": true
       }
-    ]
+    ],
+    "ports": [4201]
   },
   "targets": {
     "build": {

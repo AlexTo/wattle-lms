@@ -32,6 +32,9 @@
     },
     {
       "path": "./packages/websites/instructor-portal"
+    },
+    {
+      "path": "./packages/websites/admin-portal"
     }
   ]
 }

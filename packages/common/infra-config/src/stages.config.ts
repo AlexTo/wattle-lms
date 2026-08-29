@@ -20,6 +20,7 @@ export default {
             },
             studentPortal: { enableWaf: false, enableKmsEncryption: false },
             instructorPortal: { enableWaf: false, enableKmsEncryption: false },
+            adminPortal: { enableWaf: false, enableKmsEncryption: false },
           },
         },
         'wattle-production': {
@@ -41,6 +42,11 @@ export default {
               enableKeyRotation: true,
             },
             instructorPortal: {
+              enableWaf: true,
+              enableKmsEncryption: true,
+              enableKeyRotation: true,
+            },
+            adminPortal: {
               enableWaf: true,
               enableKmsEncryption: true,
               enableKeyRotation: true,

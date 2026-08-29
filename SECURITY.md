@@ -10,7 +10,7 @@ Wattle LMS ships with security controls enabled by default, and only relaxes the
 
 - Cognito authentication with MFA required, fronting both the API and portals
 - WAF on the API Gateway, CloudFront distributions, and Cognito user pool
-- KMS customer-managed encryption with key rotation for DynamoDB, the API's logs, and both portals' buckets
+- KMS customer-managed encryption with key rotation for DynamoDB, the API's logs, and the portals' buckets
 - DynamoDB deletion protection
 - Infrastructure security scanning with [Checkov](https://www.checkov.io) (`infra:checkov`, part of the `build` target)
 - Credential scanning with `git-secrets` on every commit (`.husky/pre-commit`)

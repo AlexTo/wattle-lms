@@ -15,6 +15,8 @@ export interface ApplicationStageProps extends StageProps {
   readonly coreApi?: ApplicationStackProps['coreApi'];
   readonly coreTable?: ApplicationStackProps['coreTable'];
   readonly studentPortal?: ApplicationStackProps['studentPortal'];
+  readonly instructorPortal?: ApplicationStackProps['instructorPortal'];
+  readonly adminPortal?: ApplicationStackProps['adminPortal'];
 }
 
 /**
@@ -29,6 +31,8 @@ export class ApplicationStage extends Stage {
       coreApi,
       coreTable,
       studentPortal,
+      instructorPortal,
+      adminPortal,
       ...props
     }: ApplicationStageProps,
   ) {
@@ -40,6 +44,8 @@ export class ApplicationStage extends Stage {
       coreApi,
       coreTable,
       studentPortal,
+      instructorPortal,
+      adminPortal,
     });
   }
 }

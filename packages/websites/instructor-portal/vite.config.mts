@@ -13,11 +13,11 @@ export default defineConfig(() => ({
   root: import.meta.dirname,
   cacheDir: '../../../node_modules/.vite/packages/websites/instructor-portal',
   server: {
-    port: 4201,
+    port: 4200,
     host: 'localhost',
   },
   preview: {
-    port: 4301,
+    port: 4300,
     host: 'localhost',
   },
   plugins: [
