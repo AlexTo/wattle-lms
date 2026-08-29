@@ -5,19 +5,35 @@
 import { Entity } from 'electrodb';
 import { getDynamoDBClient, resolveTableName } from '../client.js';
 
-// Example entity - replace with your own entities using ElectroDB
-// See https://electrodb.dev/en/modeling/entities/ for documentation
-export const createExampleEntity = async () =>
+// Shares its pk with Course and Lesson (COURSE#<courseId>) via the
+// `curriculum` collection (../service.ts), so a course's full curriculum
+// can be read with a single query through the Service instead of one query
+// per entity.
+export const createModuleEntity = async () =>
   new Entity(
     {
       model: {
-        entity: 'example',
+        entity: 'module',
         version: '1',
         service: 'CoreTable',
       },
       attributes: {
-        id: {
+        moduleId: {
           type: 'string',
+          required: true,
+        },
+        courseId: {
+          type: 'string',
+          required: true,
+        },
+        title: {
+          type: 'string',
+          required: true,
+        },
+        // Sequencing within the course. Not part of any key: module counts
+        // per course are small enough to sort client-side after fetch.
+        order: {
+          type: 'number',
           required: true,
         },
         createdAt: {
@@ -36,13 +52,14 @@ export const createExampleEntity = async () =>
       },
       indexes: {
         primary: {
+          collection: 'curriculum',
           pk: {
             field: 'pk',
-            composite: ['id'],
+            composite: ['courseId'],
           },
           sk: {
             field: 'sk',
-            composite: [],
+            composite: ['moduleId'],
           },
         },
       },
