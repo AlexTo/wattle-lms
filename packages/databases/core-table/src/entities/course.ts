@@ -1,0 +1,84 @@
+/**
+ * Copyright Wattle LMS Contributors. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+import { Entity } from 'electrodb';
+import { getDynamoDBClient, resolveTableName } from '../client.js';
+
+// Primary key attribute is named `courseId`, not `id`, so it matches the
+// composite attribute name Module/Lesson use for their own pk. ElectroDB
+// requires an exact attribute-name match (not just an equal rendered value)
+// for entities to share a partition in a Service collection (`curriculum`,
+// see ../service.ts) - a mismatch here silently splits the Course's own
+// item into a different physical partition than its Modules/Lessons.
+export const createCourseEntity = async () =>
+  new Entity(
+    {
+      model: {
+        entity: 'course',
+        version: '1',
+        service: 'CoreTable',
+      },
+      attributes: {
+        courseId: {
+          type: 'string',
+          required: true,
+        },
+        title: {
+          type: 'string',
+          required: true,
+        },
+        description: {
+          type: 'string',
+        },
+        instructorId: {
+          type: 'string',
+          required: true,
+        },
+        status: {
+          type: ['draft', 'published', 'archived'] as const,
+          required: true,
+          default: 'draft',
+        },
+        createdAt: {
+          type: 'string',
+          required: true,
+          default: () => new Date().toISOString(),
+          readOnly: true,
+        },
+        updatedAt: {
+          type: 'string',
+          required: true,
+          default: () => new Date().toISOString(),
+          watch: '*',
+          set: () => new Date().toISOString(),
+        },
+      },
+      indexes: {
+        primary: {
+          collection: 'curriculum',
+          pk: {
+            field: 'pk',
+            composite: ['courseId'],
+          },
+          sk: {
+            field: 'sk',
+            composite: ['courseId'],
+          },
+        },
+        // List courses an instructor owns.
+        byInstructor: {
+          index: 'gsi1pk-gsi1sk-index',
+          pk: {
+            field: 'gsi1pk',
+            composite: ['instructorId'],
+          },
+          sk: {
+            field: 'gsi1sk',
+            composite: ['createdAt', 'courseId'],
+          },
+        },
+      },
+    },
+    { client: getDynamoDBClient(), table: await resolveTableName() },
+  );
