@@ -48,6 +48,9 @@
       ],
       "@wattle/instructor-portal": [
         "../packages/websites/instructor-portal/src/index.ts"
+      ],
+      "@wattle/admin-portal": [
+        "../packages/websites/admin-portal/src/index.ts"
       ]
     }
   }

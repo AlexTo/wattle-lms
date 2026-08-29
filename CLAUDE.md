@@ -44,6 +44,7 @@ Local dev, deploy once, pull runtime config, then run dev servers:
 pnpm nx deploy @wattle/infra "wattle-development/*"
 pnpm nx load-runtime-config @wattle/student-portal
 pnpm nx load-runtime-config @wattle/instructor-portal
+pnpm nx load-runtime-config @wattle/admin-portal
 pnpm dev
 ```
 
@@ -57,10 +58,10 @@ Everything else (`compile`, `bundle`, `synth`, `checkov`, `dev`, `serve`) is a p
 - `packages/databases/core-table`: single-table DynamoDB access via ElectroDB; `client.ts` resolves table/client so entities work identically against local (Docker) and deployed DynamoDB
 - `packages/common/scripts`: deploy/destroy and local-DynamoDB (Docker) tooling invoked by Nx targets
 - `packages/events`: standalone Lambda handlers for AWS-triggered events (e.g. Cognito), separate from the API
-- `packages/websites/student-portal`, `packages/websites/instructor-portal`: React + Vite + TanStack Router frontends
+- `packages/websites/student-portal`, `packages/websites/instructor-portal`, `packages/websites/admin-portal`: React + Vite + TanStack Router frontends
 - `packages/common/constructs`: all CDK constructs; `packages/infra` composes them into stacks and has no infra logic of its own
 - `packages/common/infra-config`: per-stage deployment config (credentials, region, which security features are on)
-- `packages/common/shadcn`: shared shadcn/ui components used by both portals
+- `packages/common/shadcn`: shared shadcn/ui components used by all three portals
 - `docs`: Astro/Starlight docs site, deployed to GitHub Pages on push to `main`
 
 Stack composition (`packages/infra/src/stacks/application-stack.ts`) wires the constructs together and reads per-component config (`enableWaf`, `enableKmsEncryption`, etc.) that defaults to fully-hardened and is only relaxed per stage. Stages themselves are defined in `packages/common/infra-config/src/stages.config.ts`, not in `packages/infra`; adding a stage means editing that file only. `wattle-development` relaxes security for cheap iteration; `wattle-production` is the hardened baseline.

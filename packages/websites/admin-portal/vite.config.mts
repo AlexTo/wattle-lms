@@ -3,21 +3,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import tailwindcss from '@tailwindcss/vite';
-import { tanstackRouter } from '@tanstack/router-plugin/vite';
-import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
+import { tanstackRouter } from '@tanstack/router-plugin/vite';
 /// <reference types='vitest' />
 import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
 export default defineConfig(() => ({
   root: import.meta.dirname,
-  cacheDir: '../../../node_modules/.vite/packages/websites/student-portal',
+  cacheDir: '../../../node_modules/.vite/packages/websites/admin-portal',
   server: {
-    port: 4201,
+    port: 4202,
     host: 'localhost',
   },
   preview: {
-    port: 4301,
+    port: 4302,
     host: 'localhost',
   },
   plugins: [
@@ -33,7 +33,7 @@ export default defineConfig(() => ({
   //  plugins: [],
   // },
   build: {
-    outDir: '../../../dist/packages/websites/student-portal/bundle',
+    outDir: '../../../dist/packages/websites/admin-portal/bundle',
     emptyOutDir: true,
     reportCompressedSize: true,
     commonjsOptions: {
@@ -42,7 +42,7 @@ export default defineConfig(() => ({
   },
   test: {
     passWithNoTests: true,
-    name: '@wattle/student-portal',
+    name: '@wattle/admin-portal',
     watch: false,
     globals: true,
     environment: 'jsdom',

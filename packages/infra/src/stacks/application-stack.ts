@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import {
+  AdminPortal,
   CoreApi,
   CoreTable,
   EventsPostConfirmation,
@@ -12,6 +13,7 @@ import {
   UserIdentity,
 } from '@wattle/common-constructs';
 import type {
+  AdminPortalComponentConfig,
   CoreApiComponentConfig,
   CoreTableComponentConfig,
   IdentityComponentConfig,
@@ -36,6 +38,8 @@ export interface ApplicationStackProps extends StackProps {
   readonly studentPortal?: StudentPortalComponentConfig;
   /** Settings for the instructor portal static website construct. @default all enabled */
   readonly instructorPortal?: InstructorPortalComponentConfig;
+  /** Settings for the admin portal static website construct. @default all enabled */
+  readonly adminPortal?: AdminPortalComponentConfig;
 }
 
 export class ApplicationStack extends Stack {
@@ -48,6 +52,7 @@ export class ApplicationStack extends Stack {
       coreTable: coreTableConfig,
       studentPortal: studentPortalConfig,
       instructorPortal: instructorPortalConfig,
+      adminPortal: adminPortalConfig,
       ...props
     }: ApplicationStackProps,
   ) {
@@ -62,6 +67,9 @@ export class ApplicationStack extends Stack {
       instructorPortalConfig?.enableWaf ?? true;
     const instructorPortalKmsEnabled =
       instructorPortalConfig?.enableKmsEncryption ?? true;
+    const adminPortalWafEnabled = adminPortalConfig?.enableWaf ?? true;
+    const adminPortalKmsEnabled =
+      adminPortalConfig?.enableKmsEncryption ?? true;
 
     const identity = new UserIdentity(this, 'Identity', {
       enableWaf: identityConfig?.enableWaf ?? true,
@@ -186,13 +194,42 @@ export class ApplicationStack extends Stack {
       );
     }
 
+    const adminPortal = new AdminPortal(this, 'AdminPortal', {
+      enableWaf: adminPortalWafEnabled,
+      enableKeyRotation: adminPortalConfig?.enableKeyRotation ?? true,
+      ...(adminPortalKmsEnabled
+        ? {}
+        : { encryption: BucketEncryption.S3_MANAGED }),
+    });
+    if (!adminPortalWafEnabled) {
+      suppressRules(
+        adminPortal.cloudFrontDistribution,
+        ['CKV_AWS_68'],
+        'WAF disabled for this stage',
+      );
+    }
+    if (!adminPortalKmsEnabled) {
+      suppressRules(
+        this,
+        ['CKV_AWS_158'],
+        'KMS encryption disabled for this stage',
+        (c) =>
+          CfnResource.isCfnResource(c) &&
+          c.cfnResourceType === 'AWS::Logs::LogGroup' &&
+          c.node.path.includes('/AdminPortal/AccessLogs'),
+      );
+    }
+
     coreApi.restrictCorsTo(
       studentPortal,
       instructorPortal,
+      adminPortal,
       'http://localhost:4200',
       'http://localhost:4300',
       'http://localhost:4201',
       'http://localhost:4301',
+      'http://localhost:4202',
+      'http://localhost:4302',
     );
   }
 }

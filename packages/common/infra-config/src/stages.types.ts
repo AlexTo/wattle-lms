@@ -88,6 +88,18 @@ export type InstructorPortalComponentConfig = {
 };
 
 /**
+ * Per-stage settings for the admin portal static website construct.
+ */
+export type AdminPortalComponentConfig = {
+  /** Protect the CloudFront distribution with AWS WAF */
+  enableWaf?: boolean;
+  /** Use customer-managed KMS encryption instead of the cheaper S3-managed default */
+  enableKmsEncryption?: boolean;
+  /** Enable automatic key rotation on the website bucket's KMS key. Only used when `enableKmsEncryption` is true */
+  enableKeyRotation?: boolean;
+};
+
+/**
  * Component-level settings consuming apps use to configure their constructs
  * per stage, keyed by component name. Omitted components/flags fall back to
  * whatever default the app itself chooses.
@@ -98,6 +110,7 @@ export type StageComponents = {
   coreTable?: CoreTableComponentConfig;
   studentPortal?: StudentPortalComponentConfig;
   instructorPortal?: InstructorPortalComponentConfig;
+  adminPortal?: AdminPortalComponentConfig;
 };
 
 /**
