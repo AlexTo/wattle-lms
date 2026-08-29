@@ -114,6 +114,7 @@ export class CoreApi<
             ),
           ),
         ),
+        memorySize: 256,
         timeout: Duration.seconds(30),
         tracing: Tracing.ACTIVE,
       } as FunctionProps,
