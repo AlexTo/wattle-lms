@@ -5,13 +5,13 @@
   "type": "module",
   "dependencies": {
     "@tanstack/react-router": "catalog:",
+    "@wattle/common-shadcn": "workspace:*",
     "lucide-react": "catalog:",
     "oidc-client-ts": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-oidc-context": "catalog:",
-    "tailwindcss": "catalog:",
-    "@wattle/common-shadcn": "workspace:*"
+    "tailwindcss": "catalog:"
   },
   "devDependencies": {},
   "license": "Apache-2.0"

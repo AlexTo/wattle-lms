@@ -4,20 +4,20 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@wattle/common-shadcn": "workspace:*",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-query-devtools": "catalog:",
     "@tanstack/react-router": "catalog:",
     "@trpc/client": "catalog:",
     "@trpc/tanstack-react-query": "catalog:",
+    "@wattle/common-shadcn": "workspace:*",
+    "@wattle/core-api": "workspace:*",
     "event-source-polyfill": "catalog:",
     "lucide-react": "catalog:",
     "oidc-client-ts": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-oidc-context": "catalog:",
-    "tailwindcss": "catalog:",
-    "@wattle/core-api": "workspace:*"
+    "tailwindcss": "catalog:"
   },
   "devDependencies": {
     "@smithy/types": "catalog:",

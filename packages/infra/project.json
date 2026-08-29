@@ -33,7 +33,7 @@
       "outputs": ["{workspaceRoot}/dist/{projectRoot}/checkov"],
       "dependsOn": ["synth"],
       "options": {
-        "command": "uvx --from checkov==3.3.11 checkov --config-file {projectRoot}/checkov.yml --directory dist/{projectRoot}/cdk.out --framework cloudformation"
+        "command": "uvx --from checkov==3.3.15 checkov --config-file {projectRoot}/checkov.yml --directory dist/{projectRoot}/cdk.out --framework cloudformation"
       }
     },
     "compile": {
@@ -76,7 +76,7 @@
       "executor": "nx:run-commands",
       "options": {
         "cwd": "{projectRoot}",
-        "command": "cdk destroy --require-approval=never --app ../../dist/{projectRoot}/cdk.out"
+        "command": "cdk destroy --app ../../dist/{projectRoot}/cdk.out"
       }
     },
     "format": {

@@ -5,8 +5,8 @@
   "type": "module",
   "dependencies": {
     "@aws-sdk/client-dynamodb": "catalog:",
-    "tslib": "^2.3.0",
-    "@wattle/common-infra-config": "workspace:*"
+    "@wattle/common-infra-config": "workspace:*",
+    "tslib": "^2.3.0"
   },
   "devDependencies": {
     "@aws-sdk/client-sts": "catalog:",
