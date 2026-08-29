@@ -25,7 +25,7 @@ const logger = new Logger();
 const metrics = new Metrics();
 const cognito = new CognitoIdentityProviderClient();
 
-const STUDENT_GROUP = 'student';
+const SIGN_UP_GROUPS = ['student', 'instructor'];
 
 export const postConfirmation = async (
   event: PostConfirmationTriggerEvent,
@@ -35,12 +35,16 @@ export const postConfirmation = async (
   // Also fires as PostConfirmation_ConfirmForgotPassword, which should not
   // re-run group assignment
   if (event.triggerSource === 'PostConfirmation_ConfirmSignUp') {
-    await cognito.send(
-      new AdminAddUserToGroupCommand({
-        UserPoolId: event.userPoolId,
-        Username: event.userName,
-        GroupName: STUDENT_GROUP,
-      }),
+    await Promise.all(
+      SIGN_UP_GROUPS.map((groupName) =>
+        cognito.send(
+          new AdminAddUserToGroupCommand({
+            UserPoolId: event.userPoolId,
+            Username: event.userName,
+            GroupName: groupName,
+          }),
+        ),
+      ),
     );
   }
 
