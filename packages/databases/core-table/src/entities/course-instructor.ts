@@ -5,17 +5,15 @@
 import { Entity } from 'electrodb';
 import { getDynamoDBClient, resolveTableName } from '../client.js';
 
-// Primary key attribute is named `courseId`, not `id`, so it matches the
-// composite attribute name Module/Lesson use for their own pk. ElectroDB
-// requires an exact attribute-name match (not just an equal rendered value)
-// for entities to share a partition in a Service collection (`curriculum`,
-// see ../service.ts) - a mismatch here silently splits the Course's own
-// item into a different physical partition than its Modules/Lessons.
-export const createCourseEntity = async () =>
+// Join entity: a course may be taught by more than one instructor, and an
+// instructor may teach more than one course. Modeled the same way as
+// Enrolment (student<->course), just for the teaching staff instead of the
+// roster.
+export const createCourseInstructorEntity = async () =>
   new Entity(
     {
       model: {
-        entity: 'course',
+        entity: 'courseInstructor',
         version: '1',
         service: 'CoreTable',
       },
@@ -24,17 +22,9 @@ export const createCourseEntity = async () =>
           type: 'string',
           required: true,
         },
-        title: {
+        instructorId: {
           type: 'string',
           required: true,
-        },
-        description: {
-          type: 'string',
-        },
-        status: {
-          type: ['draft', 'published', 'archived'] as const,
-          required: true,
-          default: 'draft',
         },
         createdAt: {
           type: 'string',
@@ -51,14 +41,29 @@ export const createCourseEntity = async () =>
         },
       },
       indexes: {
+        // List instructors teaching a course. Shares its pk with Course/
+        // Module/Lesson (COURSE#<courseId>) at the raw table level, but is
+        // intentionally not part of the `curriculum` Service collection
+        // since no access pattern needs instructors fetched alongside them.
         primary: {
-          collection: 'curriculum',
           pk: {
             field: 'pk',
             composite: ['courseId'],
           },
           sk: {
             field: 'sk',
+            composite: ['instructorId'],
+          },
+        },
+        // List courses an instructor teaches.
+        byInstructor: {
+          index: 'gsi1pk-gsi1sk-index',
+          pk: {
+            field: 'gsi1pk',
+            composite: ['instructorId'],
+          },
+          sk: {
+            field: 'gsi1sk',
             composite: ['courseId'],
           },
         },

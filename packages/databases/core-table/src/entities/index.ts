@@ -4,6 +4,7 @@
  */
 export { createAssignmentEntity } from './assignment.js';
 export { createCourseEntity } from './course.js';
+export { createCourseInstructorEntity } from './course-instructor.js';
 export { createEnrolmentEntity } from './enrolment.js';
 export { createLessonEntity } from './lesson.js';
 export { createModuleEntity } from './module.js';
