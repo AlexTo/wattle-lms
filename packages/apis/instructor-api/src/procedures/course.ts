@@ -1,0 +1,80 @@
+/**
+ * Copyright Wattle LMS Contributors. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+import { TRPCError } from '@trpc/server';
+import { v7 as uuidv7 } from 'uuid';
+import { courseProcedure } from '../init.js';
+import {
+  ArchiveCourseInputSchema,
+  ArchiveCourseOutputSchema,
+  CreateCourseInputSchema,
+  CreateCourseOutputSchema,
+} from '../schema/index.js';
+
+export const createCourse = courseProcedure
+  .input(CreateCourseInputSchema)
+  .output(CreateCourseOutputSchema)
+  .mutation(async ({ ctx, input }) => {
+    const coreTable = ctx.coreTable!;
+    const courseId = uuidv7();
+    const { sub: currentUser } = ctx.user;
+    const { title, description } = input;
+
+    // A course must always have at least one instructor, so the course and
+    // its initial CourseInstructor row are written transactionally: either
+    // both succeed or neither does. DynamoDB transactions don't return the
+    // written attributes, so fetch the course back once the write commits.
+    const { canceled } = await coreTable.transaction
+      .write((entities) => [
+        entities.course.create({ courseId, title, description }).commit(),
+        entities.courseInstructor
+          .create({ courseId, instructorId: currentUser })
+          .commit(),
+      ])
+      .go();
+
+    if (canceled) {
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Failed to create course',
+      });
+    }
+
+    const { data: course } = await coreTable.entities.course
+      .get({ courseId })
+      .go();
+    if (!course) {
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Failed to create course',
+      });
+    }
+
+    return course;
+  });
+
+export const archiveCourse = courseProcedure
+  .input(ArchiveCourseInputSchema)
+  .output(ArchiveCourseOutputSchema)
+  .mutation(async ({ ctx, input }) => {
+    const coreTable = ctx.coreTable!;
+    const { courseId } = input;
+    const { sub: currentUser } = ctx.user;
+
+    // Only instructors teaching this specific course may archive it, not
+    // just any member of the instructor group.
+    const { data: membership } = await coreTable.entities.courseInstructor
+      .get({ courseId, instructorId: currentUser })
+      .go();
+    if (!membership) {
+      throw new TRPCError({ code: 'FORBIDDEN' });
+    }
+
+    const { data: course } = await coreTable.entities.course
+      .patch({ courseId })
+      .set({ status: 'archived' })
+      .go({ response: 'all_new' });
+
+    return course;
+  });

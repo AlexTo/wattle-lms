@@ -4,12 +4,15 @@
  */
 
 import { t } from './init.js';
-import { echo } from './procedures/echo.js';
+import { archiveCourse, createCourse } from './procedures/course.js';
 
 export const router = t.router;
 
 export const appRouter = router({
-  echo,
+  course: router({
+    create: createCourse,
+    archive: archiveCourse,
+  }),
 });
 
 export type AppRouter = typeof appRouter;

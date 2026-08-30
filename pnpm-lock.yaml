@@ -225,6 +225,9 @@ catalogs:
     typescript:
       specifier: ~6.0.3
       version: 6.0.3
+    uuid:
+      specifier: 14.0.2
+      version: 14.0.2
     vite:
       specifier: 8.2.2
       version: 8.2.2
@@ -458,6 +461,9 @@ importers:
       '@aws-sdk/client-appconfigdata':
         specifier: 'catalog:'
         version: 3.1119.0
+      '@aws-sdk/client-dynamodb':
+        specifier: 'catalog:'
+        version: 3.1119.0
       '@aws-sdk/credential-providers':
         specifier: 'catalog:'
         version: 3.1119.0
@@ -467,15 +473,24 @@ importers:
       '@trpc/server':
         specifier: 'catalog:'
         version: 11.18.0(typescript@6.0.3)
+      '@wattle/core-table':
+        specifier: workspace:*
+        version: link:../../databases/core-table
       aws-xray-sdk-core:
         specifier: 'catalog:'
         version: 3.12.0
       aws4fetch:
         specifier: 'catalog:'
         version: 1.0.20
+      electrodb:
+        specifier: 'catalog:'
+        version: 3.9.3(@aws-sdk/client-dynamodb@3.1119.0)
       tslib:
         specifier: ^2.3.0
         version: 2.8.1
+      uuid:
+        specifier: 'catalog:'
+        version: 14.0.2
       zod:
         specifier: 'catalog:'
         version: 4.4.3
