@@ -26,7 +26,7 @@ export const RuntimeConfigContext = createContext<IRuntimeConfig | undefined>(
  */
 const applyOverrides = (runtimeConfig: IRuntimeConfig) => {
   if (import.meta.env.MODE === 'local-dev') {
-    // Add local server urls here
+    runtimeConfig.apis.InstructorApi = 'http://localhost:2023/';
   }
   return runtimeConfig;
 };

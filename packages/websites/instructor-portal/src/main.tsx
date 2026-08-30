@@ -2,11 +2,18 @@
  * Copyright Wattle LMS Contributors. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
+
+/**
+ * Copyright Wattle LMS Contributors. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
 import { createRouter, RouterProvider } from '@tanstack/react-router';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { useAuth } from 'react-oidc-context';
 import CognitoAuth from './components/CognitoAuth';
+import InstructorApiClientProvider from './components/InstructorApiClientProvider';
+import QueryClientProvider from './components/QueryClientProvider';
 import RuntimeConfigProvider from './components/RuntimeConfig';
 import { useRuntimeConfig } from './hooks/useRuntimeConfig';
 import { routeTree } from './routeTree.gen';
@@ -42,7 +49,11 @@ root &&
     <React.StrictMode>
       <RuntimeConfigProvider>
         <CognitoAuth>
-          <App />
+          <QueryClientProvider>
+            <InstructorApiClientProvider>
+              <App />
+            </InstructorApiClientProvider>
+          </QueryClientProvider>
         </CognitoAuth>
       </RuntimeConfigProvider>
     </React.StrictMode>,

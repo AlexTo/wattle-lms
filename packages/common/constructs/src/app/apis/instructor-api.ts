@@ -1,0 +1,218 @@
+/**
+ * Copyright Wattle LMS Contributors. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { AppRouter, appRouter } from '@wattle/instructor-api';
+import { Aspects, Duration } from 'aws-cdk-lib';
+import {
+  AuthorizationType,
+  CognitoUserPoolsAuthorizer,
+  LambdaIntegration,
+  ResponseTransferMode,
+} from 'aws-cdk-lib/aws-apigateway';
+import { Distribution } from 'aws-cdk-lib/aws-cloudfront';
+import { IUserPool } from 'aws-cdk-lib/aws-cognito';
+import {
+  AnyPrincipal,
+  Effect,
+  PolicyDocument,
+  PolicyStatement,
+} from 'aws-cdk-lib/aws-iam';
+import {
+  Code,
+  Function,
+  FunctionProps,
+  Runtime,
+  Tracing,
+} from 'aws-cdk-lib/aws-lambda';
+import { Construct } from 'constructs';
+import * as url from 'url';
+import { AddCorsPreflightAspect, RestApi } from '../../core/api/rest-api.js';
+import { Procedures, routerToOperations } from '../../core/api/trpc-utils.js';
+import {
+  ApiIntegrations,
+  IntegrationBuilder,
+  RestApiIntegration,
+} from '../../core/api/utils.js';
+import { findCloudFrontDomainNames } from '../../core/cloudfront.js';
+import { RuntimeConfig } from '../../core/runtime-config.js';
+
+// String union type for all API operation names
+type Operations = Procedures<AppRouter>;
+
+/**
+ * Properties for creating a InstructorApi construct
+ *
+ * @template TIntegrations - Map of operation names to their integrations
+ */
+export interface InstructorApiProps<
+  TIntegrations extends ApiIntegrations<Operations, RestApiIntegration>,
+> {
+  /**
+   * Map of operation names to their API Gateway integrations
+   */
+  integrations: TIntegrations;
+  /**
+   * Identity details for Cognito Authentication
+   */
+  identity: {
+    userPool: IUserPool;
+  };
+  /**
+   * Whether to enable AWS WAFv2 with the default managed ruleset on the API's default stage.
+   *
+   * @default true
+   */
+  enableWaf?: boolean;
+  /**
+   * Whether to encrypt the API access log group with a customer-managed KMS key.
+   * When disabled, CloudWatch Logs still encrypts log data at rest using an
+   * AWS-owned key.
+   *
+   * @default true
+   */
+  enableKmsEncryption?: boolean;
+  /**
+   * Whether to enable automatic key rotation on the KMS key used to encrypt
+   * the access log group. Only used when `enableKmsEncryption` is `true`.
+   *
+   * @default true
+   */
+  enableKeyRotation?: boolean;
+}
+
+/**
+ * A CDK construct that creates and configures an AWS API Gateway REST API
+ * specifically for InstructorApi.
+ * @template TIntegrations - Map of operation names to their integrations
+ */
+export class InstructorApi<
+  TIntegrations extends ApiIntegrations<Operations, RestApiIntegration>,
+> extends RestApi<Operations, TIntegrations> {
+  private allowedOrigins: readonly string[] = ['*'];
+
+  /**
+   * Creates default integrations for all operations, which implement each operation as
+   * its own individual lambda function.
+   *
+   * @param scope - The CDK construct scope
+   * @returns An IntegrationBuilder with default lambda integrations
+   */
+  public static defaultIntegrations = (scope: Construct) => {
+    const rc = RuntimeConfig.ensure(scope);
+    return IntegrationBuilder.rest({
+      pattern: 'isolated',
+      operations: routerToOperations(appRouter),
+      defaultIntegrationOptions: {
+        runtime: Runtime.NODEJS_24_X,
+        handler: 'index.handler',
+        code: Code.fromAsset(
+          url.fileURLToPath(
+            new URL(
+              '../../../../../../dist/packages/apis/instructor-api/bundle',
+              import.meta.url,
+            ),
+          ),
+        ),
+        timeout: Duration.seconds(30),
+        tracing: Tracing.ACTIVE,
+      } as FunctionProps,
+      buildDefaultIntegration: (op, props: FunctionProps) => {
+        const handler = new Function(scope, `InstructorApi${op}Handler`, props);
+        handler.addEnvironment(
+          'RUNTIME_CONFIG_APP_ID',
+          rc.appConfigApplicationId,
+        );
+        rc.grantReadAppConfig(handler);
+        return {
+          handler,
+          integration: new LambdaIntegration(handler, {
+            responseTransferMode: ResponseTransferMode.STREAM,
+          }),
+        };
+      },
+    });
+  };
+
+  constructor(
+    scope: Construct,
+    id: string,
+    props: InstructorApiProps<TIntegrations>,
+  ) {
+    super(scope, id, {
+      apiName: 'InstructorApi',
+      defaultMethodOptions: {
+        authorizationType: AuthorizationType.COGNITO,
+        authorizer: new CognitoUserPoolsAuthorizer(
+          scope,
+          'InstructorApiAuthorizer',
+          {
+            cognitoUserPools: [props.identity.userPool],
+          },
+        ),
+        // Accept access tokens from both sign-in flows: 'openid' (Cognito hosted UI)
+        // and 'aws.cognito.signin.user.admin' (Cognito admin/SRP auth APIs).
+        authorizationScopes: ['openid', 'aws.cognito.signin.user.admin'],
+      },
+      deployOptions: {
+        tracingEnabled: true,
+      },
+      policy: new PolicyDocument({
+        statements: [
+          // Allow all callers to invoke the API in the resource policy, since auth is handled by Cognito
+          new PolicyStatement({
+            effect: Effect.ALLOW,
+            principals: [new AnyPrincipal()],
+            actions: ['execute-api:Invoke'],
+            resources: ['execute-api:/*'],
+          }),
+        ],
+      }),
+      operations: routerToOperations(appRouter),
+      ...props,
+    });
+    Aspects.of(this).add(new AddCorsPreflightAspect(() => this.allowedOrigins));
+  }
+
+  /**
+   * Restricts CORS to the provided origins
+   *
+   * Configures the provided CloudFront distribution domains or origin strings
+   * as the only permitted CORS origins in API Gateway preflight responses and the
+   * AWS Lambda integrations. Any custom domain names (aliases) configured on a
+   * CloudFront distribution are included automatically alongside its default
+   * `*.cloudfront.net` domain.
+   *
+   * @param origins - The origin strings, CloudFront distributions, or objects containing a CloudFront distribution to grant CORS from
+   */
+  public restrictCorsTo(
+    ...origins: (
+      | string
+      | Distribution
+      | { cloudFrontDistribution: Distribution }
+    )[]
+  ) {
+    const allowedOrigins = origins.flatMap((origin) =>
+      typeof origin === 'string'
+        ? [origin]
+        : findCloudFrontDomainNames(
+            'cloudFrontDistribution' in origin
+              ? origin.cloudFrontDistribution
+              : origin,
+          ).map((domain) => `https://${domain}`),
+    );
+
+    this.allowedOrigins = allowedOrigins;
+
+    // Set ALLOWED_ORIGINS environment variable for all Lambda integrations
+    Object.values(this.integrations).forEach((integration) => {
+      if ('handler' in integration && integration.handler instanceof Function) {
+        integration.handler.addEnvironment(
+          'ALLOWED_ORIGINS',
+          allowedOrigins.join(','),
+        );
+      }
+    });
+  }
+}

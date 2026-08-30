@@ -1,47 +1,45 @@
 {
-  "name": "@wattle/instructor-portal",
+  "name": "@wattle/instructor-api",
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "packages/websites/instructor-portal/src",
-  "projectType": "application",
+  "sourceRoot": "packages/apis/instructor-api/src",
+  "projectType": "library",
   "tags": [],
   "metadata": {
-    "generator": "ts#react-website",
-    "ux": "shadcn",
-    "framework": "react",
-    "infra": "cloudfront-s3",
-    "tailwind": true,
-    "tanstackRouter": true,
+    "generator": "ts#trpc-api",
+    "ports": [2023],
+    "apiName": "InstructorApi",
+    "apiType": "trpc",
+    "auth": "cognito",
+    "infra": "rest-lambda",
+    "integrationPattern": "isolated",
     "iac": "cdk",
     "components": [
       {
-        "generator": "ts#react-website#runtime-config",
-        "path": "src/components/RuntimeConfig"
-      },
-      {
-        "generator": "ts#react-website#auth",
-        "path": "src/components/CognitoAuth",
-        "iac": "cdk"
-      },
-      {
-        "generator": "ts#trpc-api#react-connection",
-        "path": "src/components/InstructorApiClientProvider",
-        "name": "InstructorApi",
-        "auth": "cognito",
-        "isRestApi": true
+        "generator": "ts#dynamodb#trpc-connection",
+        "path": "packages/databases/core-table",
+        "name": "@wattle/core-table"
       }
-    ],
-    "ports": [4200]
+    ]
   },
   "targets": {
     "build": {
       "dependsOn": ["lint", "compile", "test", "bundle"]
     },
+    "bundle": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["compile"],
+      "cache": true,
+      "outputs": ["{workspaceRoot}/dist/{projectRoot}/bundle"],
+      "options": {
+        "command": "rolldown -c rolldown.config.ts",
+        "cwd": "{projectRoot}"
+      }
+    },
     "compile": {
-      "dependsOn": ["^build"],
       "executor": "nx:run-commands",
       "outputs": ["{workspaceRoot}/dist/{projectRoot}/tsc"],
       "options": {
-        "command": "tsc --build tsconfig.app.json",
+        "command": "tsc --build tsconfig.lib.json",
         "cwd": "{projectRoot}"
       }
     },
@@ -49,14 +47,17 @@
       "executor": "nx:run-commands",
       "dependsOn": [
         {
-          "projects": ["@wattle/instructor-api"],
+          "projects": ["@wattle/core-table"],
           "target": "dev"
         }
       ],
       "continuous": true,
       "options": {
-        "command": "vite --mode local-dev",
-        "cwd": "{projectRoot}"
+        "commands": ["tsx --watch src/local-server.ts"],
+        "cwd": "{projectRoot}",
+        "env": {
+          "LOCAL_DEV": "true"
+        }
       }
     },
     "format": {
@@ -98,13 +99,12 @@
         }
       }
     },
-    "load-runtime-config": {
+    "serve": {
       "executor": "nx:run-commands",
-      "metadata": {
-        "description": "Load runtime config from your deployed stack for dev purposes. You must set your AWS CLI credentials whilst calling 'pnpm nx load-runtime-config @wattle/instructor-portal'"
-      },
+      "continuous": true,
       "options": {
-        "command": "aws s3 cp s3://`aws cloudformation describe-stacks --query \"Stacks[?starts_with(StackName, 'wattle-')][].Outputs[] | [?contains(OutputKey, 'InstructorPortalWebsiteBucketName')].OutputValue\" --output text`/runtime-config.json \"{projectRoot}/public/runtime-config.json\""
+        "commands": ["tsx --watch src/local-server.ts"],
+        "cwd": "{projectRoot}"
       }
     }
   }

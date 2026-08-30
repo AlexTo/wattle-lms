@@ -14,6 +14,7 @@ export default {
           components: {
             identity: { enableWaf: false, enableMfa: false },
             coreApi: { enableWaf: false, enableKmsEncryption: false },
+            instructorApi: { enableWaf: false, enableKmsEncryption: false },
             coreTable: {
               enableKmsEncryption: false,
               enableDeletionProtection: false,
@@ -27,6 +28,11 @@ export default {
           components: {
             identity: { enableWaf: true, enableMfa: true },
             coreApi: {
+              enableWaf: true,
+              enableKmsEncryption: true,
+              enableKeyRotation: true,
+            },
+            instructorApi: {
               enableWaf: true,
               enableKmsEncryption: true,
               enableKeyRotation: true,

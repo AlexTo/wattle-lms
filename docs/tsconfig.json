@@ -51,6 +51,9 @@
       ],
       "@wattle/admin-portal": [
         "../packages/websites/admin-portal/src/index.ts"
+      ],
+      "@wattle/instructor-api": [
+        "../packages/apis/instructor-api/src/index.ts"
       ]
     }
   }
