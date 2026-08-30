@@ -2,7 +2,7 @@
  * Copyright Wattle LMS Contributors. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
-import { IAspect, RemovalPolicy, Stack } from 'aws-cdk-lib';
+import { Annotations, IAspect, RemovalPolicy, Stack } from 'aws-cdk-lib';
 import {
   RestApi as _RestApi,
   RestApiProps as _RestApiProps,
@@ -317,10 +317,20 @@ export class AddCorsPreflightAspect implements IAspect {
   }
   public visit(node: IConstruct): void {
     if (node instanceof Resource) {
-      node.addCorsPreflight({
+      const preflightMethod = node.addCorsPreflight({
         allowOrigins: [...this.getAllowedOrigins()],
         allowMethods: Cors.ALL_METHODS,
       });
+      // CORS preflight requests never carry credentials, so this method is
+      // intentionally created with AuthorizationType.NONE while still
+      // inheriting the resource's Cognito authorizationScopes default. That
+      // combination is invalid, but harmless here since API Gateway never
+      // applies scopes to an unauthorized method - acknowledge it rather
+      // than let it print as a warning on every route.
+      Annotations.of(preflightMethod).acknowledgeWarning(
+        '@aws-cdk/aws-apigateway:invalidAuthScope',
+        "AuthorizationScopes is inherited from the resource's default method options but ignored for this CORS preflight OPTIONS method, which intentionally uses AuthorizationType.NONE.",
+      );
     }
   }
 }
