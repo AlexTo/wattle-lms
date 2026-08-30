@@ -18,7 +18,8 @@
         "@wattle/student-portal:build",
         "@wattle/events:build",
         "@wattle/instructor-portal:build",
-        "@wattle/admin-portal:build"
+        "@wattle/admin-portal:build",
+        "@wattle/instructor-api:build"
       ]
     },
     "compile": {

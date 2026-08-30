@@ -21,6 +21,13 @@
         "generator": "ts#react-website#auth",
         "path": "src/components/CognitoAuth",
         "iac": "cdk"
+      },
+      {
+        "generator": "ts#trpc-api#react-connection",
+        "path": "src/components/InstructorApiClientProvider",
+        "name": "InstructorApi",
+        "auth": "cognito",
+        "isRestApi": true
       }
     ],
     "ports": [4200]
@@ -40,6 +47,12 @@
     },
     "dev": {
       "executor": "nx:run-commands",
+      "dependsOn": [
+        {
+          "projects": ["@wattle/instructor-api"],
+          "target": "dev"
+        }
+      ],
       "continuous": true,
       "options": {
         "command": "vite --mode local-dev",

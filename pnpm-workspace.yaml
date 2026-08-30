@@ -56,6 +56,7 @@ catalog:
   '@aws-sdk/credential-providers': 3.1119.0
   cors: 2.8.6
   '@types/cors': 2.8.19
+  uuid: 14.0.2
   react: 19.2.8
   react-dom: 19.2.8
   class-variance-authority: 0.7.1

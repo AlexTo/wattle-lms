@@ -52,6 +52,18 @@ export type CoreApiComponentConfig = {
 };
 
 /**
+ * Per-stage settings for the instructor API construct.
+ */
+export type InstructorApiComponentConfig = {
+  /** Protect the API Gateway with AWS WAF */
+  enableWaf?: boolean;
+  /** Use customer-managed KMS encryption instead of the cheaper AWS-owned default for the access log group */
+  enableKmsEncryption?: boolean;
+  /** Enable automatic key rotation on the access log group's KMS key. Only used when `enableKmsEncryption` is true */
+  enableKeyRotation?: boolean;
+};
+
+/**
  * Per-stage settings for the core DynamoDB table construct.
  */
 export type CoreTableComponentConfig = {
@@ -107,6 +119,7 @@ export type AdminPortalComponentConfig = {
 export type StageComponents = {
   identity?: IdentityComponentConfig;
   coreApi?: CoreApiComponentConfig;
+  instructorApi?: InstructorApiComponentConfig;
   coreTable?: CoreTableComponentConfig;
   studentPortal?: StudentPortalComponentConfig;
   instructorPortal?: InstructorPortalComponentConfig;

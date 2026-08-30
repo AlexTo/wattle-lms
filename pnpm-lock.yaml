@@ -225,6 +225,9 @@ catalogs:
     typescript:
       specifier: ~6.0.3
       version: 6.0.3
+    uuid:
+      specifier: 14.0.2
+      version: 14.0.2
     vite:
       specifier: 8.2.2
       version: 8.2.2
@@ -409,6 +412,9 @@ importers:
       '@aws-sdk/client-appconfigdata':
         specifier: 'catalog:'
         version: 3.1119.0
+      '@aws-sdk/client-dynamodb':
+        specifier: 'catalog:'
+        version: 3.1119.0
       '@aws-sdk/credential-providers':
         specifier: 'catalog:'
         version: 3.1119.0
@@ -418,15 +424,82 @@ importers:
       '@trpc/server':
         specifier: 'catalog:'
         version: 11.18.0(typescript@6.0.3)
+      '@wattle/core-table':
+        specifier: workspace:*
+        version: link:../../databases/core-table
       aws-xray-sdk-core:
         specifier: 'catalog:'
         version: 3.12.0
       aws4fetch:
         specifier: 'catalog:'
         version: 1.0.20
+      electrodb:
+        specifier: 'catalog:'
+        version: 3.9.3(@aws-sdk/client-dynamodb@3.1119.0)
       tslib:
         specifier: ^2.3.0
         version: 2.8.1
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
+    devDependencies:
+      '@types/aws-lambda':
+        specifier: 'catalog:'
+        version: 8.10.162
+      '@types/cors':
+        specifier: 'catalog:'
+        version: 2.8.19
+      cors:
+        specifier: 'catalog:'
+        version: 2.8.6
+
+  packages/apis/instructor-api:
+    dependencies:
+      '@aws-lambda-powertools/logger':
+        specifier: 'catalog:'
+        version: 2.35.0(@middy/core@7.8.0)
+      '@aws-lambda-powertools/metrics':
+        specifier: 'catalog:'
+        version: 2.35.0(@middy/core@7.8.0)
+      '@aws-lambda-powertools/parameters':
+        specifier: 'catalog:'
+        version: 2.35.0(@aws-sdk/client-appconfigdata@3.1119.0)(@aws-sdk/client-dynamodb@3.1119.0)(@aws-sdk/util-dynamodb@3.996.9(@aws-sdk/client-dynamodb@3.1119.0))(@middy/core@7.8.0)
+      '@aws-lambda-powertools/tracer':
+        specifier: 'catalog:'
+        version: 2.35.0(@middy/core@7.8.0)
+      '@aws-sdk/client-appconfigdata':
+        specifier: 'catalog:'
+        version: 3.1119.0
+      '@aws-sdk/client-dynamodb':
+        specifier: 'catalog:'
+        version: 3.1119.0
+      '@aws-sdk/credential-providers':
+        specifier: 'catalog:'
+        version: 3.1119.0
+      '@trpc/client':
+        specifier: 'catalog:'
+        version: 11.18.0(@trpc/server@11.18.0(typescript@6.0.3))(typescript@6.0.3)
+      '@trpc/server':
+        specifier: 'catalog:'
+        version: 11.18.0(typescript@6.0.3)
+      '@wattle/core-table':
+        specifier: workspace:*
+        version: link:../../databases/core-table
+      aws-xray-sdk-core:
+        specifier: 'catalog:'
+        version: 3.12.0
+      aws4fetch:
+        specifier: 'catalog:'
+        version: 1.0.20
+      electrodb:
+        specifier: 'catalog:'
+        version: 3.9.3(@aws-sdk/client-dynamodb@3.1119.0)
+      tslib:
+        specifier: ^2.3.0
+        version: 2.8.1
+      uuid:
+        specifier: 'catalog:'
+        version: 14.0.2
       zod:
         specifier: 'catalog:'
         version: 4.4.3
@@ -455,6 +528,9 @@ importers:
       '@wattle/core-api':
         specifier: workspace:*
         version: link:../../apis/core-api
+      '@wattle/instructor-api':
+        specifier: workspace:*
+        version: link:../../apis/instructor-api
       aws-cdk-lib:
         specifier: 'catalog:'
         version: 2.266.0(constructs@10.8.1)
@@ -667,12 +743,30 @@ importers:
 
   packages/websites/instructor-portal:
     dependencies:
+      '@tanstack/react-query':
+        specifier: 'catalog:'
+        version: 5.102.6(react@19.2.8)
+      '@tanstack/react-query-devtools':
+        specifier: 'catalog:'
+        version: 5.102.6(@tanstack/react-query@5.102.6(react@19.2.8))(react@19.2.8)
       '@tanstack/react-router':
         specifier: 'catalog:'
         version: 1.170.32(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@trpc/client':
+        specifier: 'catalog:'
+        version: 11.18.0(@trpc/server@11.18.0(typescript@6.0.3))(typescript@6.0.3)
+      '@trpc/tanstack-react-query':
+        specifier: 'catalog:'
+        version: 11.18.0(@tanstack/react-query@5.102.6(react@19.2.8))(@trpc/client@11.18.0(@trpc/server@11.18.0(typescript@6.0.3))(typescript@6.0.3))(@trpc/server@11.18.0(typescript@6.0.3))(react@19.2.8)(typescript@6.0.3)
       '@wattle/common-shadcn':
         specifier: workspace:*
         version: link:../../common/shadcn
+      '@wattle/instructor-api':
+        specifier: workspace:*
+        version: link:../../apis/instructor-api
+      event-source-polyfill:
+        specifier: 'catalog:'
+        version: 1.0.31
       lucide-react:
         specifier: 'catalog:'
         version: 1.34.0(react@19.2.8)
@@ -691,6 +785,13 @@ importers:
       tailwindcss:
         specifier: 'catalog:'
         version: 4.3.3
+    devDependencies:
+      '@smithy/types':
+        specifier: 'catalog:'
+        version: 4.17.2
+      '@types/event-source-polyfill':
+        specifier: 'catalog:'
+        version: 1.0.5
 
   packages/websites/student-portal:
     dependencies:

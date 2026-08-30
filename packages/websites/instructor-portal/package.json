@@ -4,15 +4,24 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@tanstack/react-query": "catalog:",
+    "@tanstack/react-query-devtools": "catalog:",
     "@tanstack/react-router": "catalog:",
+    "@trpc/client": "catalog:",
+    "@trpc/tanstack-react-query": "catalog:",
     "@wattle/common-shadcn": "workspace:*",
+    "event-source-polyfill": "catalog:",
     "lucide-react": "catalog:",
     "oidc-client-ts": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-oidc-context": "catalog:",
-    "tailwindcss": "catalog:"
+    "tailwindcss": "catalog:",
+    "@wattle/instructor-api": "workspace:*"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "@smithy/types": "catalog:",
+    "@types/event-source-polyfill": "catalog:"
+  },
   "license": "Apache-2.0"
 }

@@ -31,10 +31,6 @@ export const createCourseEntity = async () =>
         description: {
           type: 'string',
         },
-        instructorId: {
-          type: 'string',
-          required: true,
-        },
         status: {
           type: ['draft', 'published', 'archived'] as const,
           required: true,
@@ -64,18 +60,6 @@ export const createCourseEntity = async () =>
           sk: {
             field: 'sk',
             composite: ['courseId'],
-          },
-        },
-        // List courses an instructor owns.
-        byInstructor: {
-          index: 'gsi1pk-gsi1sk-index',
-          pk: {
-            field: 'gsi1pk',
-            composite: ['instructorId'],
-          },
-          sk: {
-            field: 'gsi1sk',
-            composite: ['createdAt', 'courseId'],
           },
         },
       },

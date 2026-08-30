@@ -3,12 +3,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { t } from './init.js';
-import { echo } from './procedures/echo.js';
+import {
+  listCoursesByInstructor,
+  listInstructorsForCourse,
+  viewCourse,
+} from './procedures/course.js';
 
 export const router = t.router;
 
 export const appRouter = router({
-  echo,
+  course: router({
+    listByInstructor: listCoursesByInstructor,
+    listInstructors: listInstructorsForCourse,
+    view: viewCourse,
+  }),
 });
 
 export type AppRouter = typeof appRouter;

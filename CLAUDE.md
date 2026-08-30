@@ -54,7 +54,8 @@ Everything else (`compile`, `bundle`, `synth`, `checkov`, `dev`, `serve`) is a p
 
 ## Architecture
 
-- `packages/apis/core-api`: tRPC API (`@wattle/core-api`), one Lambda behind API Gateway
+- `packages/apis/core-api`: tRPC API (`@wattle/core-api`), one Lambda behind API Gateway, for procedures any authenticated user can call
+- `packages/apis/instructor-api`: separate tRPC API (`@wattle/instructor-api`), separate Lambda/API Gateway, for procedures only instructors may call (e.g. creating/archiving courses); same Cognito user pool as `core-api`
 - `packages/databases/core-table`: single-table DynamoDB access via ElectroDB; `client.ts` resolves table/client so entities work identically against local (Docker) and deployed DynamoDB
 - `packages/common/scripts`: deploy/destroy and local-DynamoDB (Docker) tooling invoked by Nx targets
 - `packages/events`: standalone Lambda handlers for AWS-triggered events (e.g. Cognito), separate from the API
@@ -68,6 +69,8 @@ Stack composition (`packages/infra/src/stacks/application-stack.ts`) wires the c
 
 The tRPC router (`packages/apis/core-api/src/router.ts`) builds procedures from middleware plugins in `init.ts`; `protectedProcedure` additionally requires `ctx.user`. `src/handler.ts` is the deployed Lambda entrypoint; `src/local-server.ts` is what `nx dev` runs locally and decodes JWTs itself (no API Gateway in front locally). See `middleware/auth.ts` for how the two are reconciled.
 
+`instructor-api` follows the same `init.ts`/`router.ts`/`handler.ts`/`local-server.ts` shape, but its `protectedProcedure` additionally requires the caller be in the `instructor` Cognito group, throwing `FORBIDDEN` otherwise. Procedures needing DynamoDB access build on `courseProcedure` (`protectedProcedure` + `ctx.coreTable`, see `middleware/core-table.ts`) — this plugin is hand-written, not generated: the installed `@aws/nx-plugin` version's `connection` generator doesn't support a tRPC→DynamoDB combination, only tRPC→RDB. Any project newly wiring up `@wattle/core-table` also needs `electrodb`/`@aws-sdk/client-dynamodb` as direct dependencies (not just transitively via `@wattle/core-table`) — without them, `tsc --build` fails with a "cannot be named without a reference" (TS2883) error, since it can't print a portable type for anything touching core-table's `Service`.
+
 `lint` depends on the workspace-level `license-check` sync generator (SPDX headers). Don't hand-edit copyright headers; they're generator-managed.
 
 ## Conventions
@@ -75,3 +78,4 @@ The tRPC router (`packages/apis/core-api/src/router.ts`) builds procedures from 
 - Conventional Commits for commit and PR titles (enforced by commitlint via husky).
 - Biome (not ESLint/Prettier) formats and lints.
 - Pre-commit runs `git-secrets` and `lint-staged`, and fails if either mutated the working tree. Stage the result and recommit.
+- New business logic (tRPC procedures, entity access patterns) should ship with unit tests covering the main behavior and any invariants it's meant to enforce (authorization, transactional guarantees, etc.) — see `packages/apis/instructor-api/src/procedures/course.test.ts` for the pattern (`t.createCallerFactory`, mocking dependencies with `vi.mock`). Testing anything that imports `@wattle/core-table` needs a `resolve.alias` in that project's `vitest.config.mts` (see instructor-api's) — Vite doesn't resolve it via tsconfig `paths` the way `tsc`/`tsx` do.

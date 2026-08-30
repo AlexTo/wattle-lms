@@ -35,6 +35,9 @@
     },
     {
       "path": "./packages/websites/admin-portal"
+    },
+    {
+      "path": "./packages/apis/instructor-api"
     }
   ]
 }

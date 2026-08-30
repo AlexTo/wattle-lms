@@ -7,6 +7,7 @@ import {
   CoreApi,
   CoreTable,
   EventsPostConfirmation,
+  InstructorApi,
   InstructorPortal,
   StudentPortal,
   suppressRules,
@@ -17,6 +18,7 @@ import type {
   CoreApiComponentConfig,
   CoreTableComponentConfig,
   IdentityComponentConfig,
+  InstructorApiComponentConfig,
   InstructorPortalComponentConfig,
   StudentPortalComponentConfig,
 } from '@wattle/common-infra-config';
@@ -32,6 +34,8 @@ export interface ApplicationStackProps extends StackProps {
   readonly identity?: IdentityComponentConfig;
   /** Settings for the core API construct. @default all enabled */
   readonly coreApi?: CoreApiComponentConfig;
+  /** Settings for the instructor API construct. @default all enabled */
+  readonly instructorApi?: InstructorApiComponentConfig;
   /** Settings for the core DynamoDB table construct. @default all enabled */
   readonly coreTable?: CoreTableComponentConfig;
   /** Settings for the student portal static website construct. @default all enabled */
@@ -49,6 +53,7 @@ export class ApplicationStack extends Stack {
     {
       identity: identityConfig,
       coreApi: coreApiConfig,
+      instructorApi: instructorApiConfig,
       coreTable: coreTableConfig,
       studentPortal: studentPortalConfig,
       instructorPortal: instructorPortalConfig,
@@ -60,6 +65,9 @@ export class ApplicationStack extends Stack {
 
     const coreTableKmsEnabled = coreTableConfig?.enableKmsEncryption ?? true;
     const coreApiKmsEnabled = coreApiConfig?.enableKmsEncryption ?? true;
+    const instructorApiWafEnabled = instructorApiConfig?.enableWaf ?? true;
+    const instructorApiKmsEnabled =
+      instructorApiConfig?.enableKmsEncryption ?? true;
     const studentPortalWafEnabled = studentPortalConfig?.enableWaf ?? true;
     const studentPortalKmsEnabled =
       studentPortalConfig?.enableKmsEncryption ?? true;
@@ -139,6 +147,32 @@ export class ApplicationStack extends Stack {
     }
 
     Object.values(integrations).forEach(({ handler }) =>
+      coreTable.grantReadWriteData(handler),
+    );
+
+    const instructorApiIntegrations =
+      InstructorApi.defaultIntegrations(this).build();
+
+    const instructorApi = new InstructorApi(this, 'InstructorApi', {
+      integrations: instructorApiIntegrations,
+      identity,
+      enableWaf: instructorApiWafEnabled,
+      enableKmsEncryption: instructorApiKmsEnabled,
+      enableKeyRotation: instructorApiConfig?.enableKeyRotation ?? true,
+    });
+    if (!instructorApiKmsEnabled) {
+      suppressRules(
+        this,
+        ['CKV_AWS_158'],
+        'KMS encryption disabled for this stage',
+        (c) =>
+          CfnResource.isCfnResource(c) &&
+          c.cfnResourceType === 'AWS::Logs::LogGroup' &&
+          c.node.path.includes('/InstructorApi/AccessLogs'),
+      );
+    }
+
+    Object.values(instructorApiIntegrations).forEach(({ handler }) =>
       coreTable.grantReadWriteData(handler),
     );
 
@@ -230,6 +264,12 @@ export class ApplicationStack extends Stack {
       'http://localhost:4301',
       'http://localhost:4202',
       'http://localhost:4302',
+    );
+
+    instructorApi.restrictCorsTo(
+      instructorPortal,
+      'http://localhost:4200',
+      'http://localhost:4300',
     );
   }
 }
