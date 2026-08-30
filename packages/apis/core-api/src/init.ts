@@ -5,6 +5,7 @@
 import { initTRPC, TRPCError } from '@trpc/server';
 import {
   createAuthPlugin,
+  createCoreTablePlugin,
   createErrorPlugin,
   createLoggerPlugin,
   createMetricsPlugin,
@@ -43,3 +44,8 @@ export const protectedProcedure = publicProcedure.use(async (opts) => {
     },
   });
 });
+
+/** Like protectedProcedure, additionally exposing ctx.coreTable. */
+export const courseProcedure = protectedProcedure.concat(
+  createCoreTablePlugin(),
+);

@@ -2,4 +2,5 @@
  * Copyright Wattle LMS Contributors. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
-export * from './echo.js';
+export * from './common.js';
+export * from './course.js';
