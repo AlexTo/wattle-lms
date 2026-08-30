@@ -43,8 +43,8 @@ catalogs:
       specifier: 3.1119.0
       version: 3.1119.0
     '@aws/nx-plugin':
-      specifier: 1.0.0-rc.88
-      version: 1.0.0-rc.88
+      specifier: 1.0.0-rc.89
+      version: 1.0.0-rc.89
     '@aws/nx-plugin-mcp':
       specifier: ^1.0.0-rc.73
       version: 1.0.0-rc.73
@@ -241,7 +241,7 @@ importers:
     dependencies:
       '@aws/nx-plugin':
         specifier: 'catalog:'
-        version: 1.0.0-rc.88(@babel/core@7.29.7(supports-color@7.2.0))(@babel/traverse@7.29.8(supports-color@7.2.0))(@nx/eslint@23.1.2(@babel/traverse@7.29.8(supports-color@7.2.0))(@zkochan/js-yaml@0.0.7)(eslint@10.8.1(jiti@2.4.2)(supports-color@7.2.0))(nx@23.1.2)(supports-color@7.2.0))(@opentelemetry/api@1.9.1)(@types/node@26.4.0)(@vitest/coverage-v8@4.1.11)(@vitest/ui@4.1.11)(@zkochan/js-yaml@0.0.7)(debug@4.4.3(supports-color@7.2.0))(esbuild@0.28.2)(eslint@10.8.1(jiti@2.4.2)(supports-color@7.2.0))(express@5.2.1(supports-color@7.2.0))(http-proxy-middleware@3.0.7(supports-color@7.2.0))(jsdom@27.4.0(supports-color@7.2.0))(nx@23.1.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@7.2.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
+        version: 1.0.0-rc.89(@babel/core@7.29.7(supports-color@7.2.0))(@babel/traverse@7.29.8(supports-color@7.2.0))(@nx/eslint@23.1.2(@babel/traverse@7.29.8(supports-color@7.2.0))(@zkochan/js-yaml@0.0.7)(eslint@10.8.1(jiti@2.4.2)(supports-color@7.2.0))(nx@23.1.2)(supports-color@7.2.0))(@opentelemetry/api@1.9.1)(@types/node@26.4.0)(@vitest/coverage-v8@4.1.11)(@vitest/ui@4.1.11)(@zkochan/js-yaml@0.0.7)(debug@4.4.3(supports-color@7.2.0))(esbuild@0.28.2)(eslint@10.8.1(jiti@2.4.2)(supports-color@7.2.0))(express@5.2.1(supports-color@7.2.0))(http-proxy-middleware@3.0.7(supports-color@7.2.0))(jsdom@27.4.0(supports-color@7.2.0))(nx@23.1.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@7.2.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)
     devDependencies:
       '@aws/nx-plugin-mcp':
         specifier: 'catalog:'
@@ -1187,8 +1187,8 @@ packages:
     resolution: {integrity: sha512-ry5ogap8RMvpeag52cHkDa33R6XF0QQOHk5rjckIiNRickem+oQ3QOBK0kdoGytokKz9HieWgFJXMc88E+b9wA==}
     hasBin: true
 
-  '@aws/nx-plugin@1.0.0-rc.88':
-    resolution: {integrity: sha512-kfsWfB+Bbxh9SNbEwqMYkwh2Ybm0O8HC4zoD/peSiPfF35hwWmfzLZ98qs0SVSaGeW+VMS8o9hBgZnsTnsFwlw==}
+  '@aws/nx-plugin@1.0.0-rc.89':
+    resolution: {integrity: sha512-5myX+W12lwgO2UOVQPll5pQ6/lsvE/jhUzlwnfj+YxJ0gicHt/9n9yItc3u+BMbAQ/dZxuxsxAx290triaSNFQ==}
     engines: {node: '>=20.19.0'}
     peerDependencies:
       nx: 23.1.2
@@ -8986,7 +8986,7 @@ snapshots:
 
   '@aws/nx-plugin-mcp@1.0.0-rc.73': {}
 
-  '@aws/nx-plugin@1.0.0-rc.88(@babel/core@7.29.7(supports-color@7.2.0))(@babel/traverse@7.29.8(supports-color@7.2.0))(@nx/eslint@23.1.2(@babel/traverse@7.29.8(supports-color@7.2.0))(@zkochan/js-yaml@0.0.7)(eslint@10.8.1(jiti@2.4.2)(supports-color@7.2.0))(nx@23.1.2)(supports-color@7.2.0))(@opentelemetry/api@1.9.1)(@types/node@26.4.0)(@vitest/coverage-v8@4.1.11)(@vitest/ui@4.1.11)(@zkochan/js-yaml@0.0.7)(debug@4.4.3(supports-color@7.2.0))(esbuild@0.28.2)(eslint@10.8.1(jiti@2.4.2)(supports-color@7.2.0))(express@5.2.1(supports-color@7.2.0))(http-proxy-middleware@3.0.7(supports-color@7.2.0))(jsdom@27.4.0(supports-color@7.2.0))(nx@23.1.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@7.2.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)':
+  '@aws/nx-plugin@1.0.0-rc.89(@babel/core@7.29.7(supports-color@7.2.0))(@babel/traverse@7.29.8(supports-color@7.2.0))(@nx/eslint@23.1.2(@babel/traverse@7.29.8(supports-color@7.2.0))(@zkochan/js-yaml@0.0.7)(eslint@10.8.1(jiti@2.4.2)(supports-color@7.2.0))(nx@23.1.2)(supports-color@7.2.0))(@opentelemetry/api@1.9.1)(@types/node@26.4.0)(@vitest/coverage-v8@4.1.11)(@vitest/ui@4.1.11)(@zkochan/js-yaml@0.0.7)(debug@4.4.3(supports-color@7.2.0))(esbuild@0.28.2)(eslint@10.8.1(jiti@2.4.2)(supports-color@7.2.0))(express@5.2.1(supports-color@7.2.0))(http-proxy-middleware@3.0.7(supports-color@7.2.0))(jsdom@27.4.0(supports-color@7.2.0))(nx@23.1.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(supports-color@7.2.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)':
     dependencies:
       '@apidevtools/swagger-parser': 12.1.0(openapi-types@12.1.3)
       '@astral-sh/ruff-wasm-nodejs': 0.16.4
