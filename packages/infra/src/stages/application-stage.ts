@@ -13,6 +13,7 @@ export interface ApplicationStageProps extends StageProps {
   /** Passed through to ApplicationStack to control per-component settings. */
   readonly identity?: ApplicationStackProps['identity'];
   readonly coreApi?: ApplicationStackProps['coreApi'];
+  readonly instructorApi?: ApplicationStackProps['instructorApi'];
   readonly coreTable?: ApplicationStackProps['coreTable'];
   readonly studentPortal?: ApplicationStackProps['studentPortal'];
   readonly instructorPortal?: ApplicationStackProps['instructorPortal'];
@@ -29,6 +30,7 @@ export class ApplicationStage extends Stage {
     {
       identity,
       coreApi,
+      instructorApi,
       coreTable,
       studentPortal,
       instructorPortal,
@@ -42,6 +44,7 @@ export class ApplicationStage extends Stage {
       crossRegionReferences: true,
       identity,
       coreApi,
+      instructorApi,
       coreTable,
       studentPortal,
       instructorPortal,
