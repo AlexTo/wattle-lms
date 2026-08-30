@@ -1,35 +1,14 @@
 {
   "migrations": [
     {
-      "version": "1.0.0-rc.87",
-      "description": "Add a destroy-sandbox target to CDK infrastructure projects which destroys the sandbox stage, and drop the --require-approval flag from cdk destroy, which has no such option",
-      "implementation": "./src/migrations/latest/add-destroy-sandbox-target/migration",
+      "version": "1.0.0-rc.89",
+      "description": "Set nx.json parallel to 8 so full builds use available cores, preserving an existing value",
+      "implementation": "./src/migrations/latest/nx-parallel-default/migration",
       "package": "@aws/nx-plugin",
-      "name": "latest-add-destroy-sandbox-target"
+      "name": "latest-nx-parallel-default"
     },
     {
-      "version": "1.0.0-rc.87",
-      "description": "Replace the MySQL RDS Proxy role's admin secret access with the rds-db:connect grant it needs for end-to-end IAM auth",
-      "implementation": "./src/migrations/latest/terraform-rdb-proxy-iam-connect-grant/migration",
-      "package": "@aws/nx-plugin",
-      "name": "latest-terraform-rdb-proxy-iam-connect-grant"
-    },
-    {
-      "version": "1.0.0-rc.88",
-      "description": "Drop the exact CPython patch from .python-version to the Lambda runtime's major.minor",
-      "implementation": "./src/migrations/latest/python-version-drop-exact-patch/migration",
-      "package": "@aws/nx-plugin",
-      "name": "latest-python-version-drop-exact-patch"
-    },
-    {
-      "version": "1.0.0-rc.88",
-      "description": "Add an npm override pinning the express @nx/react resolves to the version generated websites use, so npm can satisfy its optional peer",
-      "implementation": "./src/migrations/latest/react-website-nx-react-express-override/migration",
-      "package": "@aws/nx-plugin",
-      "name": "latest-react-website-nx-react-express-override"
-    },
-    {
-      "version": "1.0.0-rc.88",
+      "version": "1.0.0-rc.89",
       "description": "Sync vended dependency versions and the tracked plugin version to those vended by this release",
       "implementation": "./src/utils/version-upgrade-migration/migration",
       "package": "@aws/nx-plugin",
