@@ -2,8 +2,9 @@
  * Copyright Wattle LMS Contributors. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
-import { initTRPC } from '@trpc/server';
+import { initTRPC, TRPCError } from '@trpc/server';
 import {
+  createAuthPlugin,
   createErrorPlugin,
   createLoggerPlugin,
   createMetricsPlugin,
@@ -22,4 +23,27 @@ export const publicProcedure = t.procedure
   .concat(createLoggerPlugin())
   .concat(createTracerPlugin())
   .concat(createMetricsPlugin())
+  .concat(createAuthPlugin())
   .concat(createErrorPlugin());
+
+/**
+ * Like publicProcedure, but requires ctx.user to be set (i.e. the caller
+ * presented a valid Cognito token) and a member of the `instructor` group,
+ * narrowing ctx.user from optional to required for the procedures built on
+ * top of it.
+ */
+export const protectedProcedure = publicProcedure.use(async (opts) => {
+  if (!opts.ctx.user) {
+    throw new TRPCError({ code: 'UNAUTHORIZED' });
+  }
+  if (!opts.ctx.user.groups.includes('instructor')) {
+    throw new TRPCError({ code: 'FORBIDDEN' });
+  }
+
+  return opts.next({
+    ctx: {
+      ...opts.ctx,
+      user: opts.ctx.user,
+    },
+  });
+});
