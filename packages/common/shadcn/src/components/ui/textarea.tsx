@@ -2,8 +2,9 @@
  * Copyright Wattle LMS Contributors. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
-import { cn } from '@wattle/common-shadcn/lib/utils';
+
 import * as React from 'react';
+import { cn } from '#lib/utils';
 
 function Textarea({ className, ...props }: React.ComponentProps<'textarea'>) {
   return (

@@ -19,5 +19,17 @@
     "vitest": "catalog:"
   },
   "devDependencies": {},
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "imports": {
+    "#components/*": "./src/components/*.tsx",
+    "#lib/*": "./src/lib/*.ts",
+    "#hooks/*": "./src/hooks/*.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./styles/*": "./src/styles/*",
+    "./components/*": "./src/components/*.tsx",
+    "./lib/*": "./src/lib/*.ts",
+    "./hooks/*": "./src/hooks/*.ts"
+  }
 }

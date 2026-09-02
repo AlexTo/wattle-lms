@@ -4,9 +4,9 @@
  */
 'use client';
 
-import { cn } from '@wattle/common-shadcn/lib/utils';
 import { Progress as ProgressPrimitive } from 'radix-ui';
 import * as React from 'react';
+import { cn } from '#lib/utils';
 
 function Progress({
   className,
