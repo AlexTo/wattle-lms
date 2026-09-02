@@ -28,12 +28,14 @@ import {
   Users,
 } from 'lucide-react';
 import { useState } from 'react';
+import {
+  type CourseStatus,
+  courseStatusStyles,
+} from '../../components/course-status';
 
 export const Route = createFileRoute('/_authenticated/courses')({
   component: RouteComponent,
 });
-
-type CourseStatus = 'Published' | 'Draft' | 'Archived';
 
 const courses = [
   {
@@ -116,13 +118,6 @@ const courses = [
 
 const filters = ['All', 'Published', 'Draft', 'Archived'] as const;
 type CourseFilter = (typeof filters)[number];
-
-const statusStyles: Record<CourseStatus, string> = {
-  Published:
-    'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
-  Draft: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
-  Archived: 'bg-muted text-muted-foreground',
-};
 
 function RouteComponent() {
   const [filter, setFilter] = useState<CourseFilter>('All');
@@ -260,7 +255,7 @@ function RouteComponent() {
                         {course.title}
                       </CardTitle>
                     </div>
-                    <Badge className={statusStyles[course.status]}>
+                    <Badge className={courseStatusStyles[course.status]}>
                       {course.status}
                     </Badge>
                   </div>
@@ -305,8 +300,13 @@ function RouteComponent() {
                       {course.updated}
                     </p>
                   </div>
-                  <Button variant="outline" className="w-full" type="button">
-                    Open course <ArrowRight />
+                  <Button variant="outline" className="w-full" asChild>
+                    <Link
+                      to="/courses/$courseId"
+                      params={{ courseId: course.code }}
+                    >
+                      Open course <ArrowRight />
+                    </Link>
                   </Button>
                 </CardContent>
               </Card>
