@@ -33,11 +33,14 @@
     "ports": [4201]
   },
   "targets": {
+    "assemble": {
+      "dependsOn": ["compile", "bundle"]
+    },
     "build": {
       "dependsOn": ["lint", "compile", "test", "bundle"]
     },
     "compile": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^compile"],
       "executor": "nx:run-commands",
       "outputs": ["{workspaceRoot}/dist/{projectRoot}/tsc"],
       "options": {
