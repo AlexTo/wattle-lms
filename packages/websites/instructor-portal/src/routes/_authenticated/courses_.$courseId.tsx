@@ -23,6 +23,7 @@ import {
 import { Textarea } from '@wattle/common-shadcn/components/ui/textarea';
 import {
   BookOpen,
+  CalendarDays,
   CirclePlus,
   ClipboardCheck,
   Code2,
@@ -35,9 +36,14 @@ import {
   Save,
   Trash2,
   Type,
+  Users,
   Video,
 } from 'lucide-react';
 import { useState } from 'react';
+import {
+  type CourseStatus,
+  courseStatusStyles,
+} from '../../components/course-status';
 
 export const Route = createFileRoute('/_authenticated/courses_/$courseId')({
   component: RouteComponent,
@@ -64,6 +70,126 @@ type CourseModule = {
   title: string;
   items: ModuleItem[];
 };
+
+type CourseDetails = {
+  code: string;
+  title: string;
+  description: string;
+  term: string;
+  status: CourseStatus;
+  students: number;
+  updated: string;
+};
+
+const courseDetails: Record<string, CourseDetails> = {
+  BIO102: {
+    code: 'BIO102',
+    title: 'Foundations of Biology',
+    description:
+      'Explore the foundations of cell biology, genetics, evolution, and ecology through practical activities and assessments.',
+    term: 'Semester 2, 2026',
+    status: 'Published',
+    students: 24,
+    updated: 'Updated 2 hours ago',
+  },
+  MTH201: {
+    code: 'MTH201',
+    title: 'Applied Mathematics',
+    description:
+      'Apply mathematical modelling and problem-solving techniques to practical scientific and engineering scenarios.',
+    term: 'Semester 2, 2026',
+    status: 'Published',
+    students: 31,
+    updated: 'Updated yesterday',
+  },
+  COM105: {
+    code: 'COM105',
+    title: 'Academic Communication',
+    description:
+      'Build effective academic reading, writing, research, and presentation skills for university study.',
+    term: 'Semester 2, 2026',
+    status: 'Published',
+    students: 19,
+    updated: 'Updated 3 days ago',
+  },
+  DAT210: {
+    code: 'DAT210',
+    title: 'Data Visualisation',
+    description:
+      'Turn complex data into clear, accurate, and compelling visual stories for a range of audiences.',
+    term: 'Term 4, 2026',
+    status: 'Draft',
+    students: 0,
+    updated: 'Updated 30 minutes ago',
+  },
+  BIO101: {
+    code: 'BIO101',
+    title: 'Introduction to Life Sciences',
+    description:
+      'An introduction to the key concepts, methods, and applications that underpin the life sciences.',
+    term: 'Semester 1, 2026',
+    status: 'Archived',
+    students: 28,
+    updated: 'Archived 30 Jun',
+  },
+  SCI090: {
+    code: 'SCI090',
+    title: 'Essential Study Skills for Science',
+    description:
+      'Develop the practical study, laboratory, numeracy, and communication skills needed for science courses.',
+    term: 'Term 1, 2026',
+    status: 'Archived',
+    students: 42,
+    updated: 'Archived 4 Apr',
+  },
+};
+
+const getInitialModules = (course: CourseDetails): CourseModule[] => [
+  {
+    id: 1,
+    title: `Module 1: Introduction to ${course.title}`,
+    items: [
+      {
+        id: 11,
+        title: 'Welcome and course overview',
+        type: 'lesson',
+        resources: [
+          { id: 111, title: 'Course guide', type: 'file' },
+          { id: 112, title: 'Welcome video', type: 'video' },
+        ],
+      },
+      {
+        id: 12,
+        title: 'Getting started quiz',
+        type: 'assignment',
+        submissionType: 'quiz',
+        submissionTitle: 'Module 1 knowledge check',
+      },
+    ],
+  },
+  {
+    id: 2,
+    title: 'Module 2: Core concepts',
+    items: [
+      {
+        id: 21,
+        title: `Core concepts in ${course.code}`,
+        type: 'lesson',
+        resources: [
+          { id: 211, title: 'Key concepts', type: 'text' },
+          { id: 212, title: 'Practice quiz', type: 'quiz' },
+        ],
+      },
+      {
+        id: 22,
+        title: 'Applied activity',
+        type: 'assignment',
+        submissionType: 'file',
+        submissionTitle: 'Upload your completed activity',
+      },
+    ],
+  },
+];
 
 type EditorTarget =
   | {
@@ -96,7 +222,22 @@ type EditorTarget =
     };
 
 function RouteComponent() {
-  const [modules, setModules] = useState<CourseModule[]>([]);
+  const { courseId } = Route.useParams();
+  const course =
+    courseDetails[courseId.toUpperCase()] ??
+    ({
+      code: courseId === 'draft' ? 'DRAFT' : courseId.toUpperCase(),
+      title: 'New draft course',
+      description:
+        'Add course information and organise the learning experience into modules, lessons, and assignments.',
+      term: 'Not scheduled',
+      status: 'Draft',
+      students: 0,
+      updated: 'Not saved',
+    } satisfies CourseDetails);
+  const [modules, setModules] = useState<CourseModule[]>(() =>
+    courseId === 'draft' ? [] : getInitialModules(course),
+  );
   const [editor, setEditor] = useState<EditorTarget | null>(null);
   const [editorTitle, setEditorTitle] = useState('');
 
@@ -366,15 +507,33 @@ function RouteComponent() {
   return (
     <main className="mx-auto w-full max-w-5xl space-y-6 pb-10">
       <section>
-        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-              New draft course
-            </h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Course content is organised into modules, lessons, and
-              assignments.
-            </p>
+        <div className="rounded-xl border bg-card p-5 shadow-sm sm:p-6">
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-semibold tracking-wide text-primary">
+                  {course.code}
+                </span>
+                <Badge className={courseStatusStyles[course.status]}>
+                  {course.status}
+                </Badge>
+              </div>
+              <h1 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">
+                {course.title}
+              </h1>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+                {course.description}
+              </p>
+            </div>
+          </div>
+          <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 border-t pt-4 text-sm text-muted-foreground">
+            <span className="flex items-center gap-2">
+              <CalendarDays className="size-4" /> {course.term}
+            </span>
+            <span className="flex items-center gap-2">
+              <Users className="size-4" /> {course.students} students
+            </span>
+            <span>{course.updated}</span>
           </div>
         </div>
       </section>
