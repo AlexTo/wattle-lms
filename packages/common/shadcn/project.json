@@ -8,6 +8,9 @@
     "generator": "ts#project"
   },
   "targets": {
+    "assemble": {
+      "dependsOn": ["compile"]
+    },
     "build": {
       "dependsOn": ["lint", "compile", "test"]
     },

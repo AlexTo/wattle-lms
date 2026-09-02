@@ -9,6 +9,9 @@
     "iac": "cdk"
   },
   "targets": {
+    "assemble": {
+      "dependsOn": ["compile", "synth"]
+    },
     "bootstrap": {
       "executor": "nx:run-commands",
       "options": {
@@ -33,7 +36,7 @@
       "outputs": ["{workspaceRoot}/dist/{projectRoot}/checkov"],
       "dependsOn": ["synth"],
       "options": {
-        "command": "uvx --from checkov==3.3.15 checkov --config-file {projectRoot}/checkov.yml --directory dist/{projectRoot}/cdk.out --framework cloudformation"
+        "command": "uvx --from checkov==3.3.16 checkov --config-file {projectRoot}/checkov.yml --directory dist/{projectRoot}/cdk.out --framework cloudformation"
       }
     },
     "compile": {
@@ -46,7 +49,7 @@
     },
     "deploy": {
       "executor": "nx:run-commands",
-      "dependsOn": ["^build", "compile"],
+      "dependsOn": ["^assemble", "compile"],
       "options": {
         "command": "tsx packages/common/scripts/src/infra/infra-deploy.ts packages/infra"
       }
@@ -60,14 +63,14 @@
     },
     "deploy-sandbox": {
       "executor": "nx:run-commands",
-      "dependsOn": ["^build", "compile"],
+      "dependsOn": ["^assemble", "compile"],
       "options": {
         "command": "tsx packages/common/scripts/src/infra/infra-deploy.ts packages/infra \"wattle-infra-sandbox/*\""
       }
     },
     "destroy": {
       "executor": "nx:run-commands",
-      "dependsOn": ["^build", "compile"],
+      "dependsOn": ["^assemble", "compile"],
       "options": {
         "command": "tsx packages/common/scripts/src/infra/infra-destroy.ts packages/infra"
       }
@@ -123,7 +126,7 @@
       "executor": "nx:run-commands",
       "inputs": ["default"],
       "outputs": ["{workspaceRoot}/dist/{projectRoot}/cdk.out"],
-      "dependsOn": ["^build", "compile"],
+      "dependsOn": ["^assemble", "compile"],
       "options": {
         "cwd": "{projectRoot}",
         "command": "cdk synth"

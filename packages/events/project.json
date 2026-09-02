@@ -16,6 +16,9 @@
     ]
   },
   "targets": {
+    "assemble": {
+      "dependsOn": ["compile", "bundle"]
+    },
     "build": {
       "dependsOn": ["lint", "compile", "test", "bundle"]
     },
@@ -27,7 +30,8 @@
       "options": {
         "command": "rolldown -c rolldown.config.ts",
         "cwd": "{projectRoot}"
-      }
+      },
+      "inputs": ["default"]
     },
     "compile": {
       "executor": "nx:run-commands",
