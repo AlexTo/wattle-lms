@@ -31,6 +31,10 @@ import {
 } from 'lucide-react';
 import { Fragment } from 'react';
 import { useAuth } from 'react-oidc-context';
+import {
+  type CourseStatus,
+  courseStatusStyles,
+} from '../../components/course-status';
 import { getUserIdentity } from '../../components/UserMenu/user-profile';
 
 export const Route = createFileRoute('/_authenticated/dashboard')({
@@ -68,7 +72,7 @@ const courses = [
   {
     code: 'BIO102',
     title: 'Foundations of Biology',
-    status: 'Published',
+    status: 'Published' as CourseStatus,
     students: 24,
     ungraded: 18,
     next: 'Lab report due today',
@@ -78,7 +82,7 @@ const courses = [
   {
     code: 'MTH201',
     title: 'Applied Mathematics',
-    status: 'Published',
+    status: 'Published' as CourseStatus,
     students: 31,
     ungraded: 9,
     next: 'Problem set 5 due today',
@@ -87,7 +91,7 @@ const courses = [
   {
     code: 'COM105',
     title: 'Academic Communication',
-    status: 'Published',
+    status: 'Published' as CourseStatus,
     students: 19,
     ungraded: 6,
     next: 'Bibliography due 6 Sep',
@@ -97,7 +101,7 @@ const courses = [
   {
     code: 'DAT210',
     title: 'Data Visualisation',
-    status: 'Draft',
+    status: 'Draft' as CourseStatus,
     students: 0,
     ungraded: 0,
     next: 'Course starts 14 Sep',
@@ -289,8 +293,10 @@ function RouteComponent() {
               Course health and teaching workload at a glance
             </p>
           </div>
-          <Button variant="outline" size="sm" type="button">
-            View all courses <ArrowRight />
+          <Button variant="outline" size="sm" asChild>
+            <Link to="/courses">
+              View all courses <ArrowRight />
+            </Link>
           </Button>
         </div>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -306,11 +312,7 @@ function RouteComponent() {
                   >
                     <BookOpen className="size-5" />
                   </div>
-                  <Badge
-                    variant={
-                      course.status === 'Published' ? 'secondary' : 'outline'
-                    }
-                  >
+                  <Badge className={courseStatusStyles[course.status]}>
                     {course.status}
                   </Badge>
                 </div>
@@ -342,8 +344,13 @@ function RouteComponent() {
                   <CalendarDays className="mt-0.5 size-3 shrink-0" />{' '}
                   {course.next}
                 </p>
-                <Button variant="outline" className="w-full" type="button">
-                  Open course <ArrowRight />
+                <Button variant="outline" className="w-full" asChild>
+                  <Link
+                    to="/courses/$courseId"
+                    params={{ courseId: course.code }}
+                  >
+                    Open course <ArrowRight />
+                  </Link>
                 </Button>
               </CardContent>
             </Card>
