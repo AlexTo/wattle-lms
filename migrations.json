@@ -1,14 +1,77 @@
 {
   "migrations": [
     {
-      "version": "1.0.0-rc.89",
-      "description": "Set nx.json parallel to 8 so full builds use available cores, preserving an existing value",
-      "implementation": "./src/migrations/latest/nx-parallel-default/migration",
+      "version": "1.0.0-rc.90",
+      "description": "Add dependsOn pull-image to the dev target of ts#dynamodb and ts#rdb projects",
+      "implementation": "./src/migrations/latest/dev-target-depends-on-pull-image/migration",
       "package": "@aws/nx-plugin",
-      "name": "latest-nx-parallel-default"
+      "name": "latest-dev-target-depends-on-pull-image"
     },
     {
-      "version": "1.0.0-rc.89",
+      "version": "1.0.0-rc.90",
+      "description": "Switch generated OpenAPI codegen targets to the in-process open-api-codegen executor",
+      "implementation": "./src/migrations/latest/open-api-codegen-executor/migration",
+      "package": "@aws/nx-plugin",
+      "name": "latest-open-api-codegen-executor"
+    },
+    {
+      "version": "1.0.0-rc.90",
+      "description": "Share Terraform provider downloads across terraform init targets via TF_PLUGIN_CACHE_DIR",
+      "implementation": "./src/migrations/latest/terraform-provider-plugin-cache/migration",
+      "package": "@aws/nx-plugin",
+      "name": "latest-terraform-provider-plugin-cache"
+    },
+    {
+      "version": "1.0.0-rc.90",
+      "description": "Exclude Python test files from the production named input and scope dependent task outputs to dist so Python test edits do not invalidate build tasks",
+      "implementation": "./src/migrations/latest/python-test-input-scoping/migration",
+      "package": "@aws/nx-plugin",
+      "name": "latest-python-test-input-scoping"
+    },
+    {
+      "version": "1.0.0-rc.90",
+      "description": "Write vitest coverage reports to the project's dist directory rather than inside the project",
+      "implementation": "./src/migrations/latest/vitest-coverage-output-dir/migration",
+      "package": "@aws/nx-plugin",
+      "name": "latest-vitest-coverage-output-dir"
+    },
+    {
+      "version": "1.0.0-rc.90",
+      "description": "Add an assemble target as the artifact-only sibling of build, point the deploy targets at it, and narrow compile targets depending on ^build to ^compile",
+      "implementation": "./src/migrations/latest/add-assemble-target/migration",
+      "package": "@aws/nx-plugin",
+      "name": "latest-add-assemble-target"
+    },
+    {
+      "version": "1.0.0-rc.90",
+      "description": "Make container image build and scan targets non-cacheable, so a cache hit can never report success for an image the container engine no longer has",
+      "implementation": "./src/migrations/latest/docker-target-cache-soundness/migration",
+      "package": "@aws/nx-plugin",
+      "name": "latest-docker-target-cache-soundness"
+    },
+    {
+      "version": "1.0.0-rc.90",
+      "description": "Declare explicit inputs on cacheable bundle, openapi, operations and checkov targets so they no longer read a dependency's whole project directory through Nx's implicit inputs",
+      "implementation": "./src/migrations/latest/declare-cacheable-target-inputs/migration",
+      "package": "@aws/nx-plugin",
+      "name": "latest-declare-cacheable-target-inputs"
+    },
+    {
+      "version": "1.0.0-rc.90",
+      "description": "Make the terraform fmt target check formatting rather than rewrite its own inputs, moving the write to a fix configuration, and add a lint target which orchestrates it",
+      "implementation": "./src/migrations/latest/terraform-fmt-check/migration",
+      "package": "@aws/nx-plugin",
+      "name": "latest-terraform-fmt-check"
+    },
+    {
+      "version": "1.0.0-rc.92",
+      "description": "Assign each react-website project its own dev-server and preview port, and allow-list them for any connected Cognito auth",
+      "implementation": "./src/migrations/latest/react-website-unique-dev-ports/migration",
+      "package": "@aws/nx-plugin",
+      "name": "latest-react-website-unique-dev-ports"
+    },
+    {
+      "version": "1.0.0-rc.93",
       "description": "Sync vended dependency versions and the tracked plugin version to those vended by this release",
       "implementation": "./src/utils/version-upgrade-migration/migration",
       "package": "@aws/nx-plugin",

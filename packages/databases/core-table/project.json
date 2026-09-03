@@ -10,6 +10,9 @@
     "iac": "cdk"
   },
   "targets": {
+    "assemble": {
+      "dependsOn": ["compile"]
+    },
     "build": {
       "dependsOn": ["lint", "compile", "test"]
     },
@@ -18,6 +21,19 @@
       "outputs": ["{workspaceRoot}/dist/{projectRoot}/tsc"],
       "options": {
         "command": "tsc --build tsconfig.lib.json",
+        "cwd": "{projectRoot}"
+      }
+    },
+    "dev": {
+      "executor": "nx:run-commands",
+      "continuous": true,
+      "dependsOn": ["pull-image"],
+      "options": {
+        "commands": [
+          "tsx ../../common/scripts/src/dynamodb/start-container.ts",
+          "tsx ../../common/scripts/src/dynamodb/create-local-table.ts"
+        ],
+        "parallel": true,
         "cwd": "{projectRoot}"
       }
     },
@@ -64,19 +80,6 @@
       "executor": "nx:run-commands",
       "options": {
         "command": "tsx ../../common/scripts/src/dynamodb/pull-image.ts",
-        "cwd": "{projectRoot}"
-      }
-    },
-    "dev": {
-      "executor": "nx:run-commands",
-      "continuous": true,
-      "dependsOn": ["pull-image"],
-      "options": {
-        "commands": [
-          "tsx ../../common/scripts/src/dynamodb/start-container.ts",
-          "tsx ../../common/scripts/src/dynamodb/create-local-table.ts"
-        ],
-        "parallel": true,
         "cwd": "{projectRoot}"
       }
     }

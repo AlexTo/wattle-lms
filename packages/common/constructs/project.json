@@ -8,6 +8,18 @@
     "generator": "ts#project"
   },
   "targets": {
+    "assemble": {
+      "dependsOn": [
+        "compile",
+        "@wattle/core-table:assemble",
+        "@wattle/core-api:assemble",
+        "@wattle/student-portal:assemble",
+        "@wattle/events:assemble",
+        "@wattle/instructor-portal:assemble",
+        "@wattle/admin-portal:assemble",
+        "@wattle/instructor-api:assemble"
+      ]
+    },
     "build": {
       "dependsOn": [
         "lint",
