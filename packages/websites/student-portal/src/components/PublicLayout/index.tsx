@@ -14,8 +14,8 @@ const PublicLayout = ({ children }: { children: ReactNode }) => {
 
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="flex items-center justify-between border-b px-6 py-4">
-        <div className="flex items-center gap-2">
+      <header className="sticky top-0 z-50 flex items-center justify-between border-b bg-background/90 px-6 py-3 backdrop-blur lg:px-8">
+        <Link to="/" className="flex items-center gap-2">
           <img
             alt={`${Config.applicationName} logo`}
             className="size-10 rounded-lg border border-border/60 bg-background object-cover shadow-sm"
@@ -24,7 +24,7 @@ const PublicLayout = ({ children }: { children: ReactNode }) => {
           <span className="text-sm font-semibold">
             {Config.applicationName}
           </span>
-        </div>
+        </Link>
         {isAuthenticated ? (
           <div className="flex items-center gap-3">
             <Button variant="outline" asChild>
@@ -38,7 +38,7 @@ const PublicLayout = ({ children }: { children: ReactNode }) => {
           </Button>
         )}
       </header>
-      <main className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
+      <main className="flex flex-1 flex-col items-center justify-center text-center">
         {children}
       </main>
     </div>
