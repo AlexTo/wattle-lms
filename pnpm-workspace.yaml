@@ -79,6 +79,7 @@ catalog:
   '@trpc/tanstack-react-query': 11.18.0
   '@tanstack/react-query': 5.102.8
   '@tanstack/react-query-devtools': 5.102.8
+  '@tanstack/react-form': 1.33.5
   event-source-polyfill: 1.0.31
   '@smithy/types': 4.17.2
   '@types/event-source-polyfill': 1.0.5

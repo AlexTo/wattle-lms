@@ -4,12 +4,14 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@tanstack/react-form": "catalog:",
     "@tanstack/react-query": "catalog:",
     "@tanstack/react-query-devtools": "catalog:",
     "@tanstack/react-router": "catalog:",
     "@trpc/client": "catalog:",
     "@trpc/tanstack-react-query": "catalog:",
     "@wattle/common-shadcn": "workspace:*",
+    "@wattle/instructor-api": "workspace:*",
     "event-source-polyfill": "catalog:",
     "lucide-react": "catalog:",
     "oidc-client-ts": "catalog:",
@@ -17,7 +19,7 @@
     "react-dom": "catalog:",
     "react-oidc-context": "catalog:",
     "tailwindcss": "catalog:",
-    "@wattle/instructor-api": "workspace:*"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@smithy/types": "catalog:",
