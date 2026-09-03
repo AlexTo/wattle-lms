@@ -4,11 +4,11 @@
  */
 'use client';
 
-import { toggleVariants } from '@wattle/common-shadcn/components/ui/toggle';
-import { cn } from '@wattle/common-shadcn/lib/utils';
 import { type VariantProps } from 'class-variance-authority';
 import { ToggleGroup as ToggleGroupPrimitive } from 'radix-ui';
 import * as React from 'react';
+import { toggleVariants } from '#components/ui/toggle';
+import { cn } from '#lib/utils';
 
 const ToggleGroupContext = React.createContext<
   VariantProps<typeof toggleVariants> & {

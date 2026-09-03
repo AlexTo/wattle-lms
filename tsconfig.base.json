@@ -41,9 +41,6 @@
       "@wattle/common-shadcn": [
         "./packages/common/shadcn/src/index.ts"
       ],
-      "@wattle/common-shadcn/*": [
-        "./packages/common/shadcn/src/*"
-      ],
       "@wattle/infra": [
         "./packages/infra/src/index.ts"
       ],

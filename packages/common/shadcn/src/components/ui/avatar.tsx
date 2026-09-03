@@ -4,9 +4,9 @@
  */
 'use client';
 
-import { cn } from '@wattle/common-shadcn/lib/utils';
 import { Avatar as AvatarPrimitive } from 'radix-ui';
 import * as React from 'react';
+import { cn } from '#lib/utils';
 
 function Avatar({
   className,
