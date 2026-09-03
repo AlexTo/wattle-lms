@@ -65,7 +65,7 @@
       "executor": "nx:run-commands",
       "dependsOn": ["^assemble", "compile"],
       "options": {
-        "command": "tsx packages/common/scripts/src/infra/infra-deploy.ts packages/infra \"wattle-infra-sandbox/*\""
+        "command": "tsx packages/common/scripts/src/infra/infra-deploy.ts packages/infra \"wattle-infra-sandbox/*\" --express"
       }
     },
     "destroy": {
