@@ -32,6 +32,7 @@ import {
   type CourseStatus,
   courseStatusStyles,
 } from '../../components/course-status';
+import { CreateCourseDialog } from '../../components/create-course-dialog';
 
 export const Route = createFileRoute('/_authenticated/courses')({
   component: RouteComponent,
@@ -145,11 +146,13 @@ function RouteComponent() {
             Manage every course you teach and see its current workload.
           </p>
         </div>
-        <Button asChild>
-          <Link to="/courses/new">
-            <CirclePlus /> Create course
-          </Link>
-        </Button>
+        <CreateCourseDialog
+          trigger={
+            <Button>
+              <CirclePlus /> Create course
+            </Button>
+          }
+        />
       </section>
 
       <section

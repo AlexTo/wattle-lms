@@ -35,6 +35,7 @@ import {
   type CourseStatus,
   courseStatusStyles,
 } from '../../components/course-status';
+import { CreateCourseDialog } from '../../components/create-course-dialog';
 import { getUserIdentity } from '../../components/UserMenu/user-profile';
 
 export const Route = createFileRoute('/_authenticated/dashboard')({
@@ -465,16 +466,18 @@ function RouteComponent() {
             <CardContent className="space-y-2 px-5">
               {quickActions.map((action) =>
                 action.label === 'Create a course' ? (
-                  <Button
+                  <CreateCourseDialog
                     key={action.label}
-                    variant="outline"
-                    className="w-full justify-start"
-                    asChild
-                  >
-                    <Link to="/courses/new">
-                      <action.icon /> {action.label}
-                    </Link>
-                  </Button>
+                    trigger={
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start"
+                        type="button"
+                      >
+                        <action.icon /> {action.label}
+                      </Button>
+                    }
+                  />
                 ) : (
                   <Button
                     key={action.label}
