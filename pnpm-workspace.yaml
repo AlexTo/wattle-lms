@@ -21,7 +21,7 @@ onlyBuiltDependencies:
   - sharp
 catalogMode: strict
 catalog:
-  '@aws/nx-plugin': 1.0.0-rc.93
+  '@aws/nx-plugin': 1.0.0-rc.95
   nx: 23.1.2
   '@nx/js': 23.1.2
   '@nx/workspace': 23.1.2

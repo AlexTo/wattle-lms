@@ -45,6 +45,7 @@
       "**",
       "!**/dist",
       "!**/out-tsc",
+      "!**/rolldown.config.*.*js",
       "!**/test-output",
       "!**/node_modules",
       "!**/.nx",
