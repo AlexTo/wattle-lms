@@ -49,3 +49,8 @@ export const protectedProcedure = publicProcedure.use(async (opts) => {
 export const courseProcedure = protectedProcedure.concat(
   createCoreTablePlugin(),
 );
+
+/** Like publicProcedure, additionally exposing ctx.coreTable, for procedures anonymous callers may use (e.g. public course discovery). */
+export const publicCourseProcedure = publicProcedure.concat(
+  createCoreTablePlugin(),
+);

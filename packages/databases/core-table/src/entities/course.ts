@@ -62,6 +62,20 @@ export const createCourseEntity = async () =>
             composite: ['courseId'],
           },
         },
+        // List published courses for public discovery. courseId is a UUIDv7,
+        // so it's already sortable by creation time without needing a
+        // separate timestamp in the sort key.
+        byStatus: {
+          index: 'gsi1pk-gsi1sk-index',
+          pk: {
+            field: 'gsi1pk',
+            composite: ['status'],
+          },
+          sk: {
+            field: 'gsi1sk',
+            composite: ['courseId'],
+          },
+        },
       },
     },
     { client: getDynamoDBClient(), table: await resolveTableName() },

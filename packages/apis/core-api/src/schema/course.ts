@@ -52,6 +52,15 @@ export type IListInstructorsForCourseInput = z.TypeOf<
 export const ListInstructorsForCourseOutputSchema =
   createPaginatedQueryOutputSchema(InstructorSchema);
 
+export const ListPublicCoursesInputSchema = QueryInputSchema;
+
+export type IListPublicCoursesInput = z.TypeOf<
+  typeof ListPublicCoursesInputSchema
+>;
+
+export const ListPublicCoursesOutputSchema =
+  createPaginatedQueryOutputSchema(CourseSchema);
+
 export const ViewCourseInputSchema = z.object({
   courseId: z.string(),
 });

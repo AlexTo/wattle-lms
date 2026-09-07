@@ -3,12 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { TRPCError } from '@trpc/server';
-import { courseProcedure } from '../init.js';
+import { courseProcedure, publicCourseProcedure } from '../init.js';
 import {
   ListCoursesByInstructorInputSchema,
   ListCoursesByInstructorOutputSchema,
   ListInstructorsForCourseInputSchema,
   ListInstructorsForCourseOutputSchema,
+  ListPublicCoursesInputSchema,
+  ListPublicCoursesOutputSchema,
   ViewCourseInputSchema,
   ViewCourseOutputSchema,
 } from '../schema/index.js';
@@ -20,10 +22,12 @@ export const listCoursesByInstructor = courseProcedure
     const coreTable = ctx.coreTable!;
     const { instructorId, cursor, limit } = input;
 
+    // byInstructor's sort key is courseUpdatedAt#courseId; order: 'desc'
+    // surfaces the most recently updated courses first.
     const { data: memberships, cursor: nextCursor } =
       await coreTable.entities.courseInstructor.query
         .byInstructor({ instructorId })
-        .go({ cursor, limit });
+        .go({ cursor, limit, order: 'desc' });
     if (memberships.length === 0) {
       return { items: [], cursor: nextCursor };
     }
@@ -64,6 +68,21 @@ export const listInstructorsForCourse = courseProcedure
       items: instructors.filter((instructor) => instructor !== null),
       cursor: nextCursor,
     };
+  });
+
+export const listPublicCourses = publicCourseProcedure
+  .input(ListPublicCoursesInputSchema)
+  .output(ListPublicCoursesOutputSchema)
+  .query(async ({ ctx, input }) => {
+    const coreTable = ctx.coreTable!;
+    const { cursor, limit } = input;
+
+    const { data: courses, cursor: nextCursor } =
+      await coreTable.entities.course.query
+        .byStatus({ status: 'published' })
+        .go({ cursor, limit });
+
+    return { items: courses, cursor: nextCursor };
   });
 
 export const viewCourse = courseProcedure
