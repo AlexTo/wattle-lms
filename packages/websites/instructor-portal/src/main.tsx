@@ -12,6 +12,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { useAuth } from 'react-oidc-context';
 import CognitoAuth from './components/CognitoAuth';
+import CoreApiClientProvider from './components/CoreApiClientProvider';
 import InstructorApiClientProvider from './components/InstructorApiClientProvider';
 import QueryClientProvider from './components/QueryClientProvider';
 import RuntimeConfigProvider from './components/RuntimeConfig';
@@ -51,7 +52,9 @@ root &&
         <CognitoAuth>
           <QueryClientProvider>
             <InstructorApiClientProvider>
-              <App />
+              <CoreApiClientProvider>
+                <App />
+              </CoreApiClientProvider>
             </InstructorApiClientProvider>
           </QueryClientProvider>
         </CognitoAuth>

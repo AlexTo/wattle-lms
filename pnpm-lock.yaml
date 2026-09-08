@@ -770,6 +770,9 @@ importers:
       '@wattle/common-shadcn':
         specifier: workspace:*
         version: link:../../common/shadcn
+      '@wattle/core-api':
+        specifier: workspace:*
+        version: link:../../apis/core-api
       '@wattle/instructor-api':
         specifier: workspace:*
         version: link:../../apis/instructor-api

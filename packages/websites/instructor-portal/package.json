@@ -19,7 +19,8 @@
     "react-dom": "catalog:",
     "react-oidc-context": "catalog:",
     "tailwindcss": "catalog:",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "@wattle/core-api": "workspace:*"
   },
   "devDependencies": {
     "@smithy/types": "catalog:",
