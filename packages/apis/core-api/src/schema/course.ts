@@ -19,13 +19,13 @@ export const CourseSchema = z.object({
   updatedAt: z.string(),
 });
 
-export type ICourse = z.TypeOf<typeof CourseSchema>;
+export type ICourse = z.output<typeof CourseSchema>;
 
 export const ListCoursesByInstructorInputSchema = QueryInputSchema.extend({
   instructorId: z.string(),
 });
 
-export type IListCoursesByInstructorInput = z.TypeOf<
+export type IListCoursesByInstructorInput = z.output<
   typeof ListCoursesByInstructorInputSchema
 >;
 
@@ -39,13 +39,13 @@ export const InstructorSchema = z.object({
   familyName: z.string().optional(),
 });
 
-export type IInstructor = z.TypeOf<typeof InstructorSchema>;
+export type IInstructor = z.output<typeof InstructorSchema>;
 
 export const ListInstructorsForCourseInputSchema = QueryInputSchema.extend({
   courseId: z.string(),
 });
 
-export type IListInstructorsForCourseInput = z.TypeOf<
+export type IListInstructorsForCourseInput = z.output<
   typeof ListInstructorsForCourseInputSchema
 >;
 
@@ -54,7 +54,7 @@ export const ListInstructorsForCourseOutputSchema =
 
 export const ListPublicCoursesInputSchema = QueryInputSchema;
 
-export type IListPublicCoursesInput = z.TypeOf<
+export type IListPublicCoursesInput = z.output<
   typeof ListPublicCoursesInputSchema
 >;
 
@@ -65,6 +65,6 @@ export const ViewCourseInputSchema = z.object({
   courseId: z.string(),
 });
 
-export type IViewCourseInput = z.TypeOf<typeof ViewCourseInputSchema>;
+export type IViewCourseInput = z.output<typeof ViewCourseInputSchema>;
 
 export const ViewCourseOutputSchema = CourseSchema;

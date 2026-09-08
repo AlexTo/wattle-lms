@@ -11,7 +11,7 @@ export const CreateCourseInputSchema = z.object({
   description: z.string().max(2000).optional(),
 });
 
-export type ICreateCourseInput = z.TypeOf<typeof CreateCourseInputSchema>;
+export type ICreateCourseInput = z.output<typeof CreateCourseInputSchema>;
 
 export const CourseSchema = z.object({
   courseId: z.string(),
@@ -22,18 +22,18 @@ export const CourseSchema = z.object({
   updatedAt: z.string(),
 });
 
-export type ICourse = z.TypeOf<typeof CourseSchema>;
+export type ICourse = z.output<typeof CourseSchema>;
 
 export const CreateCourseOutputSchema = CourseSchema;
 
-export type ICreateCourseOutput = z.TypeOf<typeof CreateCourseOutputSchema>;
+export type ICreateCourseOutput = z.output<typeof CreateCourseOutputSchema>;
 
 export const ArchiveCourseInputSchema = z.object({
   courseId: z.string(),
 });
 
-export type IArchiveCourseInput = z.TypeOf<typeof ArchiveCourseInputSchema>;
+export type IArchiveCourseInput = z.output<typeof ArchiveCourseInputSchema>;
 
 export const ArchiveCourseOutputSchema = CourseSchema;
 
-export type IArchiveCourseOutput = z.TypeOf<typeof ArchiveCourseOutputSchema>;
+export type IArchiveCourseOutput = z.output<typeof ArchiveCourseOutputSchema>;
