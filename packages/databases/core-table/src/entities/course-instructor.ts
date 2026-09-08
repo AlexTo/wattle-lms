@@ -26,6 +26,14 @@ export const createCourseInstructorEntity = async () =>
           type: 'string',
           required: true,
         },
+        // Denormalized from Course.updatedAt so byInstructor can list an
+        // instructor's courses sorted by recency without an extra fetch per
+        // page. Kept in sync by every procedure that writes Course - see
+        // createCourse/archiveCourse in @wattle/instructor-api.
+        courseUpdatedAt: {
+          type: 'string',
+          required: true,
+        },
         createdAt: {
           type: 'string',
           required: true,
@@ -55,7 +63,9 @@ export const createCourseInstructorEntity = async () =>
             composite: ['instructorId'],
           },
         },
-        // List courses an instructor teaches.
+        // List courses an instructor teaches, sorted by recency (courseId
+        // as a tiebreaker also handles same-instant timestamps, and is
+        // itself creation-ordered since it's a UUIDv7).
         byInstructor: {
           index: 'gsi1pk-gsi1sk-index',
           pk: {
@@ -64,7 +74,7 @@ export const createCourseInstructorEntity = async () =>
           },
           sk: {
             field: 'gsi1sk',
-            composite: ['courseId'],
+            composite: ['courseUpdatedAt', 'courseId'],
           },
         },
       },

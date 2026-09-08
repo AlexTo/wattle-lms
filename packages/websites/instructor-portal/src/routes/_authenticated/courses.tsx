@@ -2,6 +2,7 @@
  * Copyright Wattle LMS Contributors. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
+import { useQuery } from '@tanstack/react-query';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { Badge } from '@wattle/common-shadcn/components/ui/badge';
 import { Button } from '@wattle/common-shadcn/components/ui/button';
@@ -28,94 +29,38 @@ import {
   Users,
 } from 'lucide-react';
 import { useState } from 'react';
+import { useAuth } from 'react-oidc-context';
+import { Alert } from '../../components/alert';
 import {
   type CourseStatus,
   courseStatusStyles,
 } from '../../components/course-status';
 import { CreateCourseDialog } from '../../components/create-course-dialog';
+import { Spinner } from '../../components/spinner';
+import { useCoreApi } from '../../hooks/useCoreApi';
 
 export const Route = createFileRoute('/_authenticated/courses')({
   component: RouteComponent,
 });
 
-const courses = [
-  {
-    code: 'BIO102',
-    title: 'Foundations of Biology',
-    term: 'Semester 2, 2026',
-    status: 'Published' as CourseStatus,
-    students: 24,
-    ungraded: 18,
-    modules: 8,
-    next: 'Lab report due today at 11:59 pm',
-    updated: 'Updated 2 hours ago',
-    surface:
-      'from-emerald-500/25 to-teal-500/10 text-emerald-700 dark:text-emerald-300',
-  },
-  {
-    code: 'MTH201',
-    title: 'Applied Mathematics',
-    term: 'Semester 2, 2026',
-    status: 'Published' as CourseStatus,
-    students: 31,
-    ungraded: 9,
-    modules: 10,
-    next: 'Problem set 5 due today at 5:00 pm',
-    updated: 'Updated yesterday',
-    surface: 'from-blue-500/25 to-cyan-500/10 text-blue-700 dark:text-blue-300',
-  },
-  {
-    code: 'COM105',
-    title: 'Academic Communication',
-    term: 'Semester 2, 2026',
-    status: 'Published' as CourseStatus,
-    students: 19,
-    ungraded: 6,
-    modules: 7,
-    next: 'Annotated bibliography due 6 Sep',
-    updated: 'Updated 3 days ago',
-    surface:
-      'from-violet-500/25 to-fuchsia-500/10 text-violet-700 dark:text-violet-300',
-  },
-  {
-    code: 'DAT210',
-    title: 'Data Visualisation',
-    term: 'Term 4, 2026',
-    status: 'Draft' as CourseStatus,
-    students: 0,
-    ungraded: 0,
-    modules: 4,
-    next: 'Course starts 14 Sep',
-    updated: 'Updated 30 minutes ago',
-    surface:
-      'from-amber-500/25 to-orange-500/10 text-amber-700 dark:text-amber-300',
-  },
-  {
-    code: 'BIO101',
-    title: 'Introduction to Life Sciences',
-    term: 'Semester 1, 2026',
-    status: 'Archived' as CourseStatus,
-    students: 28,
-    ungraded: 0,
-    modules: 9,
-    next: 'Course ended 21 Jun',
-    updated: 'Archived 30 Jun',
-    surface: 'from-rose-500/20 to-pink-500/10 text-rose-700 dark:text-rose-300',
-  },
-  {
-    code: 'SCI090',
-    title: 'Essential Study Skills for Science',
-    term: 'Term 1, 2026',
-    status: 'Archived' as CourseStatus,
-    students: 42,
-    ungraded: 0,
-    modules: 5,
-    next: 'Course ended 28 Mar',
-    updated: 'Archived 4 Apr',
-    surface:
-      'from-slate-500/20 to-zinc-500/10 text-slate-700 dark:text-slate-300',
-  },
-];
+// Not yet backed by an API, so every course card shows this same mock
+// workload/scheduling info until grading, enrolment, and module data exist.
+const mockCourseDetails = {
+  term: 'Semester 2, 2026',
+  students: 24,
+  ungraded: 18,
+  modules: 8,
+  next: 'Course content coming soon',
+  updated: 'Updated recently',
+  surface:
+    'from-emerald-500/25 to-teal-500/10 text-emerald-700 dark:text-emerald-300',
+};
+
+const courseStatusLabels: Record<string, CourseStatus> = {
+  draft: 'Draft',
+  published: 'Published',
+  archived: 'Archived',
+};
 
 const filters = ['All', 'Published', 'Draft', 'Archived'] as const;
 type CourseFilter = (typeof filters)[number];
@@ -124,12 +69,30 @@ function RouteComponent() {
   const [filter, setFilter] = useState<CourseFilter>('All');
   const [query, setQuery] = useState('');
   const normalisedQuery = query.trim().toLocaleLowerCase();
+
+  const auth = useAuth();
+  const instructorId = auth.user?.profile.sub;
+  const trpc = useCoreApi();
+  const coursesQuery = useQuery(
+    trpc.course.listByInstructor.queryOptions(
+      { instructorId: instructorId ?? '', limit: 100 },
+      { enabled: Boolean(instructorId) },
+    ),
+  );
+
+  const courses = (coursesQuery.data?.items ?? []).map((course) => ({
+    courseId: course.courseId,
+    title: course.title,
+    description: course.description,
+    status: courseStatusLabels[course.status] ?? 'Draft',
+    ...mockCourseDetails,
+  }));
+
   const visibleCourses = courses.filter(
     (course) =>
       (filter === 'All' || course.status === filter) &&
       (!normalisedQuery ||
-        course.title.toLocaleLowerCase().includes(normalisedQuery) ||
-        course.code.toLocaleLowerCase().includes(normalisedQuery)),
+        course.title.toLocaleLowerCase().includes(normalisedQuery)),
   );
 
   return (
@@ -205,7 +168,7 @@ function RouteComponent() {
               <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search by title or code"
+                placeholder="Search by title"
                 aria-label="Search courses"
                 className="pl-9"
               />
@@ -234,11 +197,19 @@ function RouteComponent() {
           </div>
         </div>
 
-        {visibleCourses.length > 0 ? (
+        {coursesQuery.isLoading ? (
+          <div className="flex justify-center py-12">
+            <Spinner />
+          </div>
+        ) : coursesQuery.isError ? (
+          <Alert type="error" header="Couldn't load your courses">
+            {coursesQuery.error.message}
+          </Alert>
+        ) : visibleCourses.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {visibleCourses.map((course) => (
               <Card
-                key={course.code}
+                key={course.courseId}
                 className="h-full gap-4 overflow-hidden py-0 transition-shadow hover:shadow-md"
               >
                 <div
@@ -251,9 +222,6 @@ function RouteComponent() {
                 <CardHeader className="gap-3 px-5">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="mb-1 text-xs font-semibold tracking-wide text-muted-foreground">
-                        {course.code}
-                      </p>
                       <CardTitle className="text-base leading-5">
                         {course.title}
                       </CardTitle>
@@ -262,7 +230,9 @@ function RouteComponent() {
                       {course.status}
                     </Badge>
                   </div>
-                  <CardDescription>{course.term}</CardDescription>
+                  <CardDescription>
+                    {course.description || course.term}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="mt-auto space-y-4 px-5 pb-5">
                   <div className="grid grid-cols-3 divide-x rounded-lg border bg-muted/20 py-3 text-center">
@@ -306,7 +276,7 @@ function RouteComponent() {
                   <Button variant="outline" className="w-full" asChild>
                     <Link
                       to="/courses/$courseId"
-                      params={{ courseId: course.code }}
+                      params={{ courseId: course.courseId }}
                     >
                       Open course <ArrowRight />
                     </Link>
@@ -340,8 +310,9 @@ function RouteComponent() {
       </section>
 
       <div className="flex items-center gap-2 rounded-xl border border-dashed bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
-        <GraduationCap className="size-4 shrink-0" /> Prototype content shown
-        for design feedback; course data is illustrative.
+        <GraduationCap className="size-4 shrink-0" /> Course titles and status
+        are live; workload and scheduling details shown here are illustrative
+        placeholders.
       </div>
     </main>
   );

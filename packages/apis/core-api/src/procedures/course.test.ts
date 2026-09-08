@@ -8,17 +8,20 @@ import { t } from '../init.js';
 import {
   listCoursesByInstructor,
   listInstructorsForCourse,
+  listPublicCourses,
   viewCourse,
 } from './course.js';
 
 const {
   courseInstructorQueryByInstructor,
   courseInstructorQueryPrimary,
+  courseQueryByStatus,
   courseGet,
   userGet,
 } = vi.hoisted(() => ({
   courseInstructorQueryByInstructor: vi.fn(),
   courseInstructorQueryPrimary: vi.fn(),
+  courseQueryByStatus: vi.fn(),
   courseGet: vi.fn(),
   userGet: vi.fn(),
 }));
@@ -26,7 +29,10 @@ const {
 vi.mock('@wattle/core-table', () => ({
   createCoreTableService: vi.fn(async () => ({
     entities: {
-      course: { get: courseGet },
+      course: {
+        get: courseGet,
+        query: { byStatus: courseQueryByStatus },
+      },
       user: { get: userGet },
       courseInstructor: {
         query: {
@@ -41,6 +47,7 @@ vi.mock('@wattle/core-table', () => ({
 const router = t.router({
   listCoursesByInstructor,
   listInstructorsForCourse,
+  listPublicCourses,
   viewCourse,
 });
 const caller = t.createCallerFactory(router);
@@ -108,7 +115,7 @@ describe('listCoursesByInstructor', () => {
 
     expect(
       courseInstructorQueryByInstructor.mock.results[0].value.go,
-    ).toHaveBeenCalledWith({ cursor: undefined, limit: 10 });
+    ).toHaveBeenCalledWith({ cursor: undefined, limit: 10, order: 'desc' });
   });
 
   it('passes cursor/limit through to the query and forwards the next cursor', async () => {
@@ -133,7 +140,7 @@ describe('listCoursesByInstructor', () => {
     });
     expect(
       courseInstructorQueryByInstructor.mock.results[0].value.go,
-    ).toHaveBeenCalledWith({ cursor: 'prev-page', limit: 10 });
+    ).toHaveBeenCalledWith({ cursor: 'prev-page', limit: 10, order: 'desc' });
     expect(courseGet).toHaveBeenCalledWith([{ courseId: 'course-1' }]);
     expect(courseGet.mock.results[0].value.go).toHaveBeenCalledWith({
       preserveBatchOrder: true,
@@ -247,6 +254,49 @@ describe('listInstructorsForCourse', () => {
       preserveBatchOrder: true,
     });
     expect(result).toEqual({ items: [instructor], cursor: 'next-page' });
+  });
+});
+
+describe('listPublicCourses', () => {
+  it('allows unauthenticated callers', async () => {
+    courseQueryByStatus.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: [course], cursor: null }),
+    });
+
+    const result = await callAnonymously().listPublicCourses({});
+
+    expect(result).toEqual({ items: [course], cursor: null });
+  });
+
+  it('queries only published courses, defaulting limit to 10', async () => {
+    courseQueryByStatus.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: [], cursor: null }),
+    });
+
+    await callAnonymously().listPublicCourses({});
+
+    expect(courseQueryByStatus).toHaveBeenCalledWith({ status: 'published' });
+    expect(courseQueryByStatus.mock.results[0].value.go).toHaveBeenCalledWith({
+      cursor: undefined,
+      limit: 10,
+    });
+  });
+
+  it('passes cursor/limit through and forwards the next cursor', async () => {
+    courseQueryByStatus.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: [course], cursor: 'next-page' }),
+    });
+
+    const result = await callAnonymously().listPublicCourses({
+      cursor: 'prev-page',
+      limit: 20,
+    });
+
+    expect(courseQueryByStatus.mock.results[0].value.go).toHaveBeenCalledWith({
+      cursor: 'prev-page',
+      limit: 20,
+    });
+    expect(result).toEqual({ items: [course], cursor: 'next-page' });
   });
 });
 

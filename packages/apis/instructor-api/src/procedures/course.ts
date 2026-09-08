@@ -20,6 +20,10 @@ export const createCourse = courseProcedure
     const courseId = uuidv7();
     const { sub: currentUser } = ctx.user;
     const { title, description } = input;
+    // Course.updatedAt is computed by ElectroDB at write time (not settable
+    // here), so this is only an approximation of its real value - fine for a
+    // brand new course that's never been touched since.
+    const courseUpdatedAt = new Date().toISOString();
 
     // A course must always have at least one instructor, so the course and
     // its initial CourseInstructor row are written transactionally: either
@@ -29,7 +33,7 @@ export const createCourse = courseProcedure
       .write((entities) => [
         entities.course.create({ courseId, title, description }).commit(),
         entities.courseInstructor
-          .create({ courseId, instructorId: currentUser })
+          .create({ courseId, instructorId: currentUser, courseUpdatedAt })
           .commit(),
       ])
       .go();
@@ -75,6 +79,22 @@ export const archiveCourse = courseProcedure
       .patch({ courseId })
       .set({ status: 'archived' })
       .go({ response: 'all_new' });
+
+    // byInstructor's sort key is courseUpdatedAt#courseId, so every course
+    // update has to refresh that denormalized timestamp on every
+    // CourseInstructor row for this course, not just the caller's own.
+    const { data: instructors } =
+      await coreTable.entities.courseInstructor.query
+        .primary({ courseId })
+        .go();
+    await Promise.all(
+      instructors.map(({ instructorId }) =>
+        coreTable.entities.courseInstructor
+          .patch({ courseId, instructorId })
+          .set({ courseUpdatedAt: course.updatedAt })
+          .go(),
+      ),
+    );
 
     return course;
   });

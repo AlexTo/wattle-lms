@@ -9,9 +9,9 @@ export const QueryInputSchema = z.object({
   limit: z.number().max(100).optional().default(10),
 });
 
-export type IQueryInput = z.TypeOf<typeof QueryInputSchema>;
+export type IQueryInput = z.output<typeof QueryInputSchema>;
 
-export const createPaginatedQueryOutputSchema = <ItemType extends z.ZodTypeAny>(
+export const createPaginatedQueryOutputSchema = <ItemType extends z.ZodType>(
   itemSchema: ItemType,
 ) =>
   z.object({

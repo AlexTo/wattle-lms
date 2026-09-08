@@ -14,6 +14,9 @@ const {
   coursePatchSet,
   courseInstructorCreate,
   courseInstructorGet,
+  courseInstructorQueryPrimary,
+  courseInstructorPatch,
+  courseInstructorPatchSet,
   transactionWrite,
   transactionGo,
 } = vi.hoisted(() => ({
@@ -23,6 +26,9 @@ const {
   coursePatchSet: vi.fn(),
   courseInstructorCreate: vi.fn(),
   courseInstructorGet: vi.fn(),
+  courseInstructorQueryPrimary: vi.fn(),
+  courseInstructorPatch: vi.fn(),
+  courseInstructorPatchSet: vi.fn(),
   transactionWrite: vi.fn(),
   transactionGo: vi.fn(),
 }));
@@ -38,6 +44,10 @@ vi.mock('@wattle/core-table', () => ({
       courseInstructor: {
         create: courseInstructorCreate,
         get: courseInstructorGet,
+        query: {
+          primary: courseInstructorQueryPrimary,
+        },
+        patch: courseInstructorPatch,
       },
     },
     transaction: {
@@ -99,6 +109,15 @@ beforeEach(() => {
       data: { courseId: course.courseId, instructorId: INSTRUCTOR_SUB },
     }),
   });
+  courseInstructorQueryPrimary.mockReturnValue({
+    go: vi.fn().mockResolvedValue({
+      data: [{ courseId: course.courseId, instructorId: INSTRUCTOR_SUB }],
+    }),
+  });
+  courseInstructorPatch.mockReturnValue({ set: courseInstructorPatchSet });
+  courseInstructorPatchSet.mockReturnValue({
+    go: vi.fn().mockResolvedValue({ data: undefined }),
+  });
 });
 
 describe('createCourse', () => {
@@ -126,7 +145,10 @@ describe('createCourse', () => {
       }),
     );
     expect(courseInstructorCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ instructorId: INSTRUCTOR_SUB }),
+      expect.objectContaining({
+        instructorId: INSTRUCTOR_SUB,
+        courseUpdatedAt: expect.any(String),
+      }),
     );
 
     const [courseArgs] = courseCreate.mock.calls[0];
@@ -178,6 +200,7 @@ describe('archiveCourse', () => {
       callAs().archiveCourse({ courseId: course.courseId }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect(coursePatch).not.toHaveBeenCalled();
+    expect(courseInstructorQueryPrimary).not.toHaveBeenCalled();
   });
 
   it('archives a course the caller teaches', async () => {
@@ -190,5 +213,37 @@ describe('archiveCourse', () => {
     expect(coursePatch).toHaveBeenCalledWith({ courseId: course.courseId });
     expect(coursePatchSet).toHaveBeenCalledWith({ status: 'archived' });
     expect(result).toEqual({ ...course, status: 'archived' });
+  });
+
+  // byInstructor's sort key is courseUpdatedAt#courseId, so every
+  // CourseInstructor row for the course needs the refreshed timestamp, not
+  // just the caller's own membership row.
+  it('refreshes the denormalized courseUpdatedAt on every instructor teaching the course', async () => {
+    courseInstructorQueryPrimary.mockReturnValue({
+      go: vi.fn().mockResolvedValue({
+        data: [
+          { courseId: course.courseId, instructorId: INSTRUCTOR_SUB },
+          { courseId: course.courseId, instructorId: 'co-instructor' },
+        ],
+      }),
+    });
+
+    await callAs().archiveCourse({ courseId: course.courseId });
+
+    expect(courseInstructorQueryPrimary).toHaveBeenCalledWith({
+      courseId: course.courseId,
+    });
+    expect(courseInstructorPatch).toHaveBeenCalledWith({
+      courseId: course.courseId,
+      instructorId: INSTRUCTOR_SUB,
+    });
+    expect(courseInstructorPatch).toHaveBeenCalledWith({
+      courseId: course.courseId,
+      instructorId: 'co-instructor',
+    });
+    expect(courseInstructorPatchSet).toHaveBeenCalledWith({
+      courseUpdatedAt: course.updatedAt,
+    });
+    expect(courseInstructorPatchSet).toHaveBeenCalledTimes(2);
   });
 });

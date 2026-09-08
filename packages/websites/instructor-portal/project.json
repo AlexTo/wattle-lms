@@ -28,6 +28,13 @@
         "name": "InstructorApi",
         "auth": "cognito",
         "isRestApi": true
+      },
+      {
+        "generator": "ts#trpc-api#react-connection",
+        "path": "src/components/CoreApiClientProvider",
+        "name": "CoreApi",
+        "auth": "cognito",
+        "isRestApi": true
       }
     ],
     "ports": [4200]
@@ -53,6 +60,10 @@
       "dependsOn": [
         {
           "projects": ["@wattle/instructor-api"],
+          "target": "dev"
+        },
+        {
+          "projects": ["@wattle/core-api"],
           "target": "dev"
         }
       ],
