@@ -1,60 +1,115 @@
 {
   "migrations": [
     {
-      "version": "1.0.0-rc.94",
-      "description": "Deploy using CloudFormation express mode from the deploy and deploy-sandbox targets of ts#infra projects",
-      "implementation": "./src/migrations/latest/infra-deploy-express-mode/migration",
+      "version": "1.0.0-rc.98",
+      "description": "Update the deploy-sandbox and destroy-sandbox stage patterns to match stacks nested below the stage's stacks, so cdk destroy removes the website WebACL stack",
+      "implementation": "./src/migrations/latest/sandbox-pattern-nested-stacks/migration",
       "package": "@aws/nx-plugin",
-      "name": "latest-infra-deploy-express-mode"
+      "name": "latest-sandbox-pattern-nested-stacks"
     },
     {
-      "version": "1.0.0-rc.94",
-      "description": "Replace the ncp, rimraf, make-dir-cli and cpy-cli filesystem CLIs with shx",
-      "implementation": "./src/migrations/latest/shx-fs-commands/migration",
+      "version": "1.0.0-rc.98",
+      "description": "Move the shared shadcn package's components onto the cn package the shadcn registry now depends on",
+      "implementation": "./src/migrations/latest/shadcn-cn-package/migration",
       "package": "@aws/nx-plugin",
-      "name": "latest-shx-fs-commands"
+      "name": "latest-shadcn-cn-package"
     },
     {
-      "version": "1.0.0-rc.94",
-      "description": "Cache the AgentCore ADOT install in its own target so editing an agent no longer re-runs it",
-      "implementation": "./src/migrations/latest/agent-core-vendor-target/migration",
+      "version": "1.0.0-rc.97",
+      "description": "Expose a non-optional gatewayUrl accessor on the vended AgentCoreGateway construct",
+      "implementation": "./src/migrations/v1.0.0-rc.97/0001-gateway-url-accessor/migration",
       "package": "@aws/nx-plugin",
-      "name": "latest-agent-core-vendor-target"
+      "name": "v1.0.0-rc.97-0001-gateway-url-accessor"
     },
     {
-      "version": "1.0.0-rc.95",
-      "description": "Exclude the transient bundle rolldown writes while loading a TypeScript config from Biome and from git, so a concurrent format or lint target cannot fail on it",
-      "implementation": "./src/migrations/latest/rolldown-config-bundle-transient/migration",
+      "version": "1.0.0-rc.97",
+      "description": "Scope the CDK infrastructure checkov target's cache inputs so the security scan cannot serve a stale pass",
+      "implementation": "./src/migrations/v1.0.0-rc.97/0002-checkov-scan-cache-inputs/migration",
       "package": "@aws/nx-plugin",
-      "name": "latest-rolldown-config-bundle-transient"
+      "name": "v1.0.0-rc.97-0002-checkov-scan-cache-inputs"
     },
     {
-      "version": "1.0.0-rc.95",
-      "description": "Declare @aws-sdk/client-s3 in the shared agent-connection project so @strands-agents/sdk resolves to a single peer-suffixed instance",
-      "implementation": "./src/migrations/latest/agent-connection-pin-strands-peers/migration",
+      "version": "1.0.0-rc.97",
+      "description": "Run the Terraform validate target with -backend=false so it works before bootstrap",
+      "implementation": "./src/migrations/v1.0.0-rc.97/0003-terraform-validate-without-backend/migration",
       "package": "@aws/nx-plugin",
-      "name": "latest-agent-connection-pin-strands-peers"
+      "name": "v1.0.0-rc.97-0003-terraform-validate-without-backend"
     },
     {
-      "version": "1.0.0-rc.95",
-      "description": "Ignore the temporary files pnpm writes at the workspace root while materialising packages, which otherwise invalidate the Nx project graph",
-      "implementation": "./src/migrations/latest/ignore-package-manager-temp-files/migration",
+      "version": "1.0.0-rc.97",
+      "description": "Add powertools Lambda context injection and cold start metrics to Python Lambda handlers",
+      "implementation": "./src/migrations/v1.0.0-rc.97/0004-py-lambda-powertools-context/migration",
       "package": "@aws/nx-plugin",
-      "name": "latest-ignore-package-manager-temp-files"
+      "name": "v1.0.0-rc.97-0004-py-lambda-powertools-context"
     },
     {
-      "version": "1.0.0-rc.95",
-      "description": "Move the shared shadcn package from a tsconfig paths alias to package.json imports/exports, matching the shadcn CLI's own monorepo resolution",
-      "implementation": "./src/migrations/latest/shadcn-package-imports-exports/migration",
+      "version": "1.0.0-rc.97",
+      "description": "Alias the extensions.smithy vendor-extension traits so Smithy emits x-query / x-mutation / x-cursor",
+      "implementation": "./src/migrations/v1.0.0-rc.97/0005-smithy-extension-trait-aliases/migration",
       "package": "@aws/nx-plugin",
-      "name": "latest-shadcn-package-imports-exports"
+      "name": "v1.0.0-rc.97-0005-smithy-extension-trait-aliases"
     },
     {
-      "version": "1.0.0-rc.95",
+      "version": "1.0.0-rc.97",
+      "description": "Add build, lint, format and typecheck targets plus a tsconfig.json to AgentCore Gateway and Harness projects",
+      "implementation": "./src/migrations/v1.0.0-rc.97/0006-script-project-quality-gates/migration",
+      "package": "@aws/nx-plugin",
+      "name": "v1.0.0-rc.97-0006-script-project-quality-gates"
+    },
+    {
+      "version": "1.0.0",
       "description": "Sync vended dependency versions and the tracked plugin version to those vended by this release",
       "implementation": "./src/utils/version-upgrade-migration/migration",
       "package": "@aws/nx-plugin",
       "name": "sync-vended-versions"
+    },
+    {
+      "version": "23.2.0-beta.6",
+      "description": "Replace `__dirname` with `import.meta.dirname` in `vite.config.mts`/`vitest.config.mts` files so they work with Vite's `configLoader: 'native'`.",
+      "implementation": "./dist/src/migrations/update-23-2-0/use-import-meta-dirname",
+      "documentation": "./dist/src/migrations/update-23-2-0/use-import-meta-dirname.md",
+      "package": "@nx/vitest",
+      "name": "update-23-2-0-use-import-meta-dirname"
+    },
+    {
+      "version": "23.2.0-beta.8",
+      "description": "Sets \"cache\" on some executor-based target defaults whose caching was previously enabled by a target name default, maintaining compatibility with how cacheability resolved before Nx 23. Keys the migration cannot decide are left alone and keep working through a deprecated runtime fallback.",
+      "implementation": "./dist/src/migrations/update-23-2-0/set-cache-on-executor-target-defaults",
+      "documentation": "./dist/src/migrations/update-23-2-0/set-cache-on-executor-target-defaults.md",
+      "package": "nx",
+      "name": "23-2-0-set-cache-on-executor-target-defaults"
+    },
+    {
+      "version": "23.2.0-beta.11",
+      "description": "Add the pnpm-workspace.yaml, patches, and local_path_modules paths to the outputs of @nx/js:prune-lockfile targets in pnpm workspaces, and the workspace root pnpm-workspace.yaml, package.json, and a pnpm-major runtime probe to their inputs, so a cache replay restores the pnpm install settings, patch files, and vendored local-path dependencies the executor now emits, and a change to the root pnpm install settings or a pnpm major switch does not replay a stale one.",
+      "implementation": "./dist/src/migrations/update-23-2-0/add-pnpm-prune-lockfile-cache-config",
+      "documentation": "./dist/src/migrations/update-23-2-0/add-pnpm-prune-lockfile-cache-config.md",
+      "package": "@nx/js",
+      "name": "update-23-2-0-add-pnpm-prune-lockfile-cache-config"
+    },
+    {
+      "version": "23.2.0-beta.11",
+      "description": "Add the workspace root pnpm-workspace.yaml, the pnpm settings fields of the root package.json, and a pnpm-major runtime probe to the inputs of build targets that emit the pruned pnpm deploy output (webpack, rspack, vite, esbuild with generatePackageJson; next, remix, tsc, swc with generateLockfile), so revoking a build-script approval, changing another pnpm install setting, or crossing the pnpm 10/11 boundary does not replay a cached output that still carries the old one.",
+      "implementation": "./dist/src/migrations/update-23-2-0/add-pnpm-deploy-output-cache-inputs",
+      "documentation": "./dist/src/migrations/update-23-2-0/add-pnpm-deploy-output-cache-inputs.md",
+      "package": "@nx/js",
+      "name": "update-23-2-0-add-pnpm-deploy-output-cache-inputs"
+    },
+    {
+      "version": "23.2.0-beta.4",
+      "description": "Add optional Module Federation packages when existing targets require them.",
+      "implementation": "./dist/src/migrations/update-23-2-0/add-optional-module-federation-packages",
+      "documentation": "./dist/src/migrations/update-23-2-0/add-optional-module-federation-packages.md",
+      "package": "@nx/react",
+      "name": "update-23-2-0-add-optional-module-federation-packages"
+    },
+    {
+      "version": "23.2.0-beta.4",
+      "description": "Add `@svgr/webpack` when a webpack config references it.",
+      "implementation": "./dist/src/migrations/update-23-2-0/add-svgr-webpack-if-used",
+      "documentation": "./dist/src/migrations/update-23-2-0/add-svgr-webpack-if-used.md",
+      "package": "@nx/react",
+      "name": "update-23-2-0-add-svgr-webpack-if-used"
     }
   ]
 }

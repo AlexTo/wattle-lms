@@ -2,7 +2,7 @@
  * Copyright Wattle LMS Contributors. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
-import { cn } from '#lib/utils';
+import { cn } from 'cn';
 
 function Skeleton({ className, ...props }: React.ComponentProps<'div'>) {
   return (
