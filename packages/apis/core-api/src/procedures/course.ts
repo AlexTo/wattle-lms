@@ -91,12 +91,37 @@ export const viewCourse = courseProcedure
   .query(async ({ ctx, input }) => {
     const coreTable = ctx.coreTable!;
 
-    const { data: course } = await coreTable.entities.course
-      .get({ courseId: input.courseId })
+    // Course, its modules, and their lessons all share the `curriculum`
+    // collection's partition (see @wattle/core-table's service.ts), so one
+    // query returns the whole curriculum instead of a get plus per-module
+    // lesson queries.
+    const {
+      data: { course: courses, module: modules, lesson: lessons },
+    } = await coreTable.collections
+      .curriculum({ courseId: input.courseId })
       .go();
+    const [course] = courses;
     if (!course) {
       throw new TRPCError({ code: 'NOT_FOUND' });
     }
 
-    return course;
+    const lessonsByModuleId = new Map<string, typeof lessons>();
+    for (const lesson of lessons) {
+      const moduleLessons = lessonsByModuleId.get(lesson.moduleId) ?? [];
+      moduleLessons.push(lesson);
+      lessonsByModuleId.set(lesson.moduleId, moduleLessons);
+    }
+
+    return {
+      ...course,
+      modules: modules
+        .slice()
+        .sort((a, b) => a.order - b.order)
+        .map((module) => ({
+          ...module,
+          lessons: (lessonsByModuleId.get(module.moduleId) ?? [])
+            .slice()
+            .sort((a, b) => a.order - b.order),
+        })),
+    };
   });

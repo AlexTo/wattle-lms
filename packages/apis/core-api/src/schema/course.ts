@@ -67,4 +67,31 @@ export const ViewCourseInputSchema = z.object({
 
 export type IViewCourseInput = z.output<typeof ViewCourseInputSchema>;
 
-export const ViewCourseOutputSchema = CourseSchema;
+export const LessonSchema = z.object({
+  lessonId: z.string(),
+  moduleId: z.string(),
+  courseId: z.string(),
+  title: z.string(),
+  content: z.string().optional(),
+  order: z.number(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export type ILesson = z.output<typeof LessonSchema>;
+
+export const ModuleSchema = z.object({
+  moduleId: z.string(),
+  courseId: z.string(),
+  title: z.string(),
+  order: z.number(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  lessons: z.array(LessonSchema),
+});
+
+export type IModule = z.output<typeof ModuleSchema>;
+
+export const ViewCourseOutputSchema = CourseSchema.extend({
+  modules: z.array(ModuleSchema),
+});
