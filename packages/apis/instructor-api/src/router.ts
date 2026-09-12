@@ -5,7 +5,11 @@
 
 import { t } from './init.js';
 import { archiveCourse, createCourse } from './procedures/course.js';
-import { createLesson, updateLesson } from './procedures/lesson.js';
+import {
+  createLesson,
+  deleteLesson,
+  updateLesson,
+} from './procedures/lesson.js';
 import { createModule } from './procedures/module.js';
 
 export const router = t.router;
@@ -21,6 +25,7 @@ export const appRouter = router({
   lesson: router({
     create: createLesson,
     update: updateLesson,
+    delete: deleteLesson,
   }),
 });
 

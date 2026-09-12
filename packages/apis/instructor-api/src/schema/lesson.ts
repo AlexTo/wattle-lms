@@ -44,3 +44,15 @@ export type IUpdateLessonInput = z.output<typeof UpdateLessonInputSchema>;
 export const UpdateLessonOutputSchema = LessonSchema;
 
 export type IUpdateLessonOutput = z.output<typeof UpdateLessonOutputSchema>;
+
+export const DeleteLessonInputSchema = z.object({
+  courseId: z.string(),
+  moduleId: z.string(),
+  lessonId: z.string(),
+});
+
+export type IDeleteLessonInput = z.output<typeof DeleteLessonInputSchema>;
+
+export const DeleteLessonOutputSchema = LessonSchema;
+
+export type IDeleteLessonOutput = z.output<typeof DeleteLessonOutputSchema>;
