@@ -18,12 +18,14 @@ const {
   courseQueryByStatus,
   courseGet,
   userGet,
+  curriculumCollection,
 } = vi.hoisted(() => ({
   courseInstructorQueryByInstructor: vi.fn(),
   courseInstructorQueryPrimary: vi.fn(),
   courseQueryByStatus: vi.fn(),
   courseGet: vi.fn(),
   userGet: vi.fn(),
+  curriculumCollection: vi.fn(),
 }));
 
 vi.mock('@wattle/core-table', () => ({
@@ -40,6 +42,9 @@ vi.mock('@wattle/core-table', () => ({
           primary: courseInstructorQueryPrimary,
         },
       },
+    },
+    collections: {
+      curriculum: curriculumCollection,
     },
   })),
 }));
@@ -305,23 +310,85 @@ describe('viewCourse', () => {
     await expect(
       callAnonymously().viewCourse({ courseId: course.courseId }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
-    expect(courseGet).not.toHaveBeenCalled();
+    expect(curriculumCollection).not.toHaveBeenCalled();
   });
 
-  it('returns the course when found', async () => {
-    courseGet.mockReturnValue({
-      go: vi.fn().mockResolvedValue({ data: course }),
+  it('returns the course with an empty curriculum when it has no modules', async () => {
+    curriculumCollection.mockReturnValue({
+      go: vi.fn().mockResolvedValue({
+        data: { course: [course], module: [], lesson: [] },
+      }),
     });
 
     const result = await callAsUser().viewCourse({ courseId: course.courseId });
 
-    expect(courseGet).toHaveBeenCalledWith({ courseId: course.courseId });
-    expect(result).toEqual(course);
+    expect(curriculumCollection).toHaveBeenCalledWith({
+      courseId: course.courseId,
+    });
+    expect(result).toEqual({ ...course, modules: [] });
+  });
+
+  it('nests each module’s lessons, sorted by order', async () => {
+    const module1 = {
+      moduleId: 'module-2',
+      courseId: course.courseId,
+      title: 'Second module',
+      order: 2,
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    };
+    const module2 = {
+      moduleId: 'module-1',
+      courseId: course.courseId,
+      title: 'First module',
+      order: 1,
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    };
+    const lesson1 = {
+      lessonId: 'lesson-2',
+      moduleId: 'module-1',
+      courseId: course.courseId,
+      title: 'Second lesson',
+      order: 2,
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    };
+    const lesson2 = {
+      lessonId: 'lesson-1',
+      moduleId: 'module-1',
+      courseId: course.courseId,
+      title: 'First lesson',
+      order: 1,
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    };
+    curriculumCollection.mockReturnValue({
+      go: vi.fn().mockResolvedValue({
+        data: {
+          course: [course],
+          module: [module1, module2],
+          lesson: [lesson1, lesson2],
+        },
+      }),
+    });
+
+    const result = await callAsUser().viewCourse({ courseId: course.courseId });
+
+    expect(result).toEqual({
+      ...course,
+      modules: [
+        { ...module2, lessons: [lesson2, lesson1] },
+        { ...module1, lessons: [] },
+      ],
+    });
   });
 
   it('throws NOT_FOUND when the course does not exist', async () => {
-    courseGet.mockReturnValue({
-      go: vi.fn().mockResolvedValue({ data: undefined }),
+    curriculumCollection.mockReturnValue({
+      go: vi.fn().mockResolvedValue({
+        data: { course: [], module: [], lesson: [] },
+      }),
     });
 
     await expect(
