@@ -5,15 +5,25 @@
 import type { APIGatewayProxyEvent } from 'aws-lambda';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { t } from '../init.js';
-import { createLesson } from './lesson.js';
+import { createLesson, updateLesson } from './lesson.js';
 
-const { courseInstructorGet, moduleGet, lessonQueryPrimary, lessonCreate } =
-  vi.hoisted(() => ({
-    courseInstructorGet: vi.fn(),
-    moduleGet: vi.fn(),
-    lessonQueryPrimary: vi.fn(),
-    lessonCreate: vi.fn(),
-  }));
+const {
+  courseInstructorGet,
+  moduleGet,
+  lessonQueryPrimary,
+  lessonCreate,
+  lessonGet,
+  lessonPatch,
+  lessonPatchSet,
+} = vi.hoisted(() => ({
+  courseInstructorGet: vi.fn(),
+  moduleGet: vi.fn(),
+  lessonQueryPrimary: vi.fn(),
+  lessonCreate: vi.fn(),
+  lessonGet: vi.fn(),
+  lessonPatch: vi.fn(),
+  lessonPatchSet: vi.fn(),
+}));
 
 vi.mock('@wattle/core-table', () => ({
   createCoreTableService: vi.fn(async () => ({
@@ -29,12 +39,14 @@ vi.mock('@wattle/core-table', () => ({
           primary: lessonQueryPrimary,
         },
         create: lessonCreate,
+        get: lessonGet,
+        patch: lessonPatch,
       },
     },
   })),
 }));
 
-const router = t.router({ createLesson });
+const router = t.router({ createLesson, updateLesson });
 const caller = t.createCallerFactory(router);
 
 const INSTRUCTOR_SUB = 'instructor-1';
@@ -87,6 +99,13 @@ beforeEach(() => {
   lessonCreate.mockReturnValue({
     go: vi.fn().mockResolvedValue({ data: lesson }),
   });
+  lessonGet.mockReturnValue({
+    go: vi.fn().mockResolvedValue({ data: lesson }),
+  });
+  lessonPatchSet.mockReturnValue({
+    go: vi.fn().mockResolvedValue({ data: lesson }),
+  });
+  lessonPatch.mockReturnValue({ set: lessonPatchSet });
 });
 
 describe('createLesson', () => {
@@ -186,5 +205,115 @@ describe('createLesson', () => {
       title: 'Welcome',
     });
     expect(result).toEqual(lesson);
+  });
+
+  it('passes the description through to the created lesson', async () => {
+    await callAs().createLesson({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      title: 'Welcome',
+      description: 'A quick tour of the course',
+    });
+
+    expect(lessonCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ description: 'A quick tour of the course' }),
+    );
+  });
+});
+
+describe('updateLesson', () => {
+  it('rejects callers who are not in the instructor group before checking course membership', async () => {
+    await expect(
+      callAs(['student']).updateLesson({
+        courseId: COURSE_ID,
+        moduleId: MODULE_ID,
+        lessonId: lesson.lessonId,
+        title: 'Updated title',
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(courseInstructorGet).not.toHaveBeenCalled();
+  });
+
+  // Invariant: only an instructor who actually teaches the course may edit
+  // its lessons -- membership in the `instructor` group is not enough.
+  it('throws FORBIDDEN when the caller does not teach the course', async () => {
+    courseInstructorGet.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: undefined }),
+    });
+
+    await expect(
+      callAs().updateLesson({
+        courseId: COURSE_ID,
+        moduleId: MODULE_ID,
+        lessonId: lesson.lessonId,
+        title: 'Updated title',
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(lessonGet).not.toHaveBeenCalled();
+    expect(lessonPatch).not.toHaveBeenCalled();
+  });
+
+  it('throws NOT_FOUND when the lesson does not exist', async () => {
+    lessonGet.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: undefined }),
+    });
+
+    await expect(
+      callAs().updateLesson({
+        courseId: COURSE_ID,
+        moduleId: MODULE_ID,
+        lessonId: 'missing-lesson',
+        title: 'Updated title',
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(lessonPatch).not.toHaveBeenCalled();
+  });
+
+  it('only patches fields provided in the input', async () => {
+    await callAs().updateLesson({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: lesson.lessonId,
+      title: 'Updated title',
+    });
+
+    expect(lessonPatch).toHaveBeenCalledWith({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: lesson.lessonId,
+    });
+    expect(lessonPatchSet).toHaveBeenCalledWith({ title: 'Updated title' });
+  });
+
+  it('patches title, description, and order together when all are provided', async () => {
+    await callAs().updateLesson({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: lesson.lessonId,
+      title: 'Updated title',
+      description: 'Updated description',
+      order: 2,
+    });
+
+    expect(lessonPatchSet).toHaveBeenCalledWith({
+      title: 'Updated title',
+      description: 'Updated description',
+      order: 2,
+    });
+  });
+
+  it('returns the updated lesson', async () => {
+    const updatedLesson = { ...lesson, title: 'Updated title' };
+    lessonPatchSet.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: updatedLesson }),
+    });
+
+    const result = await callAs().updateLesson({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: lesson.lessonId,
+      title: 'Updated title',
+    });
+    expect(result).toEqual(updatedLesson);
   });
 });

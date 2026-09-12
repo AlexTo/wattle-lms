@@ -29,6 +29,7 @@ import {
 } from '../../components/course-status';
 import { CreateLessonDialog } from '../../components/create-lesson-dialog';
 import { CreateModuleDialog } from '../../components/create-module-dialog';
+import { EditLessonDialog } from '../../components/edit-lesson-dialog';
 import { Spinner } from '../../components/spinner';
 import { useCoreApi } from '../../hooks/useCoreApi';
 
@@ -203,16 +204,23 @@ function RouteComponent() {
                       >
                         Lesson
                       </Badge>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        type="button"
-                        disabled
-                        title="Editing lessons isn't available yet"
-                        aria-label={`Edit lesson ${lesson.title}`}
-                      >
-                        <PencilLine />
-                      </Button>
+                      <EditLessonDialog
+                        courseId={course.courseId}
+                        moduleId={module.moduleId}
+                        lessonId={lesson.lessonId}
+                        title={lesson.title}
+                        description={lesson.description}
+                        trigger={
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            type="button"
+                            aria-label={`Edit lesson ${lesson.title}`}
+                          >
+                            <PencilLine />
+                          </Button>
+                        }
+                      />
                       <Button
                         variant="ghost"
                         size="icon-sm"
@@ -254,8 +262,8 @@ function RouteComponent() {
 
       <div className="flex items-start gap-2 rounded-xl border border-dashed bg-muted/30 p-4 text-xs leading-5 text-muted-foreground">
         <Info className="mt-0.5 size-4 shrink-0" /> Modules and lessons shown
-        here are live, and you can add new ones. Editing or reordering existing
-        content isn't wired up yet.
+        here are live, and you can add new ones or edit existing lessons.
+        Editing modules, reordering, and deleting content isn't wired up yet.
       </div>
     </main>
   );

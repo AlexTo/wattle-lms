@@ -8,6 +8,8 @@ import { courseProcedure } from '../init.js';
 import {
   CreateLessonInputSchema,
   CreateLessonOutputSchema,
+  UpdateLessonInputSchema,
+  UpdateLessonOutputSchema,
 } from '../schema/index.js';
 
 export const createLesson = courseProcedure
@@ -15,7 +17,7 @@ export const createLesson = courseProcedure
   .output(CreateLessonOutputSchema)
   .mutation(async ({ ctx, input }) => {
     const coreTable = ctx.coreTable!;
-    const { courseId, moduleId, title } = input;
+    const { courseId, moduleId, title, description } = input;
     const { sub: currentUser } = ctx.user;
 
     // Only instructors teaching this specific course may add lessons to it,
@@ -45,8 +47,51 @@ export const createLesson = courseProcedure
       lessons.reduce((max, lesson) => Math.max(max, lesson.order), 0) + 1;
 
     const { data: lesson } = await coreTable.entities.lesson
-      .create({ lessonId: uuidv7(), moduleId, courseId, title, order })
+      .create({
+        lessonId: uuidv7(),
+        moduleId,
+        courseId,
+        title,
+        description,
+        order,
+      })
       .go();
+
+    return lesson;
+  });
+
+export const updateLesson = courseProcedure
+  .input(UpdateLessonInputSchema)
+  .output(UpdateLessonOutputSchema)
+  .mutation(async ({ ctx, input }) => {
+    const coreTable = ctx.coreTable!;
+    const { courseId, moduleId, lessonId, title, description, order } = input;
+    const { sub: currentUser } = ctx.user;
+
+    // Only instructors teaching this specific course may edit its lessons,
+    // not just any member of the instructor group.
+    const { data: membership } = await coreTable.entities.courseInstructor
+      .get({ courseId, instructorId: currentUser })
+      .go();
+    if (!membership) {
+      throw new TRPCError({ code: 'FORBIDDEN' });
+    }
+
+    const { data: existing } = await coreTable.entities.lesson
+      .get({ courseId, moduleId, lessonId })
+      .go();
+    if (!existing) {
+      throw new TRPCError({ code: 'NOT_FOUND' });
+    }
+
+    const { data: lesson } = await coreTable.entities.lesson
+      .patch({ courseId, moduleId, lessonId })
+      .set({
+        ...(title !== undefined && { title }),
+        ...(description !== undefined && { description }),
+        ...(order !== undefined && { order }),
+      })
+      .go({ response: 'all_new' });
 
     return lesson;
   });

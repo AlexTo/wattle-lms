@@ -33,7 +33,7 @@ export const createLessonEntity = async () =>
           type: 'string',
           required: true,
         },
-        content: {
+        description: {
           type: 'string',
         },
         // Sequencing within the module. Not part of any key: lesson counts
