@@ -30,14 +30,14 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from 'react-oidc-context';
-import { Alert } from '../../components/alert';
+import { Alert } from '../../../components/alert';
 import {
   type CourseStatus,
   courseStatusStyles,
-} from '../../components/course-status';
-import { CreateCourseDialog } from '../../components/create-course-dialog';
-import { Spinner } from '../../components/spinner';
-import { useCoreApi } from '../../hooks/useCoreApi';
+} from '../../../components/course-status';
+import { CreateCourseDialog } from '../../../components/create-course-dialog';
+import { Spinner } from '../../../components/spinner';
+import { useCoreApi } from '../../../hooks/useCoreApi';
 
 export const Route = createFileRoute('/_authenticated/my-courses')({
   component: RouteComponent,

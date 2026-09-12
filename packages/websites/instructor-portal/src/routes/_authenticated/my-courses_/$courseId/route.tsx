@@ -21,17 +21,17 @@ import {
   PencilLine,
   Trash2,
 } from 'lucide-react';
-import { useBreadcrumbLabel } from '../../components/AppLayout/breadcrumb-label';
-import { Alert } from '../../components/alert';
+import { useBreadcrumbLabel } from '../../../../components/AppLayout/breadcrumb-label';
+import { Alert } from '../../../../components/alert';
 import {
   type CourseStatus,
   courseStatusStyles,
-} from '../../components/course-status';
-import { CreateLessonDialog } from '../../components/create-lesson-dialog';
-import { CreateModuleDialog } from '../../components/create-module-dialog';
-import { EditLessonDialog } from '../../components/edit-lesson-dialog';
-import { Spinner } from '../../components/spinner';
-import { useCoreApi } from '../../hooks/useCoreApi';
+} from '../../../../components/course-status';
+import { Spinner } from '../../../../components/spinner';
+import { useCoreApi } from '../../../../hooks/useCoreApi';
+import { CreateLessonDialog } from './-components/create-lesson-dialog';
+import { CreateModuleDialog } from './-components/create-module-dialog';
+import { EditLessonDialog } from './-components/edit-lesson-dialog';
 
 export const Route = createFileRoute('/_authenticated/my-courses_/$courseId')({
   component: RouteComponent,
