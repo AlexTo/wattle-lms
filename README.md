@@ -29,6 +29,9 @@
 
 ---
 
+> [!IMPORTANT]
+> Wattle LMS is under active development and is not yet feature complete. Expect breaking changes and rough edges until a stable release is tagged.
+
 **Wattle LMS** is a free and open source, serverless, AWS-native Learning Management System: course delivery, enrolment, and student/instructor/admin portals, deployable to your own AWS account.
 
 It's opinionated by design: one cloud provider, one way to deploy, rather than a pluggable backend you configure yourself. The trade-off is deliberate, easier to deploy and fewer integration quirks, instead of maximum backend flexibility. And it's built with agentic AI from the start rather than bolted on later: an AI assistant and personalised learning are part of the core experience, not a paid add-on.
