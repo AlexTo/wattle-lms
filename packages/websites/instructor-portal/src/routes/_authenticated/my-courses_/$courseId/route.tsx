@@ -31,6 +31,7 @@ import { Spinner } from '../../../../components/spinner';
 import { useCoreApi } from '../../../../hooks/useCoreApi';
 import { CreateLessonDialog } from './-components/create-lesson-dialog';
 import { CreateModuleDialog } from './-components/create-module-dialog';
+import { DeleteLessonDialog } from './-components/delete-lesson-dialog';
 import { EditLessonDialog } from './-components/edit-lesson-dialog';
 
 export const Route = createFileRoute('/_authenticated/my-courses_/$courseId')({
@@ -185,85 +186,120 @@ function RouteComponent() {
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
-                  {module.lessons.map((lesson) => (
-                    <div
-                      key={lesson.lessonId}
-                      className="group flex items-center gap-2 border-t px-4 py-2.5 first:border-t-0 sm:pl-12 sm:pr-5"
-                    >
-                      <GripVertical
-                        className="size-4 shrink-0 text-muted-foreground"
-                        aria-hidden="true"
-                      />
-                      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
-                        <FileText className="size-4" />
+                  {module.lessons.length === 0 ? (
+                    <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
+                      <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                        <FileText className="size-5" />
                       </div>
-                      <span className="font-medium">{lesson.title}</span>
-                      <Badge
-                        variant="outline"
-                        className="hidden text-[10px] sm:inline-flex"
-                      >
-                        Lesson
-                      </Badge>
-                      <EditLessonDialog
+                      <h4 className="mt-1 text-sm font-semibold">
+                        No lessons yet
+                      </h4>
+                      <p className="mx-auto max-w-sm text-sm leading-6 text-muted-foreground">
+                        Lessons hold the content students work through inside
+                        this module.
+                      </p>
+                      <CreateLessonDialog
                         courseId={course.courseId}
                         moduleId={module.moduleId}
-                        lessonId={lesson.lessonId}
-                        title={lesson.title}
-                        description={lesson.description}
                         trigger={
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            type="button"
-                            aria-label={`Edit lesson ${lesson.title}`}
-                          >
-                            <PencilLine />
+                          <Button className="mt-2" size="sm" type="button">
+                            <CirclePlus /> New lesson
                           </Button>
                         }
                       />
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        type="button"
-                        disabled
-                        title="Removing lessons isn't available yet"
-                        aria-label={`Remove lesson ${lesson.title}`}
-                        className="-ml-2"
-                      >
-                        <Trash2 />
-                      </Button>
                     </div>
-                  ))}
-                  <div className="flex flex-wrap items-center gap-2 border-t bg-muted/20 px-4 py-3 sm:pl-12 sm:pr-5">
-                    <CreateLessonDialog
-                      courseId={course.courseId}
-                      moduleId={module.moduleId}
-                      trigger={
-                        <Button variant="outline" size="sm" type="button">
-                          <FileText /> New lesson
-                        </Button>
-                      }
-                    />
-                  </div>
+                  ) : (
+                    <>
+                      {module.lessons.map((lesson) => (
+                        <div
+                          key={lesson.lessonId}
+                          className="group flex items-center gap-2 border-t px-4 py-2.5 first:border-t-0 sm:pl-12 sm:pr-5"
+                        >
+                          <GripVertical
+                            className="size-4 shrink-0 text-muted-foreground"
+                            aria-hidden="true"
+                          />
+                          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
+                            <FileText className="size-4" />
+                          </div>
+                          <span className="font-medium">{lesson.title}</span>
+                          <Badge
+                            variant="outline"
+                            className="hidden text-[10px] sm:inline-flex"
+                          >
+                            Lesson
+                          </Badge>
+                          <EditLessonDialog
+                            courseId={course.courseId}
+                            moduleId={module.moduleId}
+                            lessonId={lesson.lessonId}
+                            title={lesson.title}
+                            description={lesson.description}
+                            trigger={
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                type="button"
+                                aria-label={`Edit lesson ${lesson.title}`}
+                              >
+                                <PencilLine />
+                              </Button>
+                            }
+                          />
+                          <DeleteLessonDialog
+                            courseId={course.courseId}
+                            moduleId={module.moduleId}
+                            lessonId={lesson.lessonId}
+                            title={lesson.title}
+                            trigger={
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                type="button"
+                                aria-label={`Remove lesson ${lesson.title}`}
+                                className="-ml-2"
+                              >
+                                <Trash2 />
+                              </Button>
+                            }
+                          />
+                        </div>
+                      ))}
+                      <div className="flex flex-wrap items-center justify-end gap-2 border-t bg-muted/20 px-4 py-3 sm:pl-12 sm:pr-5">
+                        <CreateLessonDialog
+                          courseId={course.courseId}
+                          moduleId={module.moduleId}
+                          trigger={
+                            <Button variant="outline" size="sm" type="button">
+                              <FileText /> New lesson
+                            </Button>
+                          }
+                        />
+                      </div>
+                    </>
+                  )}
                 </CardContent>
               </Card>
             ))}
-            <CreateModuleDialog
-              courseId={course.courseId}
-              trigger={
-                <Button type="button" variant="outline">
-                  <CirclePlus /> New module
-                </Button>
-              }
-            />
+            <div className="flex justify-end">
+              <CreateModuleDialog
+                courseId={course.courseId}
+                trigger={
+                  <Button type="button" variant="outline">
+                    <CirclePlus /> New module
+                  </Button>
+                }
+              />
+            </div>
           </div>
         )}
       </section>
 
       <div className="flex items-start gap-2 rounded-xl border border-dashed bg-muted/30 p-4 text-xs leading-5 text-muted-foreground">
         <Info className="mt-0.5 size-4 shrink-0" /> Modules and lessons shown
-        here are live, and you can add new ones or edit existing lessons.
-        Editing modules, reordering, and deleting content isn't wired up yet.
+        here are live, and you can add new ones, edit existing lessons, or
+        delete lessons. Editing modules, reordering, and deleting modules isn't
+        wired up yet.
       </div>
     </main>
   );

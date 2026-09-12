@@ -5,7 +5,7 @@
 import type { APIGatewayProxyEvent } from 'aws-lambda';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { t } from '../init.js';
-import { createLesson, updateLesson } from './lesson.js';
+import { createLesson, deleteLesson, updateLesson } from './lesson.js';
 
 const {
   courseInstructorGet,
@@ -15,6 +15,7 @@ const {
   lessonGet,
   lessonPatch,
   lessonPatchSet,
+  lessonDelete,
 } = vi.hoisted(() => ({
   courseInstructorGet: vi.fn(),
   moduleGet: vi.fn(),
@@ -23,6 +24,7 @@ const {
   lessonGet: vi.fn(),
   lessonPatch: vi.fn(),
   lessonPatchSet: vi.fn(),
+  lessonDelete: vi.fn(),
 }));
 
 vi.mock('@wattle/core-table', () => ({
@@ -41,12 +43,13 @@ vi.mock('@wattle/core-table', () => ({
         create: lessonCreate,
         get: lessonGet,
         patch: lessonPatch,
+        delete: lessonDelete,
       },
     },
   })),
 }));
 
-const router = t.router({ createLesson, updateLesson });
+const router = t.router({ createLesson, updateLesson, deleteLesson });
 const caller = t.createCallerFactory(router);
 
 const INSTRUCTOR_SUB = 'instructor-1';
@@ -106,6 +109,9 @@ beforeEach(() => {
     go: vi.fn().mockResolvedValue({ data: lesson }),
   });
   lessonPatch.mockReturnValue({ set: lessonPatchSet });
+  lessonDelete.mockReturnValue({
+    go: vi.fn().mockResolvedValue({ data: lesson }),
+  });
 });
 
 describe('createLesson', () => {
@@ -315,5 +321,67 @@ describe('updateLesson', () => {
       title: 'Updated title',
     });
     expect(result).toEqual(updatedLesson);
+  });
+});
+
+describe('deleteLesson', () => {
+  it('rejects callers who are not in the instructor group before checking course membership', async () => {
+    await expect(
+      callAs(['student']).deleteLesson({
+        courseId: COURSE_ID,
+        moduleId: MODULE_ID,
+        lessonId: lesson.lessonId,
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(courseInstructorGet).not.toHaveBeenCalled();
+  });
+
+  // Invariant: only an instructor who actually teaches the course may
+  // delete its lessons -- membership in the `instructor` group is not
+  // enough.
+  it('throws FORBIDDEN when the caller does not teach the course', async () => {
+    courseInstructorGet.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: undefined }),
+    });
+
+    await expect(
+      callAs().deleteLesson({
+        courseId: COURSE_ID,
+        moduleId: MODULE_ID,
+        lessonId: lesson.lessonId,
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(lessonGet).not.toHaveBeenCalled();
+    expect(lessonDelete).not.toHaveBeenCalled();
+  });
+
+  it('throws NOT_FOUND when the lesson does not exist', async () => {
+    lessonGet.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: undefined }),
+    });
+
+    await expect(
+      callAs().deleteLesson({
+        courseId: COURSE_ID,
+        moduleId: MODULE_ID,
+        lessonId: 'missing-lesson',
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(lessonDelete).not.toHaveBeenCalled();
+  });
+
+  it('deletes a lesson the caller teaches and returns it', async () => {
+    const result = await callAs().deleteLesson({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: lesson.lessonId,
+    });
+
+    expect(lessonDelete).toHaveBeenCalledWith({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: lesson.lessonId,
+    });
+    expect(result).toEqual(lesson);
   });
 });

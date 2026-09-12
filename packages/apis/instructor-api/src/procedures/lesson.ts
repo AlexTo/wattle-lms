@@ -8,6 +8,8 @@ import { courseProcedure } from '../init.js';
 import {
   CreateLessonInputSchema,
   CreateLessonOutputSchema,
+  DeleteLessonInputSchema,
+  DeleteLessonOutputSchema,
   UpdateLessonInputSchema,
   UpdateLessonOutputSchema,
 } from '../schema/index.js';
@@ -92,6 +94,43 @@ export const updateLesson = courseProcedure
         ...(order !== undefined && { order }),
       })
       .go({ response: 'all_new' });
+
+    return lesson;
+  });
+
+export const deleteLesson = courseProcedure
+  .input(DeleteLessonInputSchema)
+  .output(DeleteLessonOutputSchema)
+  .mutation(async ({ ctx, input }) => {
+    const coreTable = ctx.coreTable!;
+    const { courseId, moduleId, lessonId } = input;
+    const { sub: currentUser } = ctx.user;
+
+    // Only instructors teaching this specific course may delete its
+    // lessons, not just any member of the instructor group.
+    const { data: membership } = await coreTable.entities.courseInstructor
+      .get({ courseId, instructorId: currentUser })
+      .go();
+    if (!membership) {
+      throw new TRPCError({ code: 'FORBIDDEN' });
+    }
+
+    const { data: existing } = await coreTable.entities.lesson
+      .get({ courseId, moduleId, lessonId })
+      .go();
+    if (!existing) {
+      throw new TRPCError({ code: 'NOT_FOUND' });
+    }
+
+    const { data: lesson } = await coreTable.entities.lesson
+      .delete({ courseId, moduleId, lessonId })
+      .go({ response: 'all_old' });
+    if (!lesson) {
+      throw new TRPCError({
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Failed to delete lesson',
+      });
+    }
 
     return lesson;
   });
