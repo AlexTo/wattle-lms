@@ -21,6 +21,7 @@ import {
   PencilLine,
   Trash2,
 } from 'lucide-react';
+import { useBreadcrumbLabel } from '../../components/AppLayout/breadcrumb-label';
 import { Alert } from '../../components/alert';
 import {
   type CourseStatus,
@@ -31,7 +32,7 @@ import { CreateModuleDialog } from '../../components/create-module-dialog';
 import { Spinner } from '../../components/spinner';
 import { useCoreApi } from '../../hooks/useCoreApi';
 
-export const Route = createFileRoute('/_authenticated/courses_/$courseId')({
+export const Route = createFileRoute('/_authenticated/my-courses_/$courseId')({
   component: RouteComponent,
 });
 
@@ -50,6 +51,8 @@ function RouteComponent() {
     error,
     data: course,
   } = useQuery(trpc.course.view.queryOptions({ courseId }));
+
+  useBreadcrumbLabel(course?.title);
 
   if (isPending) {
     return (

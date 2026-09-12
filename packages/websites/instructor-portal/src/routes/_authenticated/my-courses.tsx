@@ -39,7 +39,7 @@ import { CreateCourseDialog } from '../../components/create-course-dialog';
 import { Spinner } from '../../components/spinner';
 import { useCoreApi } from '../../hooks/useCoreApi';
 
-export const Route = createFileRoute('/_authenticated/courses')({
+export const Route = createFileRoute('/_authenticated/my-courses')({
   component: RouteComponent,
 });
 
@@ -275,7 +275,7 @@ function RouteComponent() {
                   </div>
                   <Button variant="outline" className="w-full" asChild>
                     <Link
-                      to="/courses/$courseId"
+                      to="/my-courses/$courseId"
                       params={{ courseId: course.courseId }}
                     >
                       Open course <ArrowRight />

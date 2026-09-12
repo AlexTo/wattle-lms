@@ -28,7 +28,7 @@ export function AppSidebar() {
     },
     {
       label: 'My Courses',
-      to: '/courses',
+      to: '/my-courses',
       icon: BookOpen,
     },
   ];

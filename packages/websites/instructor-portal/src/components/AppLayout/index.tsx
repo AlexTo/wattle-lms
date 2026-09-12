@@ -21,12 +21,21 @@ import * as React from 'react';
 import Config from '../../config';
 import { AppSidebar } from '../app-sidebar';
 import { UserMenu } from '../UserMenu';
+import { BreadcrumbOverrideContext } from './breadcrumb-label';
+
+// Static labels for path segments that don't come from an entity a route
+// might load (e.g. a course title) - those instead go through
+// BreadcrumbOverrideContext, keyed by full pathname rather than segment.
+const segmentLabels: Record<string, string> = {
+  'my-courses': 'My Courses',
+};
 
 const getBreadcrumbs = (
   matchRoute: ReturnType<typeof useMatchRoute>,
   pathName: string,
   search: string,
   defaultBreadcrumb: string,
+  overrides: Record<string, string>,
   availableRoutes?: string[],
 ) => {
   const segments = [
@@ -48,7 +57,7 @@ const getBreadcrumbs = (
 
     return {
       href: matched ? `${href}${search}` : '#',
-      text: segment,
+      text: overrides[href] ?? segmentLabels[segment] ?? segment,
     };
   });
 };
@@ -59,6 +68,22 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
   >([{ text: '/', href: '/' }]);
   const matchRoute = useMatchRoute();
   const { pathname, search } = useLocation();
+  const [overrides, setOverrides] = React.useState<Record<string, string>>({});
+
+  const setOverride = React.useCallback(
+    (path: string, label: string | undefined) => {
+      setOverrides((prev) => {
+        if (label === undefined) {
+          if (!(path in prev)) return prev;
+          const next = { ...prev };
+          delete next[path];
+          return next;
+        }
+        return { ...prev, [path]: label };
+      });
+    },
+    [],
+  );
 
   React.useEffect(() => {
     const breadcrumbs = getBreadcrumbs(
@@ -66,60 +91,63 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
       pathname,
       Object.entries(search).reduce((p, [k, v]) => p + `${k}=${v}`, ''),
       '/',
+      overrides,
     );
     setActiveBreadcrumbs(breadcrumbs);
-  }, [matchRoute, pathname, search]);
+  }, [matchRoute, pathname, search, overrides]);
 
   return (
-    <SidebarProvider>
-      <AppSidebar />
-      <SidebarInset>
-        <header className="supports-backdrop-blur:bg-background/60 sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-background/80 px-4 backdrop-blur">
-          <div className="flex items-center gap-3">
-            <SidebarTrigger className="-ml-1" />
-            <Separator orientation="vertical" className="h-6" />
-            <div className="flex items-center gap-2">
-              <img
-                alt={`${Config.applicationName} logo`}
-                className="size-10 rounded-lg border border-border/60 bg-background object-cover shadow-sm"
-                src={Config.logo}
-              />
-              <div className="flex flex-col leading-tight">
-                <span className="text-sm font-semibold">
-                  {Config.applicationName}
-                </span>
+    <BreadcrumbOverrideContext.Provider value={{ setOverride }}>
+      <SidebarProvider>
+        <AppSidebar />
+        <SidebarInset>
+          <header className="supports-backdrop-blur:bg-background/60 sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-background/80 px-4 backdrop-blur">
+            <div className="flex items-center gap-3">
+              <SidebarTrigger className="-ml-1" />
+              <Separator orientation="vertical" className="h-6" />
+              <div className="flex items-center gap-2">
+                <img
+                  alt={`${Config.applicationName} logo`}
+                  className="size-10 rounded-lg border border-border/60 bg-background object-cover shadow-sm"
+                  src={Config.logo}
+                />
+                <div className="flex flex-col leading-tight">
+                  <span className="text-sm font-semibold">
+                    {Config.applicationName}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
-          <div className="ml-auto flex items-center gap-3">
-            <UserMenu />
-          </div>
-        </header>
-        <div className="flex flex-1 flex-col gap-6 p-6 pt-4">
-          <Breadcrumb>
-            <BreadcrumbList>
-              {activeBreadcrumbs.map((crumb, index) => (
-                <React.Fragment key={crumb.href || index}>
-                  <BreadcrumbItem>
-                    {index === activeBreadcrumbs.length - 1 ? (
-                      <BreadcrumbPage>{crumb.text}</BreadcrumbPage>
-                    ) : (
-                      <BreadcrumbLink asChild>
-                        <Link to={crumb.href}>{crumb.text}</Link>
-                      </BreadcrumbLink>
+            <div className="ml-auto flex items-center gap-3">
+              <UserMenu />
+            </div>
+          </header>
+          <div className="flex flex-1 flex-col gap-6 p-6 pt-4">
+            <Breadcrumb>
+              <BreadcrumbList>
+                {activeBreadcrumbs.map((crumb, index) => (
+                  <React.Fragment key={crumb.href || index}>
+                    <BreadcrumbItem>
+                      {index === activeBreadcrumbs.length - 1 ? (
+                        <BreadcrumbPage>{crumb.text}</BreadcrumbPage>
+                      ) : (
+                        <BreadcrumbLink asChild>
+                          <Link to={crumb.href}>{crumb.text}</Link>
+                        </BreadcrumbLink>
+                      )}
+                    </BreadcrumbItem>
+                    {index < activeBreadcrumbs.length - 1 && (
+                      <BreadcrumbSeparator />
                     )}
-                  </BreadcrumbItem>
-                  {index < activeBreadcrumbs.length - 1 && (
-                    <BreadcrumbSeparator />
-                  )}
-                </React.Fragment>
-              ))}
-            </BreadcrumbList>
-          </Breadcrumb>
-          {children}
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
+                  </React.Fragment>
+                ))}
+              </BreadcrumbList>
+            </Breadcrumb>
+            {children}
+          </div>
+        </SidebarInset>
+      </SidebarProvider>
+    </BreadcrumbOverrideContext.Provider>
   );
 };
 

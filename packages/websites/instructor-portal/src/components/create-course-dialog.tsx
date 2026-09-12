@@ -53,7 +53,7 @@ export function CreateCourseDialog({ trigger }: { trigger: ReactNode }) {
         });
         setOpen(false);
         void navigate({
-          to: '/courses/$courseId',
+          to: '/my-courses/$courseId',
           params: { courseId: course.courseId },
         });
       } catch {

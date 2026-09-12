@@ -295,7 +295,7 @@ function RouteComponent() {
             </p>
           </div>
           <Button variant="outline" size="sm" asChild>
-            <Link to="/courses">
+            <Link to="/my-courses">
               View all courses <ArrowRight />
             </Link>
           </Button>
@@ -347,7 +347,7 @@ function RouteComponent() {
                 </p>
                 <Button variant="outline" className="w-full" asChild>
                   <Link
-                    to="/courses/$courseId"
+                    to="/my-courses/$courseId"
                     params={{ courseId: course.code }}
                   >
                     Open course <ArrowRight />
