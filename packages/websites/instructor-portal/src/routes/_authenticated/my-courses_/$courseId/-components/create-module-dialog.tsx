@@ -16,9 +16,9 @@ import {
 import { Input } from '@wattle/common-shadcn/components/ui/input';
 import { type ReactNode, useState } from 'react';
 import { z } from 'zod';
-import { useCoreApi } from '../hooks/useCoreApi';
-import { useInstructorApi } from '../hooks/useInstructorApi';
-import { Alert } from './alert';
+import { Alert } from '../../../../../components/alert';
+import { useCoreApi } from '../../../../../hooks/useCoreApi';
+import { useInstructorApi } from '../../../../../hooks/useInstructorApi';
 
 const moduleFormSchema = z.object({
   title: z.string().trim().min(1, 'Module title is required').max(200),

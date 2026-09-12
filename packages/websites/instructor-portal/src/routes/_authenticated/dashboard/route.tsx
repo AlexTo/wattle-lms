@@ -34,9 +34,9 @@ import { useAuth } from 'react-oidc-context';
 import {
   type CourseStatus,
   courseStatusStyles,
-} from '../../components/course-status';
-import { CreateCourseDialog } from '../../components/create-course-dialog';
-import { getUserIdentity } from '../../components/UserMenu/user-profile';
+} from '../../../components/course-status';
+import { CreateCourseDialog } from '../../../components/create-course-dialog';
+import { getUserIdentity } from '../../../components/UserMenu/user-profile';
 
 export const Route = createFileRoute('/_authenticated/dashboard')({
   component: RouteComponent,

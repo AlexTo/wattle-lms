@@ -49,7 +49,7 @@ import {
 } from 'lucide-react';
 import { Fragment, useEffect, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
-import { getUserIdentity } from '../../components/UserMenu/user-profile';
+import { getUserIdentity } from '../../../components/UserMenu/user-profile';
 
 export const Route = createFileRoute('/_authenticated/dashboard')({
   component: RouteComponent,

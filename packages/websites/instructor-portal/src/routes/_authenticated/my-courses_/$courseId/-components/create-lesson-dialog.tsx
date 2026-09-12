@@ -17,28 +17,22 @@ import { Input } from '@wattle/common-shadcn/components/ui/input';
 import { Textarea } from '@wattle/common-shadcn/components/ui/textarea';
 import { type ReactNode, useState } from 'react';
 import { z } from 'zod';
-import { useCoreApi } from '../hooks/useCoreApi';
-import { useInstructorApi } from '../hooks/useInstructorApi';
-import { Alert } from './alert';
+import { Alert } from '../../../../../components/alert';
+import { useCoreApi } from '../../../../../hooks/useCoreApi';
+import { useInstructorApi } from '../../../../../hooks/useInstructorApi';
 
 const lessonFormSchema = z.object({
   title: z.string().trim().min(1, 'Lesson title is required').max(200),
   description: z.string(),
 });
 
-export function EditLessonDialog({
+export function CreateLessonDialog({
   courseId,
   moduleId,
-  lessonId,
-  title,
-  description,
   trigger,
 }: {
   courseId: string;
   moduleId: string;
-  lessonId: string;
-  title: string;
-  description?: string;
   trigger: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -46,21 +40,20 @@ export function EditLessonDialog({
   const { lesson } = useInstructorApi();
   const queryClient = useQueryClient();
   const {
-    mutateAsync: updateLesson,
-    reset: resetUpdateLesson,
+    mutateAsync: createLesson,
+    reset: resetCreateLesson,
     isError,
     error,
-  } = useMutation(lesson.update.mutationOptions());
+  } = useMutation(lesson.create.mutationOptions());
 
   const form = useForm({
-    defaultValues: { title, description: description ?? '' },
+    defaultValues: { title: '', description: '' },
     validators: { onChange: lessonFormSchema },
     onSubmit: async ({ value }) => {
       try {
-        await updateLesson({
+        await createLesson({
           courseId,
           moduleId,
-          lessonId,
           title: value.title.trim(),
           description: value.description,
         });
@@ -69,6 +62,7 @@ export function EditLessonDialog({
         return;
       }
       setOpen(false);
+      form.reset();
       void queryClient.invalidateQueries({
         queryKey: course.view.queryKey({ courseId }),
       });
@@ -82,16 +76,16 @@ export function EditLessonDialog({
         setOpen(nextOpen);
         if (!nextOpen) {
           form.reset();
-          resetUpdateLesson();
+          resetCreateLesson();
         }
       }}
     >
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Edit lesson</DialogTitle>
+          <DialogTitle>New lesson</DialogTitle>
           <p className="text-sm text-muted-foreground">
-            Update the title and description students see for this lesson.
+            Lessons hold the content students work through inside a module.
           </p>
         </DialogHeader>
 
@@ -104,7 +98,7 @@ export function EditLessonDialog({
           }}
         >
           {isError && (
-            <Alert type="error" header="Couldn't update the lesson">
+            <Alert type="error" header="Couldn't create the lesson">
               {error.message}
             </Alert>
           )}
@@ -173,7 +167,7 @@ export function EditLessonDialog({
             >
               {([canSubmit, isSubmitting]) => (
                 <Button type="submit" disabled={!canSubmit || isSubmitting}>
-                  {isSubmitting ? 'Saving...' : 'Save changes'}
+                  {isSubmitting ? 'Creating...' : 'Create lesson'}
                 </Button>
               )}
             </form.Subscribe>
