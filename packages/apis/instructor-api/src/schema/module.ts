@@ -25,3 +25,14 @@ export type ICreateModuleInput = z.output<typeof CreateModuleInputSchema>;
 export const CreateModuleOutputSchema = ModuleSchema;
 
 export type ICreateModuleOutput = z.output<typeof CreateModuleOutputSchema>;
+
+export const DeleteModuleInputSchema = z.object({
+  courseId: z.string(),
+  moduleId: z.string(),
+});
+
+export type IDeleteModuleInput = z.output<typeof DeleteModuleInputSchema>;
+
+export const DeleteModuleOutputSchema = ModuleSchema;
+
+export type IDeleteModuleOutput = z.output<typeof DeleteModuleOutputSchema>;

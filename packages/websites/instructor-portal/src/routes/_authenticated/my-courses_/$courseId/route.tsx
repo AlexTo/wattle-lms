@@ -32,6 +32,7 @@ import { useCoreApi } from '../../../../hooks/useCoreApi';
 import { CreateLessonDialog } from './-components/create-lesson-dialog';
 import { CreateModuleDialog } from './-components/create-module-dialog';
 import { DeleteLessonDialog } from './-components/delete-lesson-dialog';
+import { DeleteModuleDialog } from './-components/delete-module-dialog';
 import { EditLessonDialog } from './-components/edit-lesson-dialog';
 
 export const Route = createFileRoute('/_authenticated/my-courses_/$courseId')({
@@ -169,20 +170,27 @@ function RouteComponent() {
                       disabled
                       title="Editing modules isn't available yet"
                       aria-label={`Edit module ${moduleIndex + 1}`}
+                      className="ml-auto"
                     >
                       <PencilLine />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      type="button"
-                      disabled
-                      title="Removing modules isn't available yet"
-                      aria-label={`Remove module ${moduleIndex + 1}`}
-                      className="-ml-2"
-                    >
-                      <Trash2 />
-                    </Button>
+                    <DeleteModuleDialog
+                      courseId={course.courseId}
+                      moduleId={module.moduleId}
+                      title={module.title}
+                      lessonCount={module.lessons.length}
+                      trigger={
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          type="button"
+                          aria-label={`Remove module ${moduleIndex + 1}`}
+                          className="-ml-2"
+                        >
+                          <Trash2 />
+                        </Button>
+                      }
+                    />
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -241,6 +249,7 @@ function RouteComponent() {
                                 size="icon-sm"
                                 type="button"
                                 aria-label={`Edit lesson ${lesson.title}`}
+                                className="ml-auto"
                               >
                                 <PencilLine />
                               </Button>
@@ -297,9 +306,8 @@ function RouteComponent() {
 
       <div className="flex items-start gap-2 rounded-xl border border-dashed bg-muted/30 p-4 text-xs leading-5 text-muted-foreground">
         <Info className="mt-0.5 size-4 shrink-0" /> Modules and lessons shown
-        here are live, and you can add new ones, edit existing lessons, or
-        delete lessons. Editing modules, reordering, and deleting modules isn't
-        wired up yet.
+        here are live, and you can add new ones, edit or delete lessons, or
+        delete modules. Editing modules and reordering isn't wired up yet.
       </div>
     </main>
   );
