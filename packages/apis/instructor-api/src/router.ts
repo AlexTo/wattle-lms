@@ -10,7 +10,7 @@ import {
   deleteLesson,
   updateLesson,
 } from './procedures/lesson.js';
-import { createModule } from './procedures/module.js';
+import { createModule, deleteModule } from './procedures/module.js';
 
 export const router = t.router;
 
@@ -21,6 +21,7 @@ export const appRouter = router({
   }),
   module: router({
     create: createModule,
+    delete: deleteModule,
   }),
   lesson: router({
     create: createLesson,
