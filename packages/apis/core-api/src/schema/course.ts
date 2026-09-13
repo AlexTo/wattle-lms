@@ -84,6 +84,7 @@ export const ModuleSchema = z.object({
   moduleId: z.string(),
   courseId: z.string(),
   title: z.string(),
+  description: z.string().optional(),
   order: z.number(),
   createdAt: z.string(),
   updatedAt: z.string(),

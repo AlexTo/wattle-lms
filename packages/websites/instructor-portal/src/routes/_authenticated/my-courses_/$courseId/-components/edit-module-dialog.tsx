@@ -26,11 +26,17 @@ const moduleFormSchema = z.object({
   description: z.string(),
 });
 
-export function CreateModuleDialog({
+export function EditModuleDialog({
   courseId,
+  moduleId,
+  title,
+  description,
   trigger,
 }: {
   courseId: string;
+  moduleId: string;
+  title: string;
+  description?: string;
   trigger: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -38,19 +44,20 @@ export function CreateModuleDialog({
   const { module } = useInstructorApi();
   const queryClient = useQueryClient();
   const {
-    mutateAsync: createModule,
-    reset: resetCreateModule,
+    mutateAsync: updateModule,
+    reset: resetUpdateModule,
     isError,
     error,
-  } = useMutation(module.create.mutationOptions());
+  } = useMutation(module.update.mutationOptions());
 
   const form = useForm({
-    defaultValues: { title: '', description: '' },
+    defaultValues: { title, description: description ?? '' },
     validators: { onChange: moduleFormSchema },
     onSubmit: async ({ value }) => {
       try {
-        await createModule({
+        await updateModule({
           courseId,
+          moduleId,
           title: value.title.trim(),
           description: value.description,
         });
@@ -59,7 +66,6 @@ export function CreateModuleDialog({
         return;
       }
       setOpen(false);
-      form.reset();
       void queryClient.invalidateQueries({
         queryKey: course.view.queryKey({ courseId }),
       });
@@ -73,17 +79,16 @@ export function CreateModuleDialog({
         setOpen(nextOpen);
         if (!nextOpen) {
           form.reset();
-          resetCreateModule();
+          resetUpdateModule();
         }
       }}
     >
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>New module</DialogTitle>
+          <DialogTitle>Edit module</DialogTitle>
           <p className="text-sm text-muted-foreground">
-            Modules are the top-level sections of a course. You can add lessons
-            to it afterward.
+            Update the title and description students see for this module.
           </p>
         </DialogHeader>
 
@@ -96,7 +101,7 @@ export function CreateModuleDialog({
           }}
         >
           {isError && (
-            <Alert type="error" header="Couldn't create the module">
+            <Alert type="error" header="Couldn't update the module">
               {error.message}
             </Alert>
           )}
@@ -165,7 +170,7 @@ export function CreateModuleDialog({
             >
               {([canSubmit, isSubmitting]) => (
                 <Button type="submit" disabled={!canSubmit || isSubmitting}>
-                  {isSubmitting ? 'Creating...' : 'Create module'}
+                  {isSubmitting ? 'Saving...' : 'Save changes'}
                 </Button>
               )}
             </form.Subscribe>
