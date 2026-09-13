@@ -50,10 +50,11 @@ import { RuntimeConfig } from './runtime-config.js';
 const DEFAULT_RUNTIME_CONFIG_FILENAME = 'runtime-config.json';
 
 // Content-Security-Policy enforced on all responses. Restricts scripts and
-// framing to mitigate XSS and clickjacking, while permitting HTTPS/WSS calls
-// (connect-src) to AWS service endpoints such as API Gateway, Cognito and
-// Bedrock AgentCore which are only known at deploy time. Edit this to tighten
-// connect-src to your specific origins once they are known.
+// framing to mitigate XSS and clickjacking, while permitting HTTPS calls
+// (connect-src, media-src) to AWS service endpoints such as API Gateway,
+// Cognito, Bedrock AgentCore, and presigned S3/CloudFront media URLs, which
+// are only known at deploy time. Edit this to tighten connect-src/media-src
+// to your specific origins once they are known.
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "script-src 'self'",
@@ -61,6 +62,7 @@ const CONTENT_SECURITY_POLICY = [
   "img-src 'self' data:",
   "font-src 'self' data:",
   "connect-src 'self' https: wss:",
+  "media-src 'self' https:",
   "object-src 'none'",
   "base-uri 'self'",
   "frame-ancestors 'none'",
