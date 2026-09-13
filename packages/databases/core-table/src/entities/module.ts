@@ -30,6 +30,9 @@ export const createModuleEntity = async () =>
           type: 'string',
           required: true,
         },
+        description: {
+          type: 'string',
+        },
         // Sequencing within the course. Not part of any key: module counts
         // per course are small enough to sort client-side after fetch.
         order: {

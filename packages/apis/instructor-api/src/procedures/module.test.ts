@@ -5,7 +5,7 @@
 import type { APIGatewayProxyEvent } from 'aws-lambda';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { t } from '../init.js';
-import { createModule, deleteModule } from './module.js';
+import { createModule, deleteModule, updateModule } from './module.js';
 
 const {
   courseInstructorGet,
@@ -13,6 +13,8 @@ const {
   moduleCreate,
   moduleGet,
   moduleDelete,
+  modulePatch,
+  modulePatchSet,
   lessonQueryPrimary,
   lessonDelete,
   transactionWrite,
@@ -23,6 +25,8 @@ const {
   moduleCreate: vi.fn(),
   moduleGet: vi.fn(),
   moduleDelete: vi.fn(),
+  modulePatch: vi.fn(),
+  modulePatchSet: vi.fn(),
   lessonQueryPrimary: vi.fn(),
   lessonDelete: vi.fn(),
   transactionWrite: vi.fn(),
@@ -42,6 +46,7 @@ vi.mock('@wattle/core-table', () => ({
         create: moduleCreate,
         get: moduleGet,
         delete: moduleDelete,
+        patch: modulePatch,
       },
       lesson: {
         query: {
@@ -56,7 +61,7 @@ vi.mock('@wattle/core-table', () => ({
   })),
 }));
 
-const router = t.router({ createModule, deleteModule });
+const router = t.router({ createModule, updateModule, deleteModule });
 const caller = t.createCallerFactory(router);
 
 const INSTRUCTOR_SUB = 'instructor-1';
@@ -126,6 +131,10 @@ beforeEach(() => {
   moduleCreate.mockReturnValue({
     go: vi.fn().mockResolvedValue({ data: module }),
   });
+  modulePatchSet.mockReturnValue({
+    go: vi.fn().mockResolvedValue({ data: module }),
+  });
+  modulePatch.mockReturnValue({ set: modulePatchSet });
 });
 
 describe('createModule', () => {
@@ -187,6 +196,108 @@ describe('createModule', () => {
       title: 'Introduction',
     });
     expect(result).toEqual(module);
+  });
+
+  it('passes the description through to the created module', async () => {
+    await callAs().createModule({
+      courseId: COURSE_ID,
+      title: 'Introduction',
+      description: 'A quick tour of the course',
+    });
+
+    expect(moduleCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ description: 'A quick tour of the course' }),
+    );
+  });
+});
+
+describe('updateModule', () => {
+  it('rejects callers who are not in the instructor group before checking course membership', async () => {
+    await expect(
+      callAs(['student']).updateModule({
+        courseId: COURSE_ID,
+        moduleId: module.moduleId,
+        title: 'Updated title',
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(courseInstructorGet).not.toHaveBeenCalled();
+  });
+
+  // Invariant: only an instructor who actually teaches the course may edit
+  // its modules -- membership in the `instructor` group is not enough.
+  it('throws FORBIDDEN when the caller does not teach the course', async () => {
+    courseInstructorGet.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: undefined }),
+    });
+
+    await expect(
+      callAs().updateModule({
+        courseId: COURSE_ID,
+        moduleId: module.moduleId,
+        title: 'Updated title',
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(moduleGet).not.toHaveBeenCalled();
+    expect(modulePatch).not.toHaveBeenCalled();
+  });
+
+  it('throws NOT_FOUND when the module does not exist', async () => {
+    moduleGet.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: undefined }),
+    });
+
+    await expect(
+      callAs().updateModule({
+        courseId: COURSE_ID,
+        moduleId: 'missing-module',
+        title: 'Updated title',
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(modulePatch).not.toHaveBeenCalled();
+  });
+
+  it('only patches fields provided in the input', async () => {
+    await callAs().updateModule({
+      courseId: COURSE_ID,
+      moduleId: module.moduleId,
+      title: 'Updated title',
+    });
+
+    expect(modulePatch).toHaveBeenCalledWith({
+      courseId: COURSE_ID,
+      moduleId: module.moduleId,
+    });
+    expect(modulePatchSet).toHaveBeenCalledWith({ title: 'Updated title' });
+  });
+
+  it('patches title, description, and order together when all are provided', async () => {
+    await callAs().updateModule({
+      courseId: COURSE_ID,
+      moduleId: module.moduleId,
+      title: 'Updated title',
+      description: 'Updated description',
+      order: 2,
+    });
+
+    expect(modulePatchSet).toHaveBeenCalledWith({
+      title: 'Updated title',
+      description: 'Updated description',
+      order: 2,
+    });
+  });
+
+  it('returns the updated module', async () => {
+    const updatedModule = { ...module, title: 'Updated title' };
+    modulePatchSet.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: updatedModule }),
+    });
+
+    const result = await callAs().updateModule({
+      courseId: COURSE_ID,
+      moduleId: module.moduleId,
+      title: 'Updated title',
+    });
+    expect(result).toEqual(updatedModule);
   });
 });
 

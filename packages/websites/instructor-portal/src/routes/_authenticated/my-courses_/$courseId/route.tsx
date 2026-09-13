@@ -34,6 +34,7 @@ import { CreateModuleDialog } from './-components/create-module-dialog';
 import { DeleteLessonDialog } from './-components/delete-lesson-dialog';
 import { DeleteModuleDialog } from './-components/delete-module-dialog';
 import { EditLessonDialog } from './-components/edit-lesson-dialog';
+import { EditModuleDialog } from './-components/edit-module-dialog';
 
 export const Route = createFileRoute('/_authenticated/my-courses_/$courseId')({
   component: RouteComponent,
@@ -163,17 +164,23 @@ function RouteComponent() {
                       {module.lessons.length}{' '}
                       {module.lessons.length === 1 ? 'lesson' : 'lessons'}
                     </Badge>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      type="button"
-                      disabled
-                      title="Editing modules isn't available yet"
-                      aria-label={`Edit module ${moduleIndex + 1}`}
-                      className="ml-auto"
-                    >
-                      <PencilLine />
-                    </Button>
+                    <EditModuleDialog
+                      courseId={course.courseId}
+                      moduleId={module.moduleId}
+                      title={module.title}
+                      description={module.description}
+                      trigger={
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          type="button"
+                          aria-label={`Edit module ${moduleIndex + 1}`}
+                          className="ml-auto"
+                        >
+                          <PencilLine />
+                        </Button>
+                      }
+                    />
                     <DeleteModuleDialog
                       courseId={course.courseId}
                       moduleId={module.moduleId}
@@ -306,8 +313,8 @@ function RouteComponent() {
 
       <div className="flex items-start gap-2 rounded-xl border border-dashed bg-muted/30 p-4 text-xs leading-5 text-muted-foreground">
         <Info className="mt-0.5 size-4 shrink-0" /> Modules and lessons shown
-        here are live, and you can add new ones, edit or delete lessons, or
-        delete modules. Editing modules and reordering isn't wired up yet.
+        here are live, and you can add new ones, edit or delete lessons or
+        modules. Reordering isn't wired up yet.
       </div>
     </main>
   );

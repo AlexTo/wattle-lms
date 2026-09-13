@@ -10,6 +10,8 @@ import {
   CreateModuleOutputSchema,
   DeleteModuleInputSchema,
   DeleteModuleOutputSchema,
+  UpdateModuleInputSchema,
+  UpdateModuleOutputSchema,
 } from '../schema/index.js';
 
 export const createModule = courseProcedure
@@ -17,7 +19,7 @@ export const createModule = courseProcedure
   .output(CreateModuleOutputSchema)
   .mutation(async ({ ctx, input }) => {
     const coreTable = ctx.coreTable!;
-    const { courseId, title } = input;
+    const { courseId, title, description } = input;
     const { sub: currentUser } = ctx.user;
 
     // Only instructors teaching this specific course may add modules to it,
@@ -39,8 +41,44 @@ export const createModule = courseProcedure
       modules.reduce((max, module) => Math.max(max, module.order), 0) + 1;
 
     const { data: module } = await coreTable.entities.module
-      .create({ moduleId: uuidv7(), courseId, title, order })
+      .create({ moduleId: uuidv7(), courseId, title, description, order })
       .go();
+
+    return module;
+  });
+
+export const updateModule = courseProcedure
+  .input(UpdateModuleInputSchema)
+  .output(UpdateModuleOutputSchema)
+  .mutation(async ({ ctx, input }) => {
+    const coreTable = ctx.coreTable!;
+    const { courseId, moduleId, title, description, order } = input;
+    const { sub: currentUser } = ctx.user;
+
+    // Only instructors teaching this specific course may edit its modules,
+    // not just any member of the instructor group.
+    const { data: membership } = await coreTable.entities.courseInstructor
+      .get({ courseId, instructorId: currentUser })
+      .go();
+    if (!membership) {
+      throw new TRPCError({ code: 'FORBIDDEN' });
+    }
+
+    const { data: existing } = await coreTable.entities.module
+      .get({ courseId, moduleId })
+      .go();
+    if (!existing) {
+      throw new TRPCError({ code: 'NOT_FOUND' });
+    }
+
+    const { data: module } = await coreTable.entities.module
+      .patch({ courseId, moduleId })
+      .set({
+        ...(title !== undefined && { title }),
+        ...(description !== undefined && { description }),
+        ...(order !== undefined && { order }),
+      })
+      .go({ response: 'all_new' });
 
     return module;
   });
