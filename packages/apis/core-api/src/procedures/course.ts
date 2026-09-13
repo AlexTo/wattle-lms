@@ -91,18 +91,31 @@ export const viewCourse = courseProcedure
   .query(async ({ ctx, input }) => {
     const coreTable = ctx.coreTable!;
 
-    // Course, its modules, and their lessons all share the `curriculum`
-    // collection's partition (see @wattle/core-table's service.ts), so one
-    // query returns the whole curriculum instead of a get plus per-module
-    // lesson queries.
+    // Course, its modules, their lessons, and each lesson's content items
+    // all share the `curriculum` collection's partition (see
+    // @wattle/core-table's service.ts), so one query returns the whole
+    // curriculum instead of a get plus per-module/per-lesson queries.
     const {
-      data: { course: courses, module: modules, lesson: lessons },
+      data: {
+        course: courses,
+        module: modules,
+        lesson: lessons,
+        contentItem: contentItems,
+      },
     } = await coreTable.collections
       .curriculum({ courseId: input.courseId })
       .go();
     const [course] = courses;
     if (!course) {
       throw new TRPCError({ code: 'NOT_FOUND' });
+    }
+
+    const contentItemsByLessonId = new Map<string, typeof contentItems>();
+    for (const contentItem of contentItems) {
+      const lessonContentItems =
+        contentItemsByLessonId.get(contentItem.lessonId) ?? [];
+      lessonContentItems.push(contentItem);
+      contentItemsByLessonId.set(contentItem.lessonId, lessonContentItems);
     }
 
     const lessonsByModuleId = new Map<string, typeof lessons>();
@@ -121,7 +134,13 @@ export const viewCourse = courseProcedure
           ...module,
           lessons: (lessonsByModuleId.get(module.moduleId) ?? [])
             .slice()
-            .sort((a, b) => a.order - b.order),
+            .sort((a, b) => a.order - b.order)
+            .map((lesson) => ({
+              ...lesson,
+              contentItems: (contentItemsByLessonId.get(lesson.lessonId) ?? [])
+                .slice()
+                .sort((a, b) => a.order - b.order),
+            })),
         })),
     };
   });

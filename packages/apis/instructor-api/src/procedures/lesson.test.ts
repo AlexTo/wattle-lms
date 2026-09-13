@@ -16,6 +16,11 @@ const {
   lessonPatch,
   lessonPatchSet,
   lessonDelete,
+  contentItemQueryPrimary,
+  contentItemDelete,
+  transactionWrite,
+  transactionGo,
+  bestEffortDeleteS3Objects,
 } = vi.hoisted(() => ({
   courseInstructorGet: vi.fn(),
   moduleGet: vi.fn(),
@@ -25,6 +30,11 @@ const {
   lessonPatch: vi.fn(),
   lessonPatchSet: vi.fn(),
   lessonDelete: vi.fn(),
+  contentItemQueryPrimary: vi.fn(),
+  contentItemDelete: vi.fn(),
+  transactionWrite: vi.fn(),
+  transactionGo: vi.fn(),
+  bestEffortDeleteS3Objects: vi.fn(),
 }));
 
 vi.mock('@wattle/core-table', () => ({
@@ -45,9 +55,20 @@ vi.mock('@wattle/core-table', () => ({
         patch: lessonPatch,
         delete: lessonDelete,
       },
+      contentItem: {
+        query: {
+          primary: contentItemQueryPrimary,
+        },
+        delete: contentItemDelete,
+      },
+    },
+    transaction: {
+      write: transactionWrite,
     },
   })),
 }));
+
+vi.mock('../lib/s3-client.js', () => ({ bestEffortDeleteS3Objects }));
 
 const router = t.router({ createLesson, updateLesson, deleteLesson });
 const caller = t.createCallerFactory(router);
@@ -85,6 +106,20 @@ const lesson = {
   updatedAt: '2024-01-01T00:00:00.000Z',
 };
 
+const contentItem = {
+  contentItemId: 'content-item-1',
+  lessonId: lesson.lessonId,
+  moduleId: MODULE_ID,
+  courseId: COURSE_ID,
+  type: 'video' as const,
+  title: 'Intro video',
+  s3Key: `lessons/${lesson.lessonId}/content-item-1.mp4`,
+  mimeType: 'video/mp4',
+  order: 1,
+  createdAt: '2024-01-01T00:00:00.000Z',
+  updatedAt: '2024-01-01T00:00:00.000Z',
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
 
@@ -109,9 +144,24 @@ beforeEach(() => {
     go: vi.fn().mockResolvedValue({ data: lesson }),
   });
   lessonPatch.mockReturnValue({ set: lessonPatchSet });
-  lessonDelete.mockReturnValue({
-    go: vi.fn().mockResolvedValue({ data: lesson }),
+  lessonDelete.mockImplementation((attrs) => ({
+    commit: () => ({ item: null, attrs }),
+  }));
+  contentItemQueryPrimary.mockReturnValue({
+    go: vi.fn().mockResolvedValue({ data: [] }),
   });
+  contentItemDelete.mockImplementation((attrs) => ({
+    commit: () => ({ item: null, attrs }),
+  }));
+  bestEffortDeleteS3Objects.mockResolvedValue(undefined);
+  transactionWrite.mockImplementation((fn) => {
+    fn({
+      lesson: { delete: lessonDelete },
+      contentItem: { delete: contentItemDelete },
+    });
+    return { go: transactionGo };
+  });
+  transactionGo.mockResolvedValue({ canceled: false, data: [] });
 });
 
 describe('createLesson', () => {
@@ -367,6 +417,7 @@ describe('deleteLesson', () => {
         lessonId: 'missing-lesson',
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(contentItemQueryPrimary).not.toHaveBeenCalled();
     expect(lessonDelete).not.toHaveBeenCalled();
   });
 
@@ -377,11 +428,103 @@ describe('deleteLesson', () => {
       lessonId: lesson.lessonId,
     });
 
+    expect(transactionWrite).toHaveBeenCalledTimes(1);
     expect(lessonDelete).toHaveBeenCalledWith({
       courseId: COURSE_ID,
       moduleId: MODULE_ID,
       lessonId: lesson.lessonId,
     });
     expect(result).toEqual(lesson);
+  });
+
+  it('throws INTERNAL_SERVER_ERROR when the transaction is canceled', async () => {
+    transactionGo.mockResolvedValue({ canceled: true, data: [] });
+
+    await expect(
+      callAs().deleteLesson({
+        courseId: COURSE_ID,
+        moduleId: MODULE_ID,
+        lessonId: lesson.lessonId,
+      }),
+    ).rejects.toMatchObject({ code: 'INTERNAL_SERVER_ERROR' });
+  });
+
+  // DynamoDB transactions cap at 100 items; a lesson with too many content
+  // items can't be cascade-deleted in one, so this must fail fast rather
+  // than let DynamoDB reject the oversized transaction.
+  it('throws INTERNAL_SERVER_ERROR without attempting a transaction when the lesson has too many content items', async () => {
+    contentItemQueryPrimary.mockReturnValue({
+      go: vi.fn().mockResolvedValue({
+        data: Array.from({ length: 100 }, (_, i) => ({
+          ...contentItem,
+          contentItemId: `content-item-${i}`,
+        })),
+      }),
+    });
+
+    await expect(
+      callAs().deleteLesson({
+        courseId: COURSE_ID,
+        moduleId: MODULE_ID,
+        lessonId: lesson.lessonId,
+      }),
+    ).rejects.toMatchObject({ code: 'INTERNAL_SERVER_ERROR' });
+    expect(transactionWrite).not.toHaveBeenCalled();
+  });
+
+  // Invariant: content items have no lifecycle independent of their
+  // lesson, so deleting a lesson must cascade to every content item under
+  // it and best-effort-delete each one's underlying video.
+  it('cascades to delete every content item under the lesson and their videos', async () => {
+    const contentItem2 = {
+      ...contentItem,
+      contentItemId: 'content-item-2',
+      s3Key: `lessons/${lesson.lessonId}/content-item-2.mp4`,
+    };
+    contentItemQueryPrimary.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: [contentItem, contentItem2] }),
+    });
+
+    await callAs().deleteLesson({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: lesson.lessonId,
+    });
+
+    expect(contentItemQueryPrimary).toHaveBeenCalledWith({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: lesson.lessonId,
+    });
+    expect(contentItemDelete).toHaveBeenCalledWith({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: lesson.lessonId,
+      contentItemId: contentItem.contentItemId,
+    });
+    expect(contentItemDelete).toHaveBeenCalledWith({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: lesson.lessonId,
+      contentItemId: contentItem2.contentItemId,
+    });
+    expect(bestEffortDeleteS3Objects).toHaveBeenCalledWith(expect.anything(), [
+      contentItem.s3Key,
+      contentItem2.s3Key,
+    ]);
+  });
+
+  it('does not attempt to delete any content items when the lesson has none', async () => {
+    await callAs().deleteLesson({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: lesson.lessonId,
+    });
+
+    expect(contentItemDelete).not.toHaveBeenCalled();
+    expect(bestEffortDeleteS3Objects).toHaveBeenCalledWith(
+      expect.anything(),
+      [],
+    );
   });
 });

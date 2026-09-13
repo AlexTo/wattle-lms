@@ -1,0 +1,460 @@
+/**
+ * Copyright Wattle LMS Contributors. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Button } from '@wattle/common-shadcn/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@wattle/common-shadcn/components/ui/dialog';
+import { Input } from '@wattle/common-shadcn/components/ui/input';
+import { Textarea } from '@wattle/common-shadcn/components/ui/textarea';
+import { cn } from '@wattle/common-shadcn/lib/utils';
+import { Trash2, Upload } from 'lucide-react';
+import { type ReactNode, useState } from 'react';
+import { useDropzone } from 'react-dropzone';
+import { Alert } from '../../../../../components/alert';
+import { Spinner } from '../../../../../components/spinner';
+import { useCoreApi } from '../../../../../hooks/useCoreApi';
+import { useInstructorApi } from '../../../../../hooks/useInstructorApi';
+
+const ACCEPTED_VIDEO_TYPES = {
+  'video/mp4': ['.mp4'],
+  'video/webm': ['.webm'],
+  'video/quicktime': ['.mov'],
+};
+
+type PendingUpload = {
+  contentItemId: string;
+  objectKey: string;
+  mimeType: string;
+};
+
+// fetch() exposes no upload progress; XMLHttpRequest does via
+// xhr.upload.onprogress, hence the lower-level API here instead of fetch.
+const putFileWithProgress = (
+  uploadUrl: string,
+  file: File,
+  onProgress: (percent: number) => void,
+) =>
+  new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', uploadUrl);
+    xhr.setRequestHeader('Content-Type', file.type);
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        onProgress(Math.round((event.loaded / event.total) * 100));
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+      } else {
+        reject(new Error('Failed to upload the video file'));
+      }
+    };
+    xhr.onerror = () => reject(new Error('Failed to upload the video file'));
+    xhr.send(file);
+  });
+
+export function AttachLessonVideoDialog({
+  courseId,
+  moduleId,
+  lessonId,
+  contentItemId,
+  title,
+  description,
+  trigger,
+}: {
+  courseId: string;
+  moduleId: string;
+  lessonId: string;
+  /** Set when editing an existing video; omitted when attaching a new one. */
+  contentItemId?: string;
+  title?: string;
+  description?: string;
+  trigger: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const [titleValue, setTitleValue] = useState(title ?? '');
+  const [descriptionValue, setDescriptionValue] = useState(description ?? '');
+  const [pendingUpload, setPendingUpload] = useState<PendingUpload>();
+  const [uploadError, setUploadError] = useState<string>();
+  const [uploadProgress, setUploadProgress] = useState<number>();
+  const isUploading = uploadProgress !== undefined;
+  const { course } = useCoreApi();
+  const { contentItem } = useInstructorApi();
+  const queryClient = useQueryClient();
+
+  const { mutateAsync: createUploadUrl } = useMutation(
+    contentItem.createVideoUploadUrl.mutationOptions(),
+  );
+  const { mutateAsync: createLessonContentItem, isPending: isCreating } =
+    useMutation(contentItem.create.mutationOptions());
+  const { mutateAsync: updateLessonContentItem, isPending: isUpdating } =
+    useMutation(contentItem.update.mutationOptions());
+  const isSaving = isCreating || isUpdating;
+
+  const {
+    data: video,
+    isPending: isLoadingVideo,
+    isError: isVideoError,
+  } = useQuery({
+    ...contentItem.createVideoUrl.queryOptions({
+      courseId,
+      moduleId,
+      lessonId,
+      contentItemId: contentItemId ?? '',
+    }),
+    enabled: open && Boolean(contentItemId) && !pendingUpload,
+  });
+
+  const invalidateCourse = () =>
+    queryClient.invalidateQueries({
+      queryKey: course.view.queryKey({ courseId }),
+    });
+
+  const uploadFile = async (file: File) => {
+    setUploadError(undefined);
+    setUploadProgress(0);
+    try {
+      const {
+        contentItemId: newContentItemId,
+        uploadUrl,
+        objectKey,
+      } = await createUploadUrl({
+        courseId,
+        moduleId,
+        lessonId,
+        fileName: file.name,
+      });
+
+      await putFileWithProgress(uploadUrl, file, setUploadProgress);
+
+      setPendingUpload({
+        contentItemId: newContentItemId,
+        objectKey,
+        mimeType: file.type,
+      });
+    } catch (error) {
+      setUploadError(
+        error instanceof Error ? error.message : 'Failed to upload the video',
+      );
+    } finally {
+      setUploadProgress(undefined);
+    }
+  };
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop: (acceptedFiles) => {
+      const file = acceptedFiles[0];
+      if (file) {
+        void uploadFile(file);
+      }
+    },
+    multiple: false,
+    disabled: isUploading,
+    accept: ACCEPTED_VIDEO_TYPES,
+  });
+
+  const canSave =
+    titleValue.trim().length > 0 &&
+    !isUploading &&
+    (contentItemId || pendingUpload);
+
+  const handleSave = async () => {
+    setUploadError(undefined);
+    try {
+      if (contentItemId) {
+        await updateLessonContentItem({
+          courseId,
+          moduleId,
+          lessonId,
+          contentItemId,
+          title: titleValue.trim(),
+          description: descriptionValue || undefined,
+          ...(pendingUpload && {
+            objectKey: pendingUpload.objectKey,
+            mimeType: pendingUpload.mimeType,
+          }),
+        });
+      } else if (pendingUpload) {
+        await createLessonContentItem({
+          courseId,
+          moduleId,
+          lessonId,
+          contentItemId: pendingUpload.contentItemId,
+          objectKey: pendingUpload.objectKey,
+          mimeType: pendingUpload.mimeType,
+          title: titleValue.trim(),
+          description: descriptionValue || undefined,
+        });
+      }
+      await invalidateCourse();
+      setOpen(false);
+    } catch (error) {
+      setUploadError(
+        error instanceof Error ? error.message : "Couldn't save the video",
+      );
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (nextOpen) {
+          setTitleValue(title ?? '');
+          setDescriptionValue(description ?? '');
+          setPendingUpload(undefined);
+        }
+        if (!nextOpen) {
+          setUploadError(undefined);
+        }
+      }}
+    >
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>
+            {contentItemId ? 'Edit video' : 'Add video'}
+          </DialogTitle>
+          <p className="text-sm text-muted-foreground">
+            Attach an MP4, WebM, or MOV video for students to watch in this
+            lesson.
+          </p>
+        </DialogHeader>
+
+        {uploadError && (
+          <Alert type="error" header="Couldn't save the video">
+            {uploadError}
+          </Alert>
+        )}
+        {isVideoError && (
+          <Alert type="error" header="Couldn't load the video">
+            The attached video couldn't be loaded for playback.
+          </Alert>
+        )}
+
+        <div className="space-y-2">
+          <label
+            className="text-sm font-medium leading-none"
+            htmlFor="lesson-video-title"
+          >
+            Title
+          </label>
+          <Input
+            id="lesson-video-title"
+            value={titleValue}
+            onChange={(event) => setTitleValue(event.target.value)}
+            placeholder="e.g. Course overview"
+            autoFocus
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label
+            className="text-sm font-medium leading-none"
+            htmlFor="lesson-video-description"
+          >
+            Description
+          </label>
+          <Textarea
+            id="lesson-video-description"
+            value={descriptionValue}
+            onChange={(event) => setDescriptionValue(event.target.value)}
+            placeholder="Optional notes for students"
+            rows={3}
+          />
+        </div>
+
+        {contentItemId &&
+          !pendingUpload &&
+          (isLoadingVideo ? (
+            <div className="flex justify-center py-6">
+              <Spinner />
+            </div>
+          ) : (
+            video && (
+              // controlsList/onContextMenu only deter casual downloading via
+              // the browser's built-in UI -- the underlying URL is still a
+              // real, time-limited link, so this isn't real protection
+              // against a determined user (see #107 for a stronger option).
+              <video
+                controls
+                controlsList="nodownload noremoteplayback"
+                disablePictureInPicture
+                onContextMenu={(event) => event.preventDefault()}
+                src={video.url}
+                className="w-full rounded-lg border"
+              />
+            )
+          ))}
+
+        <div
+          {...getRootProps()}
+          className={cn(
+            'cursor-pointer rounded-lg border border-dashed bg-muted/50 px-4 py-4 transition hover:border-primary hover:bg-primary/5 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/30',
+            isUploading && 'pointer-events-none opacity-60',
+          )}
+        >
+          <input {...getInputProps()} />
+          <div className="flex items-start gap-3">
+            <div className="rounded-full bg-secondary p-2 text-secondary-foreground">
+              <Upload className="size-4" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-medium">
+                {isUploading
+                  ? `Uploading... ${uploadProgress}%`
+                  : pendingUpload
+                    ? 'Video uploaded — click Save to attach it'
+                    : contentItemId
+                      ? 'Drop a video or click to replace the file'
+                      : 'Drop a video or click to browse'}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {isDragActive
+                  ? 'Release to upload'
+                  : 'Allowed: .mp4, .webm, .mov'}
+              </p>
+              {isUploading && (
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full bg-primary transition-all"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setOpen(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            disabled={!canSave || isSaving}
+            onClick={handleSave}
+          >
+            {isSaving ? 'Saving...' : 'Save'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Confirms before removing a video from a lesson, same treatment as
+ * DeleteLessonDialog/DeleteModuleDialog give lessons and modules.
+ */
+export function RemoveLessonVideoButton({
+  courseId,
+  moduleId,
+  lessonId,
+  contentItemId,
+  title,
+}: {
+  courseId: string;
+  moduleId: string;
+  lessonId: string;
+  contentItemId: string;
+  title: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const { course } = useCoreApi();
+  const { contentItem } = useInstructorApi();
+  const queryClient = useQueryClient();
+  const {
+    mutateAsync: removeContentItem,
+    reset: resetRemoveContentItem,
+    isPending,
+    isError,
+    error,
+  } = useMutation(contentItem.delete.mutationOptions());
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) {
+          resetRemoveContentItem();
+        }
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          type="button"
+          aria-label={`Remove ${title}`}
+          className="-ml-2 transition-opacity sm:opacity-0 sm:group-hover/resource:opacity-100 focus-visible:opacity-100"
+        >
+          <Trash2 />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Remove video</DialogTitle>
+          <p className="text-sm text-muted-foreground">
+            Are you sure you want to remove "{title}"? This can't be undone.
+          </p>
+        </DialogHeader>
+
+        {isError && (
+          <Alert type="error" header="Couldn't remove the video">
+            {error.message}
+          </Alert>
+        )}
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setOpen(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={isPending}
+            onClick={async () => {
+              try {
+                await removeContentItem({
+                  courseId,
+                  moduleId,
+                  lessonId,
+                  contentItemId,
+                });
+              } catch {
+                // Surfaced via the error above; keep the dialog open.
+                return;
+              }
+              setOpen(false);
+              void queryClient.invalidateQueries({
+                queryKey: course.view.queryKey({ courseId }),
+              });
+            }}
+          >
+            {isPending ? 'Removing...' : 'Remove video'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

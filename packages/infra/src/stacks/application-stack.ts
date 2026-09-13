@@ -9,6 +9,7 @@ import {
   EventsPostConfirmation,
   InstructorApi,
   InstructorPortal,
+  LessonMediaBucket,
   StudentPortal,
   suppressRules,
   UserIdentity,
@@ -20,6 +21,7 @@ import type {
   IdentityComponentConfig,
   InstructorApiComponentConfig,
   InstructorPortalComponentConfig,
+  LessonMediaComponentConfig,
   StudentPortalComponentConfig,
 } from '@wattle/common-infra-config';
 import { CfnResource, Stack, StackProps } from 'aws-cdk-lib';
@@ -44,6 +46,8 @@ export interface ApplicationStackProps extends StackProps {
   readonly instructorPortal?: InstructorPortalComponentConfig;
   /** Settings for the admin portal static website construct. @default all enabled */
   readonly adminPortal?: AdminPortalComponentConfig;
+  /** Settings for the lesson media S3 bucket construct. @default all enabled */
+  readonly lessonMedia?: LessonMediaComponentConfig;
 }
 
 export class ApplicationStack extends Stack {
@@ -58,6 +62,7 @@ export class ApplicationStack extends Stack {
       studentPortal: studentPortalConfig,
       instructorPortal: instructorPortalConfig,
       adminPortal: adminPortalConfig,
+      lessonMedia: lessonMediaConfig,
       ...props
     }: ApplicationStackProps,
   ) {
@@ -78,6 +83,8 @@ export class ApplicationStack extends Stack {
     const adminPortalWafEnabled = adminPortalConfig?.enableWaf ?? true;
     const adminPortalKmsEnabled =
       adminPortalConfig?.enableKmsEncryption ?? true;
+    const lessonMediaKmsEnabled =
+      lessonMediaConfig?.enableKmsEncryption ?? true;
 
     const identity = new UserIdentity(this, 'Identity', {
       enableWaf: identityConfig?.enableWaf ?? true,
@@ -176,6 +183,43 @@ export class ApplicationStack extends Stack {
       coreTable.grantReadWriteData(handler),
     );
 
+    const lessonMediaBucket = new LessonMediaBucket(this, 'LessonMediaBucket', {
+      enableKmsEncryption: lessonMediaKmsEnabled,
+      enableKeyRotation: lessonMediaConfig?.enableKeyRotation ?? true,
+    });
+    if (!lessonMediaKmsEnabled) {
+      suppressRules(
+        lessonMediaBucket.bucket,
+        ['CKV_AWS_145'],
+        'KMS CMK encryption disabled for this stage',
+      );
+    }
+    // Least-privilege: only the specific operations that need to sign/access
+    // lesson video objects get bucket permissions, not every instructor-api
+    // handler (each tRPC operation is its own isolated Lambda).
+    lessonMediaBucket.grantPut(
+      instructorApiIntegrations['contentItem.createVideoUploadUrl'].handler,
+    );
+    lessonMediaBucket.grantRead(
+      instructorApiIntegrations['contentItem.createVideoUrl'].handler,
+    );
+    lessonMediaBucket.grantDelete(
+      instructorApiIntegrations['contentItem.delete'].handler,
+    );
+    // updateContentItem best-effort-deletes the old S3 object when a video
+    // is replaced with a new file.
+    lessonMediaBucket.grantDelete(
+      instructorApiIntegrations['contentItem.update'].handler,
+    );
+    // Deleting a lesson or module cascades to its content items, best-
+    // effort-deleting each one's underlying S3 object.
+    lessonMediaBucket.grantDelete(
+      instructorApiIntegrations['lesson.delete'].handler,
+    );
+    lessonMediaBucket.grantDelete(
+      instructorApiIntegrations['module.delete'].handler,
+    );
+
     const studentPortal = new StudentPortal(this, 'StudentPortal', {
       enableWaf: studentPortalWafEnabled,
       enableKeyRotation: studentPortalConfig?.enableKeyRotation ?? true,
@@ -267,6 +311,12 @@ export class ApplicationStack extends Stack {
     );
 
     instructorApi.restrictCorsTo(
+      instructorPortal,
+      'http://localhost:4200',
+      'http://localhost:4300',
+    );
+
+    lessonMediaBucket.restrictCorsTo(
       instructorPortal,
       'http://localhost:4200',
       'http://localhost:4300',

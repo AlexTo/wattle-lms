@@ -6,6 +6,7 @@ export * from './app.js';
 export * from './checkov.js';
 export * from './cloudfront.js';
 export * from './dynamodb.js';
+export * from './media-bucket.js';
 export * from './runtime-config.js';
 export * from './static-website.js';
 export * from './user-identity.js';
