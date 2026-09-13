@@ -35,6 +35,7 @@ import { DeleteLessonDialog } from './-components/delete-lesson-dialog';
 import { DeleteModuleDialog } from './-components/delete-module-dialog';
 import { EditLessonDialog } from './-components/edit-lesson-dialog';
 import { EditModuleDialog } from './-components/edit-module-dialog';
+import { LessonVideoRow } from './-components/lesson-video-row';
 
 export const Route = createFileRoute('/_authenticated/my-courses_/$courseId')({
   component: RouteComponent,
@@ -226,60 +227,68 @@ function RouteComponent() {
                   ) : (
                     <>
                       {module.lessons.map((lesson) => (
-                        <div
+                        <article
                           key={lesson.lessonId}
-                          className="group flex items-center gap-2 border-t px-4 py-2.5 first:border-t-0 sm:pl-12 sm:pr-5"
+                          className="border-t first:border-t-0"
                         >
-                          <GripVertical
-                            className="size-4 shrink-0 text-muted-foreground"
-                            aria-hidden="true"
-                          />
-                          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
-                            <FileText className="size-4" />
+                          <div className="group flex items-center gap-2 px-4 py-2.5 sm:pl-12 sm:pr-5">
+                            <GripVertical
+                              className="size-4 shrink-0 text-muted-foreground"
+                              aria-hidden="true"
+                            />
+                            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300">
+                              <FileText className="size-4" />
+                            </div>
+                            <span className="font-medium">{lesson.title}</span>
+                            <Badge
+                              variant="outline"
+                              className="hidden text-[10px] sm:inline-flex"
+                            >
+                              Lesson
+                            </Badge>
+                            <EditLessonDialog
+                              courseId={course.courseId}
+                              moduleId={module.moduleId}
+                              lessonId={lesson.lessonId}
+                              title={lesson.title}
+                              description={lesson.description}
+                              trigger={
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  type="button"
+                                  aria-label={`Edit lesson ${lesson.title}`}
+                                  className="ml-auto"
+                                >
+                                  <PencilLine />
+                                </Button>
+                              }
+                            />
+                            <DeleteLessonDialog
+                              courseId={course.courseId}
+                              moduleId={module.moduleId}
+                              lessonId={lesson.lessonId}
+                              title={lesson.title}
+                              trigger={
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  type="button"
+                                  aria-label={`Remove lesson ${lesson.title}`}
+                                  className="-ml-2"
+                                >
+                                  <Trash2 />
+                                </Button>
+                              }
+                            />
                           </div>
-                          <span className="font-medium">{lesson.title}</span>
-                          <Badge
-                            variant="outline"
-                            className="hidden text-[10px] sm:inline-flex"
-                          >
-                            Lesson
-                          </Badge>
-                          <EditLessonDialog
+                          <LessonVideoRow
                             courseId={course.courseId}
                             moduleId={module.moduleId}
                             lessonId={lesson.lessonId}
-                            title={lesson.title}
-                            description={lesson.description}
-                            trigger={
-                              <Button
-                                variant="ghost"
-                                size="icon-sm"
-                                type="button"
-                                aria-label={`Edit lesson ${lesson.title}`}
-                                className="ml-auto"
-                              >
-                                <PencilLine />
-                              </Button>
-                            }
+                            contentItems={lesson.contentItems}
                           />
-                          <DeleteLessonDialog
-                            courseId={course.courseId}
-                            moduleId={module.moduleId}
-                            lessonId={lesson.lessonId}
-                            title={lesson.title}
-                            trigger={
-                              <Button
-                                variant="ghost"
-                                size="icon-sm"
-                                type="button"
-                                aria-label={`Remove lesson ${lesson.title}`}
-                                className="-ml-2"
-                              >
-                                <Trash2 />
-                              </Button>
-                            }
-                          />
-                        </div>
+                        </article>
                       ))}
                       <div className="flex flex-wrap items-center justify-end gap-2 border-t bg-muted/20 px-4 py-3 sm:pl-12 sm:pr-5">
                         <CreateLessonDialog

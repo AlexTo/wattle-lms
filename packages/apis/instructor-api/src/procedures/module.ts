@@ -5,6 +5,7 @@
 import { TRPCError } from '@trpc/server';
 import { v7 as uuidv7 } from 'uuid';
 import { courseProcedure } from '../init.js';
+import { bestEffortDeleteS3Objects } from '../lib/s3-client.js';
 import {
   CreateModuleInputSchema,
   CreateModuleOutputSchema,
@@ -107,23 +108,30 @@ export const deleteModule = courseProcedure
       throw new TRPCError({ code: 'NOT_FOUND' });
     }
 
-    // Lessons have no lifecycle independent of their module, and there's no
-    // way to reach one once its module is gone, so deleting a module
-    // cascades to every lesson under it. The module and its lessons are
-    // deleted transactionally so a failure partway through can't leave an
-    // orphaned lesson referencing a module that no longer exists.
+    // Lessons -- and their content items -- have no lifecycle independent
+    // of their module, and there's no way to reach one once its module is
+    // gone, so deleting a module cascades to every lesson and content item
+    // under it. Content items share the same sk prefix as their parent
+    // lesson (moduleId, then lessonId, then contentItemId), so querying by
+    // just courseId+moduleId returns every content item across every
+    // lesson in the module in one call. Everything is deleted
+    // transactionally so a failure partway through can't leave an orphaned
+    // lesson or content item referencing a module that no longer exists.
     const { data: lessons } = await coreTable.entities.lesson.query
+      .primary({ courseId, moduleId })
+      .go();
+    const { data: contentItems } = await coreTable.entities.contentItem.query
       .primary({ courseId, moduleId })
       .go();
 
     // DynamoDB caps a single transaction at 100 items; nothing currently
-    // limits how many lessons a module can hold, so a module this large
-    // can't be deleted in one transactional cascade.
-    if (lessons.length + 1 > 100) {
+    // limits how many lessons/content items a module can hold, so a module
+    // this large can't be deleted in one transactional cascade.
+    if (1 + lessons.length + contentItems.length > 100) {
       throw new TRPCError({
         code: 'INTERNAL_SERVER_ERROR',
         message:
-          'Module has too many lessons to delete in a single operation; delete some lessons first',
+          'Module has too many lessons or content items to delete in a single operation; delete some first',
       });
     }
 
@@ -132,6 +140,11 @@ export const deleteModule = courseProcedure
         entities.module.delete({ courseId, moduleId }).commit(),
         ...lessons.map(({ lessonId }) =>
           entities.lesson.delete({ courseId, moduleId, lessonId }).commit(),
+        ),
+        ...contentItems.map(({ lessonId, contentItemId }) =>
+          entities.contentItem
+            .delete({ courseId, moduleId, lessonId, contentItemId })
+            .commit(),
         ),
       ])
       .go();
@@ -142,6 +155,14 @@ export const deleteModule = courseProcedure
         message: 'Failed to delete module',
       });
     }
+
+    // Best-effort: the DynamoDB records are the source of truth for the
+    // module's content, so a failure to remove the underlying S3 objects
+    // is logged rather than thrown.
+    await bestEffortDeleteS3Objects(
+      ctx.logger,
+      contentItems.map((item) => item.s3Key),
+    );
 
     // DynamoDB transactions don't return the deleted attributes, but we
     // already fetched the module's pre-delete state above for the

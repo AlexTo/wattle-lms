@@ -316,7 +316,7 @@ describe('viewCourse', () => {
   it('returns the course with an empty curriculum when it has no modules', async () => {
     curriculumCollection.mockReturnValue({
       go: vi.fn().mockResolvedValue({
-        data: { course: [course], module: [], lesson: [] },
+        data: { course: [course], module: [], lesson: [], contentItem: [] },
       }),
     });
 
@@ -326,6 +326,74 @@ describe('viewCourse', () => {
       courseId: course.courseId,
     });
     expect(result).toEqual({ ...course, modules: [] });
+  });
+
+  it('nests each lesson’s content items, sorted by order', async () => {
+    const module1 = {
+      moduleId: 'module-1',
+      courseId: course.courseId,
+      title: 'First module',
+      order: 1,
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    };
+    const lesson1 = {
+      lessonId: 'lesson-1',
+      moduleId: 'module-1',
+      courseId: course.courseId,
+      title: 'First lesson',
+      order: 1,
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    };
+    const contentItem1 = {
+      contentItemId: 'content-item-2',
+      lessonId: 'lesson-1',
+      moduleId: 'module-1',
+      courseId: course.courseId,
+      type: 'video' as const,
+      title: 'Second video',
+      s3Key: 'lessons/lesson-1/content-item-2.mp4',
+      mimeType: 'video/mp4',
+      order: 2,
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    };
+    const contentItem2 = {
+      contentItemId: 'content-item-1',
+      lessonId: 'lesson-1',
+      moduleId: 'module-1',
+      courseId: course.courseId,
+      type: 'video' as const,
+      title: 'First video',
+      s3Key: 'lessons/lesson-1/content-item-1.mp4',
+      mimeType: 'video/mp4',
+      order: 1,
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    };
+    curriculumCollection.mockReturnValue({
+      go: vi.fn().mockResolvedValue({
+        data: {
+          course: [course],
+          module: [module1],
+          lesson: [lesson1],
+          contentItem: [contentItem1, contentItem2],
+        },
+      }),
+    });
+
+    const result = await callAsUser().viewCourse({ courseId: course.courseId });
+
+    expect(result).toEqual({
+      ...course,
+      modules: [
+        {
+          ...module1,
+          lessons: [{ ...lesson1, contentItems: [contentItem2, contentItem1] }],
+        },
+      ],
+    });
   });
 
   it('nests each module’s lessons, sorted by order', async () => {
@@ -369,6 +437,7 @@ describe('viewCourse', () => {
           course: [course],
           module: [module1, module2],
           lesson: [lesson1, lesson2],
+          contentItem: [],
         },
       }),
     });
@@ -378,7 +447,13 @@ describe('viewCourse', () => {
     expect(result).toEqual({
       ...course,
       modules: [
-        { ...module2, lessons: [lesson2, lesson1] },
+        {
+          ...module2,
+          lessons: [
+            { ...lesson2, contentItems: [] },
+            { ...lesson1, contentItems: [] },
+          ],
+        },
         { ...module1, lessons: [] },
       ],
     });
@@ -387,7 +462,7 @@ describe('viewCourse', () => {
   it('throws NOT_FOUND when the course does not exist', async () => {
     curriculumCollection.mockReturnValue({
       go: vi.fn().mockResolvedValue({
-        data: { course: [], module: [], lesson: [] },
+        data: { course: [], module: [], lesson: [], contentItem: [] },
       }),
     });
 
