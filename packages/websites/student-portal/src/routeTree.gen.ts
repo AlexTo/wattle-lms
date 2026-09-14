@@ -14,6 +14,8 @@ import { Route as PublicRouteImport } from './routes/_public'
 import { Route as AuthenticatedDashboardRouteRouteImport } from './routes/_authenticated/dashboard/route'
 import { Route as PublicIndexRouteImport } from './routes/_public/index'
 import { Route as PublicSigninRouteImport } from './routes/_public/signin'
+import { Route as AuthenticatedPreviewCourseCodeRouteImport } from './routes/_authenticated/preview/$courseCode'
+import { Route as PublicCoursesCourseCodeRouteImport } from './routes/_public/courses/$courseCode'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -39,16 +41,31 @@ const PublicSigninRoute = PublicSigninRouteImport.update({
   path: '/signin',
   getParentRoute: () => PublicRoute,
 } as any)
+const AuthenticatedPreviewCourseCodeRoute =
+  AuthenticatedPreviewCourseCodeRouteImport.update({
+    id: '/preview/$courseCode',
+    path: '/preview/$courseCode',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const PublicCoursesCourseCodeRoute = PublicCoursesCourseCodeRouteImport.update({
+  id: '/courses/$courseCode',
+  path: '/courses/$courseCode',
+  getParentRoute: () => PublicRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof PublicIndexRoute
   '/dashboard': typeof AuthenticatedDashboardRouteRoute
   '/signin': typeof PublicSigninRoute
+  '/preview/$courseCode': typeof AuthenticatedPreviewCourseCodeRoute
+  '/courses/$courseCode': typeof PublicCoursesCourseCodeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof PublicIndexRoute
   '/dashboard': typeof AuthenticatedDashboardRouteRoute
   '/signin': typeof PublicSigninRoute
+  '/preview/$courseCode': typeof AuthenticatedPreviewCourseCodeRoute
+  '/courses/$courseCode': typeof PublicCoursesCourseCodeRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -57,12 +74,24 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRouteRoute
   '/_public/signin': typeof PublicSigninRoute
   '/_public/': typeof PublicIndexRoute
+  '/_authenticated/preview/$courseCode': typeof AuthenticatedPreviewCourseCodeRoute
+  '/_public/courses/$courseCode': typeof PublicCoursesCourseCodeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dashboard' | '/signin'
+  fullPaths:
+    | '/'
+    | '/dashboard'
+    | '/signin'
+    | '/preview/$courseCode'
+    | '/courses/$courseCode'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dashboard' | '/signin'
+  to:
+    | '/'
+    | '/dashboard'
+    | '/signin'
+    | '/preview/$courseCode'
+    | '/courses/$courseCode'
   id:
     | '__root__'
     | '/_authenticated'
@@ -70,6 +99,8 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_public/signin'
     | '/_public/'
+    | '/_authenticated/preview/$courseCode'
+    | '/_public/courses/$courseCode'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -114,15 +145,31 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PublicSigninRouteImport
       parentRoute: typeof PublicRoute
     }
+    '/_authenticated/preview/$courseCode': {
+      id: '/_authenticated/preview/$courseCode'
+      path: '/preview/$courseCode'
+      fullPath: '/preview/$courseCode'
+      preLoaderRoute: typeof AuthenticatedPreviewCourseCodeRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_public/courses/$courseCode': {
+      id: '/_public/courses/$courseCode'
+      path: '/courses/$courseCode'
+      fullPath: '/courses/$courseCode'
+      preLoaderRoute: typeof PublicCoursesCourseCodeRouteImport
+      parentRoute: typeof PublicRoute
+    }
   }
 }
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRouteRoute: typeof AuthenticatedDashboardRouteRoute
+  AuthenticatedPreviewCourseCodeRoute: typeof AuthenticatedPreviewCourseCodeRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRouteRoute: AuthenticatedDashboardRouteRoute,
+  AuthenticatedPreviewCourseCodeRoute: AuthenticatedPreviewCourseCodeRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
@@ -131,11 +178,13 @@ const AuthenticatedRouteRouteWithChildren =
 interface PublicRouteChildren {
   PublicSigninRoute: typeof PublicSigninRoute
   PublicIndexRoute: typeof PublicIndexRoute
+  PublicCoursesCourseCodeRoute: typeof PublicCoursesCourseCodeRoute
 }
 
 const PublicRouteChildren: PublicRouteChildren = {
   PublicSigninRoute: PublicSigninRoute,
   PublicIndexRoute: PublicIndexRoute,
+  PublicCoursesCourseCodeRoute: PublicCoursesCourseCodeRoute,
 }
 
 const PublicRouteWithChildren =

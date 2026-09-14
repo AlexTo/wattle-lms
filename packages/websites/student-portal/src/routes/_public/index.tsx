@@ -26,6 +26,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { useState } from 'react';
+import { categories, courses } from '../../data/courses';
 
 export const Route = createFileRoute('/_public/')({
   component: RouteComponent,
@@ -51,84 +52,6 @@ const features = [
       'Connect with teachers and classmates, ask questions, and keep course conversations flowing.',
   },
 ];
-
-const courses = [
-  {
-    code: 'BIO102',
-    title: 'Foundations of Biology',
-    description:
-      'Explore cells, genetics, ecosystems, and the living systems that shape our world.',
-    duration: '8 weeks',
-    level: 'Beginner',
-    category: 'Science',
-    icon: '🧬',
-    surface: 'from-emerald-500/20 to-teal-500/5',
-  },
-  {
-    code: 'MTH201',
-    title: 'Applied Mathematics',
-    description:
-      'Build practical problem-solving skills through real-world mathematical models.',
-    duration: '10 weeks',
-    level: 'Intermediate',
-    category: 'Mathematics',
-    icon: '∑',
-    surface: 'from-blue-500/20 to-indigo-500/5',
-  },
-  {
-    code: 'DAT110',
-    title: 'Data Literacy',
-    description:
-      'Learn to interpret, question, and communicate with data confidently.',
-    duration: '6 weeks',
-    level: 'Beginner',
-    category: 'Technology',
-    icon: '⌁',
-    surface: 'from-violet-500/20 to-fuchsia-500/5',
-  },
-  {
-    code: 'COM105',
-    title: 'Academic Communication',
-    description:
-      'Write clearly, research effectively, and present your ideas with confidence.',
-    duration: '6 weeks',
-    level: 'Beginner',
-    category: 'Communication',
-    icon: '✎',
-    surface: 'from-amber-500/20 to-orange-500/5',
-  },
-  {
-    code: 'PSY101',
-    title: 'Introduction to Psychology',
-    description:
-      'Understand human behaviour through cognition, development, and social psychology.',
-    duration: '8 weeks',
-    level: 'Beginner',
-    category: 'Science',
-    icon: '◉',
-    surface: 'from-rose-500/20 to-pink-500/5',
-  },
-  {
-    code: 'BUS120',
-    title: 'Business Essentials',
-    description:
-      'Discover the core ideas behind teams, markets, strategy, and sustainable growth.',
-    duration: '7 weeks',
-    level: 'Beginner',
-    category: 'Business',
-    icon: '↗',
-    surface: 'from-cyan-500/20 to-sky-500/5',
-  },
-];
-
-const categories = [
-  'All',
-  'Science',
-  'Technology',
-  'Mathematics',
-  'Communication',
-  'Business',
-] as const;
 
 const steps = [
   {
@@ -371,8 +294,9 @@ function RouteComponent() {
                   </span>
                   <Button variant="ghost" size="sm" asChild>
                     <Link
-                      to="/signin"
-                      aria-label={`Sign in to view ${course.title}`}
+                      to="/courses/$courseCode"
+                      params={{ courseCode: course.code }}
+                      aria-label={`Preview ${course.title}`}
                     >
                       Learn more <ArrowRight className="size-3.5" />
                     </Link>

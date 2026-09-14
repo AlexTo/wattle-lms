@@ -2,7 +2,7 @@
  * Copyright Wattle LMS Contributors. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import { Badge } from '@wattle/common-shadcn/components/ui/badge';
 import { Button } from '@wattle/common-shadcn/components/ui/button';
 import {
@@ -161,6 +161,7 @@ const todayTasks = [
 
 const recommendedCourses = [
   {
+    code: 'DAT210',
     category: 'Data & technology',
     title: 'Data Literacy for Decision Making',
     provider: 'Wattle Skills Academy',
@@ -169,6 +170,7 @@ const recommendedCourses = [
     surface: 'from-blue-500/20 to-cyan-500/10 text-blue-700 dark:text-blue-300',
   },
   {
+    code: 'BUS220',
     category: 'Business',
     title: 'Project Management Essentials',
     provider: 'School of Business',
@@ -178,6 +180,7 @@ const recommendedCourses = [
       'from-violet-500/20 to-fuchsia-500/10 text-violet-700 dark:text-violet-300',
   },
   {
+    code: 'PDV150',
     category: 'Personal development',
     title: 'Presenting Data with Confidence',
     provider: 'Career Development Centre',
@@ -681,10 +684,16 @@ function RouteComponent() {
                   </span>
                   <Button
                     variant="ghost"
-                    size="icon-sm"
-                    aria-label={`View ${course.title}`}
+                    size="sm"
+                    aria-label={`Preview ${course.title}`}
+                    asChild
                   >
-                    <ArrowRight />
+                    <Link
+                      to="/preview/$courseCode"
+                      params={{ courseCode: course.code }}
+                    >
+                      Preview <ArrowRight />
+                    </Link>
                   </Button>
                 </div>
               </CardContent>
@@ -696,14 +705,9 @@ function RouteComponent() {
           <p className="text-xs text-muted-foreground">
             Recommendations use your selected career goal and recent learning.
           </p>
-          <div className="flex gap-2">
-            <Button variant="ghost" size="sm">
-              Manage interests
-            </Button>
-            <Button variant="outline" size="sm">
-              Browse all courses <ArrowRight />
-            </Button>
-          </div>
+          <Button variant="ghost" size="sm">
+            Manage interests
+          </Button>
         </div>
       </section>
 
