@@ -26,7 +26,7 @@ function RouteComponent() {
       return;
     }
     if (auth.isAuthenticated) {
-      navigate({ to: '/dashboard' });
+      navigate({ to: '/home' });
       return;
     }
     if (!signinAttempted.current) {

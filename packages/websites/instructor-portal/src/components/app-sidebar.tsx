@@ -14,7 +14,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@wattle/common-shadcn/components/ui/sidebar';
-import { BookOpen, Home } from 'lucide-react';
+import { BarChart3, BookOpen, Home } from 'lucide-react';
 
 import Config from '../config';
 
@@ -23,8 +23,13 @@ export function AppSidebar() {
   const navItems = [
     {
       label: 'Home',
-      to: '/dashboard',
+      to: '/home',
       icon: Home,
+    },
+    {
+      label: 'Dashboard',
+      to: '/dashboard',
+      icon: BarChart3,
     },
     {
       label: 'My Courses',

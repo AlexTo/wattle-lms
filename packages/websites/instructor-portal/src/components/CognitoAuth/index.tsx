@@ -5,6 +5,7 @@
 import React, { PropsWithChildren } from 'react';
 import { AuthProvider, AuthProviderProps, useAuth } from 'react-oidc-context';
 import { useRuntimeConfig } from '../../hooks/useRuntimeConfig';
+import { router } from '../../router';
 import { Alert } from '../alert';
 import { Spinner } from '../spinner';
 
@@ -38,7 +39,10 @@ const CognitoAuth: React.FC<PropsWithChildren> = ({ children }) => {
     response_type: 'code',
     scope: 'email openid profile',
     onSigninCallback: () => {
-      window.location.replace('/dashboard');
+      // Runs above <RouterProvider> (see main.tsx), so useNavigate isn't
+      // available here — navigate via the router instance directly instead
+      // of window.location.replace, to avoid a full page reload.
+      router.navigate({ to: '/home', replace: true });
     },
   };
 

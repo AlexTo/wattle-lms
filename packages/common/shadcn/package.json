@@ -12,12 +12,12 @@
     "radix-ui": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "recharts": "catalog:",
     "tslib": "^2.3.0",
     "tw-animate-css": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
   },
-  "devDependencies": {},
   "license": "Apache-2.0",
   "imports": {
     "#components/*": "./src/components/*.tsx",
