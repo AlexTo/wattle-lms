@@ -215,10 +215,11 @@ export class ApplicationStack extends Stack {
     lessonMediaBucket.grantDelete(
       instructorApiIntegrations['contentItem.delete'].handler,
     );
-    // updateContentItem best-effort-deletes the old S3 object when a video
-    // is replaced with a new file.
+    // updateContentItemVideo best-effort-deletes the old S3 object when a
+    // video is replaced with a new file. updateContentItemText never touches
+    // S3, so it gets no bucket permissions.
     lessonMediaBucket.grantDelete(
-      instructorApiIntegrations['contentItem.update'].handler,
+      instructorApiIntegrations['contentItem.updateVideo'].handler,
     );
     // Deleting a lesson or module cascades to its content items, best-
     // effort-deleting each one's underlying S3 object.

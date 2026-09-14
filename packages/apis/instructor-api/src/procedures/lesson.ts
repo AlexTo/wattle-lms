@@ -164,10 +164,13 @@ export const deleteLesson = courseProcedure
 
     // Best-effort: the DynamoDB records are the source of truth for the
     // lesson's content, so a failure to remove the underlying S3 objects
-    // is logged rather than thrown.
+    // is logged rather than thrown. Only video content items have an S3
+    // object to clean up.
     await bestEffortDeleteS3Objects(
       ctx.logger,
-      contentItems.map((item) => item.s3Key),
+      contentItems.flatMap((item) =>
+        item.type === 'video' && item.s3Key ? [item.s3Key] : [],
+      ),
     );
 
     // DynamoDB transactions don't return the deleted attributes, but we

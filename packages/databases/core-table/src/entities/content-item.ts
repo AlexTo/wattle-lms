@@ -33,10 +33,13 @@ export const createContentItemEntity = async () =>
           type: 'string',
           required: true,
         },
-        // Only 'video' today; leaves room for sibling content types (text,
-        // file, quiz) from #102.
+        // 'video' and 'text' today; leaves room for sibling content types
+        // (file, quiz) from #102. Per-type required-ness (e.g. a video
+        // needs s3Key/mimeType, a text item needs body) is enforced by the
+        // zod schemas in instructor-api/core-api, not here -- ElectroDB has
+        // no native discriminated-attribute support for a single entity.
         type: {
-          type: ['video'] as const,
+          type: ['video', 'text'] as const,
           required: true,
         },
         title: {
@@ -48,14 +51,17 @@ export const createContentItemEntity = async () =>
         },
         s3Key: {
           type: 'string',
-          required: true,
         },
         mimeType: {
           type: 'string',
-          required: true,
         },
         durationSeconds: {
           type: 'number',
+        },
+        // Tiptap's JSON document, stored as a string. Only present for
+        // type: 'text'.
+        body: {
+          type: 'string',
         },
         // Sequencing within the lesson. Not part of any key: content item
         // counts per lesson are small enough to sort client-side after fetch.

@@ -105,3 +105,6 @@ catalog:
   react-dropzone: 20.1.1
   cn: 0.2.5
   recharts: 3.10.1
+  '@tiptap/react': 3.31.3
+  '@tiptap/pm': 3.31.3
+  '@tiptap/starter-kit': 3.31.3
