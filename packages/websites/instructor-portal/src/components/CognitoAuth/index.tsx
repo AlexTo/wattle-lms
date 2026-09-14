@@ -38,7 +38,7 @@ const CognitoAuth: React.FC<PropsWithChildren> = ({ children }) => {
     response_type: 'code',
     scope: 'email openid profile',
     onSigninCallback: () => {
-      window.location.replace('/dashboard');
+      window.location.replace('/home');
     },
   };
 

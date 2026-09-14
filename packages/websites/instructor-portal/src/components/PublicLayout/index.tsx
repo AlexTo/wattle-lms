@@ -28,7 +28,7 @@ const PublicLayout = ({ children }: { children: ReactNode }) => {
         {isAuthenticated ? (
           <div className="flex items-center gap-3">
             <Button variant="outline" asChild>
-              <Link to="/dashboard">Dashboard</Link>
+              <Link to="/home">Home</Link>
             </Button>
             <UserMenu />
           </div>

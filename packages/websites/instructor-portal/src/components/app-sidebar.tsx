@@ -23,18 +23,18 @@ export function AppSidebar() {
   const navItems = [
     {
       label: 'Home',
-      to: '/dashboard',
+      to: '/home',
       icon: Home,
+    },
+    {
+      label: 'Dashboard',
+      to: '/dashboard',
+      icon: BarChart3,
     },
     {
       label: 'My Courses',
       to: '/my-courses',
       icon: BookOpen,
-    },
-    {
-      label: 'Analytics',
-      to: '/analytics',
-      icon: BarChart3,
     },
   ];
   return (
