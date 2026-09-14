@@ -2,11 +2,12 @@
  * Copyright Wattle LMS Contributors. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
-import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { TRPCError } from '@trpc/server';
 import { v7 as uuidv7 } from 'uuid';
 import { courseProcedure } from '../init.js';
+import { getSignedCloudFrontUrl } from '../lib/cloudfront-client.js';
 import {
   bestEffortDeleteS3Objects,
   getS3Client,
@@ -34,7 +35,6 @@ const ALLOWED_VIDEO_TYPES: Record<string, string> = {
 };
 
 const UPLOAD_URL_EXPIRY_SECONDS = 15 * 60;
-const DOWNLOAD_URL_EXPIRY_SECONDS = 5 * 60;
 
 export const createContentItemVideoUploadUrl = courseProcedure
   .input(CreateContentItemVideoUploadUrlInputSchema)
@@ -257,14 +257,7 @@ export const createContentItemVideoUrl = courseProcedure
       throw new TRPCError({ code: 'NOT_FOUND' });
     }
 
-    const url = await getSignedUrl(
-      getS3Client(),
-      new GetObjectCommand({
-        Bucket: await resolveLessonMediaBucketName(),
-        Key: contentItem.s3Key,
-      }),
-      { expiresIn: DOWNLOAD_URL_EXPIRY_SECONDS },
-    );
+    const url = await getSignedCloudFrontUrl(contentItem.s3Key);
 
     return { url };
   });

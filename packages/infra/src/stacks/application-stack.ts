@@ -183,7 +183,9 @@ export class ApplicationStack extends Stack {
       coreTable.grantReadWriteData(handler),
     );
 
+    const lessonMediaWafEnabled = lessonMediaConfig?.enableWaf ?? true;
     const lessonMediaBucket = new LessonMediaBucket(this, 'LessonMediaBucket', {
+      enableWaf: lessonMediaWafEnabled,
       enableKmsEncryption: lessonMediaKmsEnabled,
       enableKeyRotation: lessonMediaConfig?.enableKeyRotation ?? true,
     });
@@ -194,13 +196,20 @@ export class ApplicationStack extends Stack {
         'KMS CMK encryption disabled for this stage',
       );
     }
+    if (!lessonMediaWafEnabled) {
+      suppressRules(
+        lessonMediaBucket.cloudFrontDistribution,
+        ['CKV_AWS_68'],
+        'WAF disabled for this stage',
+      );
+    }
     // Least-privilege: only the specific operations that need to sign/access
     // lesson video objects get bucket permissions, not every instructor-api
     // handler (each tRPC operation is its own isolated Lambda).
     lessonMediaBucket.grantPut(
       instructorApiIntegrations['contentItem.createVideoUploadUrl'].handler,
     );
-    lessonMediaBucket.grantRead(
+    lessonMediaBucket.grantReadSigningKey(
       instructorApiIntegrations['contentItem.createVideoUrl'].handler,
     );
     lessonMediaBucket.grantDelete(

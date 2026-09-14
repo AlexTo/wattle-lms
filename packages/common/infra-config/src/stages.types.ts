@@ -115,6 +115,8 @@ export type AdminPortalComponentConfig = {
  * Per-stage settings for the lesson media S3 bucket construct.
  */
 export type LessonMediaComponentConfig = {
+  /** Protect the CloudFront distribution in front of the bucket with AWS WAF */
+  enableWaf?: boolean;
   /** Use customer-managed KMS encryption instead of the cheaper S3-managed default */
   enableKmsEncryption?: boolean;
   /** Enable automatic key rotation on the bucket's KMS key. Only used when `enableKmsEncryption` is true */
