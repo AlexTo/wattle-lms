@@ -18,6 +18,7 @@ export interface ApplicationStageProps extends StageProps {
   readonly studentPortal?: ApplicationStackProps['studentPortal'];
   readonly instructorPortal?: ApplicationStackProps['instructorPortal'];
   readonly adminPortal?: ApplicationStackProps['adminPortal'];
+  readonly lessonMedia?: ApplicationStackProps['lessonMedia'];
 }
 
 /**
@@ -35,6 +36,7 @@ export class ApplicationStage extends Stage {
       studentPortal,
       instructorPortal,
       adminPortal,
+      lessonMedia,
       ...props
     }: ApplicationStageProps,
   ) {
@@ -49,6 +51,7 @@ export class ApplicationStage extends Stage {
       studentPortal,
       instructorPortal,
       adminPortal,
+      lessonMedia,
     });
   }
 }

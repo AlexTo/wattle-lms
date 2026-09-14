@@ -26,6 +26,7 @@ const {
   getSignedUrl,
   resolveLessonMediaBucketName,
   bestEffortDeleteS3Objects,
+  getSignedCloudFrontUrl,
 } = vi.hoisted(() => ({
   courseInstructorGet: vi.fn(),
   lessonGet: vi.fn(),
@@ -39,6 +40,7 @@ const {
   getSignedUrl: vi.fn(),
   resolveLessonMediaBucketName: vi.fn(),
   bestEffortDeleteS3Objects: vi.fn(),
+  getSignedCloudFrontUrl: vi.fn(),
 }));
 
 vi.mock('@wattle/core-table', () => ({
@@ -71,9 +73,6 @@ vi.mock('@aws-sdk/client-s3', () => ({
   PutObjectCommand: vi.fn(function (input) {
     return input;
   }),
-  GetObjectCommand: vi.fn(function (input) {
-    return input;
-  }),
   DeleteObjectCommand: vi.fn(function (input) {
     return input;
   }),
@@ -90,6 +89,13 @@ vi.mock('../lib/s3-client.js', () => ({
   getS3Client: () => ({ send: s3Send }),
   resolveLessonMediaBucketName,
   bestEffortDeleteS3Objects,
+}));
+
+// getSignedCloudFrontUrl's own config-resolution/signing behavior is
+// covered directly in lib/cloudfront-client.test.ts; here it's just a mock
+// so these tests can assert createContentItemVideoUrl calls it correctly.
+vi.mock('../lib/cloudfront-client.js', () => ({
+  getSignedCloudFrontUrl,
 }));
 
 const router = t.router({
@@ -173,6 +179,9 @@ beforeEach(() => {
   getSignedUrl.mockResolvedValue('https://example.com/signed-url');
   resolveLessonMediaBucketName.mockResolvedValue(BUCKET_NAME);
   bestEffortDeleteS3Objects.mockResolvedValue(undefined);
+  getSignedCloudFrontUrl.mockResolvedValue(
+    'https://example.cloudfront.net/signed-url',
+  );
 });
 
 describe('createContentItemVideoUploadUrl', () => {
@@ -332,12 +341,15 @@ describe('createContentItemVideoUrl', () => {
     await expect(
       callAs().createContentItemVideoUrl(input),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
-    expect(getSignedUrl).not.toHaveBeenCalled();
+    expect(getSignedCloudFrontUrl).not.toHaveBeenCalled();
   });
 
-  it('returns a presigned playback URL for the content item', async () => {
+  it('returns a signed CloudFront playback URL for the content item', async () => {
     const result = await callAs().createContentItemVideoUrl(input);
-    expect(result).toEqual({ url: 'https://example.com/signed-url' });
+    expect(getSignedCloudFrontUrl).toHaveBeenCalledWith(contentItem.s3Key);
+    expect(result).toEqual({
+      url: 'https://example.cloudfront.net/signed-url',
+    });
   });
 });
 

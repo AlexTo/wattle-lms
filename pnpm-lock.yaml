@@ -39,9 +39,15 @@ catalogs:
     '@aws-sdk/client-s3':
       specifier: 3.1126.0
       version: 3.1126.0
+    '@aws-sdk/client-secrets-manager':
+      specifier: 3.1126.0
+      version: 3.1126.0
     '@aws-sdk/client-sts':
       specifier: 3.1126.0
       version: 3.1126.0
+    '@aws-sdk/cloudfront-signer':
+      specifier: 3.1125.0
+      version: 3.1125.0
     '@aws-sdk/credential-providers':
       specifier: 3.1126.0
       version: 3.1126.0
@@ -417,7 +423,7 @@ importers:
         version: 2.35.0(@middy/core@7.9.2)
       '@aws-lambda-powertools/parameters':
         specifier: 'catalog:'
-        version: 2.35.0(@aws-sdk/client-appconfigdata@3.1126.0)(@aws-sdk/client-dynamodb@3.1126.0)(@aws-sdk/util-dynamodb@3.996.9(@aws-sdk/client-dynamodb@3.1126.0))(@middy/core@7.9.2)
+        version: 2.35.0(@aws-sdk/client-appconfigdata@3.1126.0)(@aws-sdk/client-dynamodb@3.1126.0)(@aws-sdk/client-secrets-manager@3.1126.0)(@aws-sdk/util-dynamodb@3.996.9(@aws-sdk/client-dynamodb@3.1126.0))(@middy/core@7.9.2)
       '@aws-lambda-powertools/tracer':
         specifier: 'catalog:'
         version: 2.35.0(@middy/core@7.9.2)
@@ -475,7 +481,7 @@ importers:
         version: 2.35.0(@middy/core@7.9.2)
       '@aws-lambda-powertools/parameters':
         specifier: 'catalog:'
-        version: 2.35.0(@aws-sdk/client-appconfigdata@3.1126.0)(@aws-sdk/client-dynamodb@3.1126.0)(@aws-sdk/util-dynamodb@3.996.9(@aws-sdk/client-dynamodb@3.1126.0))(@middy/core@7.9.2)
+        version: 2.35.0(@aws-sdk/client-appconfigdata@3.1126.0)(@aws-sdk/client-dynamodb@3.1126.0)(@aws-sdk/client-secrets-manager@3.1126.0)(@aws-sdk/util-dynamodb@3.996.9(@aws-sdk/client-dynamodb@3.1126.0))(@middy/core@7.9.2)
       '@aws-lambda-powertools/tracer':
         specifier: 'catalog:'
         version: 2.35.0(@middy/core@7.9.2)
@@ -488,6 +494,12 @@ importers:
       '@aws-sdk/client-s3':
         specifier: 'catalog:'
         version: 3.1126.0
+      '@aws-sdk/client-secrets-manager':
+        specifier: 'catalog:'
+        version: 3.1126.0
+      '@aws-sdk/cloudfront-signer':
+        specifier: 'catalog:'
+        version: 3.1125.0
       '@aws-sdk/credential-providers':
         specifier: 'catalog:'
         version: 3.1126.0
@@ -538,6 +550,9 @@ importers:
         specifier: 'catalog:'
         version: 3.1126.0
       '@aws-sdk/client-iam':
+        specifier: 'catalog:'
+        version: 3.1126.0
+      '@aws-sdk/client-secrets-manager':
         specifier: 'catalog:'
         version: 3.1126.0
       '@trpc/server':
@@ -631,7 +646,7 @@ importers:
     dependencies:
       '@aws-lambda-powertools/parameters':
         specifier: 'catalog:'
-        version: 2.35.0(@aws-sdk/client-appconfigdata@3.1126.0)(@aws-sdk/client-dynamodb@3.1126.0)(@aws-sdk/util-dynamodb@3.996.9(@aws-sdk/client-dynamodb@3.1126.0))(@middy/core@7.9.2)
+        version: 2.35.0(@aws-sdk/client-appconfigdata@3.1126.0)(@aws-sdk/client-dynamodb@3.1126.0)(@aws-sdk/client-secrets-manager@3.1126.0)(@aws-sdk/util-dynamodb@3.996.9(@aws-sdk/client-dynamodb@3.1126.0))(@middy/core@7.9.2)
       '@aws-sdk/client-appconfigdata':
         specifier: 'catalog:'
         version: 3.1126.0
@@ -662,7 +677,7 @@ importers:
         version: 2.35.0(@middy/core@7.9.2)
       '@aws-lambda-powertools/parameters':
         specifier: 'catalog:'
-        version: 2.35.0(@aws-sdk/client-appconfigdata@3.1126.0)(@aws-sdk/client-dynamodb@3.1126.0)(@aws-sdk/util-dynamodb@3.996.9(@aws-sdk/client-dynamodb@3.1126.0))(@middy/core@7.9.2)
+        version: 2.35.0(@aws-sdk/client-appconfigdata@3.1126.0)(@aws-sdk/client-dynamodb@3.1126.0)(@aws-sdk/client-secrets-manager@3.1126.0)(@aws-sdk/util-dynamodb@3.996.9(@aws-sdk/client-dynamodb@3.1126.0))(@middy/core@7.9.2)
       '@aws-lambda-powertools/tracer':
         specifier: 'catalog:'
         version: 2.35.0(@middy/core@7.9.2)
@@ -1127,8 +1142,16 @@ packages:
     resolution: {integrity: sha512-9v+D5TOnISyWDBkY5N+lSeQ3/pPNi1bltpd7wfY2nALO7GoGq9QbRQ8KyI4j/ctnnHq40otqV5KWKYARdYI0vg==}
     engines: {node: '>=20.0.0'}
 
+  '@aws-sdk/client-secrets-manager@3.1126.0':
+    resolution: {integrity: sha512-DD2GJgeuZVtSVteHHFfBoK7SrxrEyGPE3XjT7ug1emCGpehO+RZDUGjHQHPnxgFMyrvXm6ogl8z+JqgxUzu5sg==}
+    engines: {node: '>=20.0.0'}
+
   '@aws-sdk/client-sts@3.1126.0':
     resolution: {integrity: sha512-5h0Ro+RIToYQbjL/yfMDH8pGTwOEuzXuTKM3punYhpvf3WXyApg9j7DsACw3+Q5qDfG0VQjef2qCi+SgmVz0wg==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/cloudfront-signer@3.1125.0':
+    resolution: {integrity: sha512-1RDqOyOMHTmDqu1JHsONNVKBVunrFgOcYJv9Un0ZIovLa8zW7ps/dQfezA28hjub7Z1ADhtubM8f50daBAMkQA==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/core@3.977.9':
@@ -8689,12 +8712,13 @@ snapshots:
     optionalDependencies:
       '@middy/core': 7.9.2
 
-  '@aws-lambda-powertools/parameters@2.35.0(@aws-sdk/client-appconfigdata@3.1126.0)(@aws-sdk/client-dynamodb@3.1126.0)(@aws-sdk/util-dynamodb@3.996.9(@aws-sdk/client-dynamodb@3.1126.0))(@middy/core@7.9.2)':
+  '@aws-lambda-powertools/parameters@2.35.0(@aws-sdk/client-appconfigdata@3.1126.0)(@aws-sdk/client-dynamodb@3.1126.0)(@aws-sdk/client-secrets-manager@3.1126.0)(@aws-sdk/util-dynamodb@3.996.9(@aws-sdk/client-dynamodb@3.1126.0))(@middy/core@7.9.2)':
     dependencies:
       '@aws-lambda-powertools/commons': 2.35.0
     optionalDependencies:
       '@aws-sdk/client-appconfigdata': 3.1126.0
       '@aws-sdk/client-dynamodb': 3.1126.0
+      '@aws-sdk/client-secrets-manager': 3.1126.0
       '@aws-sdk/util-dynamodb': 3.996.9(@aws-sdk/client-dynamodb@3.1126.0)
       '@middy/core': 7.9.2
 
@@ -8739,7 +8763,7 @@ snapshots:
 
   '@aws-sdk/client-bedrock-runtime@3.1119.0':
     dependencies:
-      '@aws-sdk/core': 3.977.9
+      '@aws-sdk/core': 3.978.0
       '@aws-sdk/credential-provider-node': 3.972.82
       '@aws-sdk/eventstream-handler-node': 3.972.34
       '@aws-sdk/middleware-eventstream': 3.972.29
@@ -8801,6 +8825,17 @@ snapshots:
       '@smithy/types': 4.18.0
       tslib: 2.8.1
 
+  '@aws-sdk/client-secrets-manager@3.1126.0':
+    dependencies:
+      '@aws-sdk/core': 3.978.0
+      '@aws-sdk/credential-provider-node': 3.972.82
+      '@aws-sdk/types': 3.974.5
+      '@smithy/core': 3.33.3
+      '@smithy/fetch-http-handler': 5.7.2
+      '@smithy/node-http-handler': 4.11.3
+      '@smithy/types': 4.18.0
+      tslib: 2.8.1
+
   '@aws-sdk/client-sts@3.1126.0':
     dependencies:
       '@aws-sdk/core': 3.977.9
@@ -8811,6 +8846,11 @@ snapshots:
       '@smithy/fetch-http-handler': 5.7.2
       '@smithy/node-http-handler': 4.11.3
       '@smithy/types': 4.17.2
+      tslib: 2.8.1
+
+  '@aws-sdk/cloudfront-signer@3.1125.0':
+    dependencies:
+      '@smithy/core': 3.33.3
       tslib: 2.8.1
 
   '@aws-sdk/core@3.977.9':
@@ -8845,7 +8885,7 @@ snapshots:
 
   '@aws-sdk/credential-provider-env@3.972.70':
     dependencies:
-      '@aws-sdk/core': 3.977.9
+      '@aws-sdk/core': 3.978.0
       '@aws-sdk/types': 3.974.5
       '@smithy/core': 3.33.3
       '@smithy/types': 4.18.0
@@ -8853,7 +8893,7 @@ snapshots:
 
   '@aws-sdk/credential-provider-http@3.972.72':
     dependencies:
-      '@aws-sdk/core': 3.977.9
+      '@aws-sdk/core': 3.978.0
       '@aws-sdk/types': 3.974.5
       '@smithy/core': 3.33.3
       '@smithy/fetch-http-handler': 5.7.2
@@ -8863,7 +8903,7 @@ snapshots:
 
   '@aws-sdk/credential-provider-ini@3.973.15':
     dependencies:
-      '@aws-sdk/core': 3.977.9
+      '@aws-sdk/core': 3.978.0
       '@aws-sdk/credential-provider-env': 3.972.70
       '@aws-sdk/credential-provider-http': 3.972.72
       '@aws-sdk/credential-provider-login': 3.972.77
@@ -8879,7 +8919,7 @@ snapshots:
 
   '@aws-sdk/credential-provider-login@3.972.77':
     dependencies:
-      '@aws-sdk/core': 3.977.9
+      '@aws-sdk/core': 3.978.0
       '@aws-sdk/nested-clients': 3.997.44
       '@aws-sdk/types': 3.974.5
       '@smithy/core': 3.33.3
@@ -8902,7 +8942,7 @@ snapshots:
 
   '@aws-sdk/credential-provider-process@3.972.70':
     dependencies:
-      '@aws-sdk/core': 3.977.9
+      '@aws-sdk/core': 3.978.0
       '@aws-sdk/types': 3.974.5
       '@smithy/core': 3.33.3
       '@smithy/types': 4.18.0
@@ -8910,7 +8950,7 @@ snapshots:
 
   '@aws-sdk/credential-provider-sso@3.973.14':
     dependencies:
-      '@aws-sdk/core': 3.977.9
+      '@aws-sdk/core': 3.978.0
       '@aws-sdk/nested-clients': 3.997.44
       '@aws-sdk/token-providers': 3.1116.0
       '@aws-sdk/types': 3.974.5
@@ -8920,7 +8960,7 @@ snapshots:
 
   '@aws-sdk/credential-provider-web-identity@3.972.76':
     dependencies:
-      '@aws-sdk/core': 3.977.9
+      '@aws-sdk/core': 3.978.0
       '@aws-sdk/nested-clients': 3.997.44
       '@aws-sdk/types': 3.974.5
       '@smithy/core': 3.33.3
@@ -8948,7 +8988,7 @@ snapshots:
 
   '@aws-sdk/dynamodb-codec@3.973.44':
     dependencies:
-      '@aws-sdk/core': 3.977.9
+      '@aws-sdk/core': 3.978.0
       '@smithy/core': 3.33.3
       '@smithy/types': 4.18.0
       tslib: 2.8.1
@@ -8968,7 +9008,7 @@ snapshots:
   '@aws-sdk/lib-dynamodb@3.1115.0(@aws-sdk/client-dynamodb@3.1126.0)':
     dependencies:
       '@aws-sdk/client-dynamodb': 3.1126.0
-      '@aws-sdk/core': 3.977.9
+      '@aws-sdk/core': 3.978.0
       '@aws-sdk/util-dynamodb': 3.996.9(@aws-sdk/client-dynamodb@3.1126.0)
       '@smithy/core': 3.33.3
       '@smithy/types': 4.18.0
@@ -9007,7 +9047,7 @@ snapshots:
 
   '@aws-sdk/middleware-websocket@3.972.52':
     dependencies:
-      '@aws-sdk/core': 3.977.9
+      '@aws-sdk/core': 3.978.0
       '@aws-sdk/types': 3.974.5
       '@smithy/core': 3.33.3
       '@smithy/fetch-http-handler': 5.7.2
@@ -9017,7 +9057,7 @@ snapshots:
 
   '@aws-sdk/nested-clients@3.997.44':
     dependencies:
-      '@aws-sdk/core': 3.977.9
+      '@aws-sdk/core': 3.978.0
       '@aws-sdk/signature-v4-multi-region': 3.996.46
       '@aws-sdk/types': 3.974.5
       '@smithy/core': 3.33.3
@@ -9044,7 +9084,7 @@ snapshots:
 
   '@aws-sdk/token-providers@3.1116.0':
     dependencies:
-      '@aws-sdk/core': 3.977.9
+      '@aws-sdk/core': 3.978.0
       '@aws-sdk/nested-clients': 3.997.44
       '@aws-sdk/types': 3.974.5
       '@smithy/core': 3.33.3
@@ -9053,7 +9093,7 @@ snapshots:
 
   '@aws-sdk/token-providers@3.1119.0':
     dependencies:
-      '@aws-sdk/core': 3.977.9
+      '@aws-sdk/core': 3.978.0
       '@aws-sdk/nested-clients': 3.997.44
       '@aws-sdk/types': 3.974.5
       '@smithy/core': 3.33.3
