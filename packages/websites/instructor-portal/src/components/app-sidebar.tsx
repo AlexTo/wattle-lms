@@ -14,7 +14,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@wattle/common-shadcn/components/ui/sidebar';
-import { BookOpen, Home } from 'lucide-react';
+import { BarChart3, BookOpen, Home } from 'lucide-react';
 
 import Config from '../config';
 
@@ -30,6 +30,11 @@ export function AppSidebar() {
       label: 'My Courses',
       to: '/my-courses',
       icon: BookOpen,
+    },
+    {
+      label: 'Analytics',
+      to: '/analytics',
+      icon: BarChart3,
     },
   ];
   return (

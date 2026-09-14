@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as PublicRouteImport } from './routes/_public'
+import { Route as AuthenticatedAnalyticsRouteRouteImport } from './routes/_authenticated/analytics/route'
 import { Route as AuthenticatedDashboardRouteRouteImport } from './routes/_authenticated/dashboard/route'
 import { Route as AuthenticatedMyCoursesRouteRouteImport } from './routes/_authenticated/my-courses/route'
 import { Route as PublicIndexRouteImport } from './routes/_public/index'
@@ -25,6 +26,12 @@ const PublicRoute = PublicRouteImport.update({
   id: '/_public',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedAnalyticsRouteRoute =
+  AuthenticatedAnalyticsRouteRouteImport.update({
+    id: '/analytics',
+    path: '/analytics',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedDashboardRouteRoute =
   AuthenticatedDashboardRouteRouteImport.update({
     id: '/dashboard',
@@ -56,6 +63,7 @@ const AuthenticatedMyCoursesCourseIdRouteRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof PublicIndexRoute
+  '/analytics': typeof AuthenticatedAnalyticsRouteRoute
   '/dashboard': typeof AuthenticatedDashboardRouteRoute
   '/my-courses': typeof AuthenticatedMyCoursesRouteRoute
   '/signin': typeof PublicSigninRoute
@@ -63,6 +71,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof PublicIndexRoute
+  '/analytics': typeof AuthenticatedAnalyticsRouteRoute
   '/dashboard': typeof AuthenticatedDashboardRouteRoute
   '/my-courses': typeof AuthenticatedMyCoursesRouteRoute
   '/signin': typeof PublicSigninRoute
@@ -72,6 +81,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/_public': typeof PublicRouteWithChildren
+  '/_authenticated/analytics': typeof AuthenticatedAnalyticsRouteRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRouteRoute
   '/_authenticated/my-courses': typeof AuthenticatedMyCoursesRouteRoute
   '/_public/signin': typeof PublicSigninRoute
@@ -81,13 +91,25 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/dashboard' | '/my-courses' | '/signin' | '/my-courses/$courseId'
+    | '/'
+    | '/analytics'
+    | '/dashboard'
+    | '/my-courses'
+    | '/signin'
+    | '/my-courses/$courseId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dashboard' | '/my-courses' | '/signin' | '/my-courses/$courseId'
+  to:
+    | '/'
+    | '/analytics'
+    | '/dashboard'
+    | '/my-courses'
+    | '/signin'
+    | '/my-courses/$courseId'
   id:
     | '__root__'
     | '/_authenticated'
     | '/_public'
+    | '/_authenticated/analytics'
     | '/_authenticated/dashboard'
     | '/_authenticated/my-courses'
     | '/_public/signin'
@@ -115,6 +137,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof PublicRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/analytics': {
+      id: '/_authenticated/analytics'
+      path: '/analytics'
+      fullPath: '/analytics'
+      preLoaderRoute: typeof AuthenticatedAnalyticsRouteRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/dashboard': {
       id: '/_authenticated/dashboard'
@@ -155,12 +184,14 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAnalyticsRouteRoute: typeof AuthenticatedAnalyticsRouteRoute
   AuthenticatedDashboardRouteRoute: typeof AuthenticatedDashboardRouteRoute
   AuthenticatedMyCoursesRouteRoute: typeof AuthenticatedMyCoursesRouteRoute
   AuthenticatedMyCoursesCourseIdRouteRoute: typeof AuthenticatedMyCoursesCourseIdRouteRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAnalyticsRouteRoute: AuthenticatedAnalyticsRouteRoute,
   AuthenticatedDashboardRouteRoute: AuthenticatedDashboardRouteRoute,
   AuthenticatedMyCoursesRouteRoute: AuthenticatedMyCoursesRouteRoute,
   AuthenticatedMyCoursesCourseIdRouteRoute:
