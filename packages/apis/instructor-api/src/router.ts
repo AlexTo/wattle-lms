@@ -4,13 +4,17 @@
  */
 
 import { t } from './init.js';
+import { deleteContentItem } from './procedures/content-item-shared.js';
 import {
-  createContentItem,
+  createContentItemText,
+  updateContentItemText,
+} from './procedures/content-item-text.js';
+import {
+  createContentItemVideo,
   createContentItemVideoUploadUrl,
   createContentItemVideoUrl,
-  deleteContentItem,
-  updateContentItem,
-} from './procedures/content-item.js';
+  updateContentItemVideo,
+} from './procedures/content-item-video.js';
 import { archiveCourse, createCourse } from './procedures/course.js';
 import {
   createLesson,
@@ -42,8 +46,10 @@ export const appRouter = router({
   }),
   contentItem: router({
     createVideoUploadUrl: createContentItemVideoUploadUrl,
-    create: createContentItem,
-    update: updateContentItem,
+    createVideo: createContentItemVideo,
+    createText: createContentItemText,
+    updateVideo: updateContentItemVideo,
+    updateText: updateContentItemText,
     createVideoUrl: createContentItemVideoUrl,
     delete: deleteContentItem,
   }),

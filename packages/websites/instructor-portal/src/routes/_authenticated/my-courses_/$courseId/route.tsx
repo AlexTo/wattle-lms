@@ -35,7 +35,7 @@ import { DeleteLessonDialog } from './-components/delete-lesson-dialog';
 import { DeleteModuleDialog } from './-components/delete-module-dialog';
 import { EditLessonDialog } from './-components/edit-lesson-dialog';
 import { EditModuleDialog } from './-components/edit-module-dialog';
-import { LessonVideoRow } from './-components/lesson-video-row';
+import { LessonContentItemsRow } from './-components/lesson-content-items-row';
 
 export const Route = createFileRoute('/_authenticated/my-courses_/$courseId')({
   component: RouteComponent,
@@ -282,7 +282,7 @@ function RouteComponent() {
                               }
                             />
                           </div>
-                          <LessonVideoRow
+                          <LessonContentItemsRow
                             courseId={course.courseId}
                             moduleId={module.moduleId}
                             lessonId={lesson.lessonId}

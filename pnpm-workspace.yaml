@@ -104,3 +104,6 @@ catalog:
   embla-carousel-react: ^8.6.0
   react-dropzone: 20.1.1
   cn: 0.2.5
+  '@tiptap/react': 3.31.3
+  '@tiptap/pm': 3.31.3
+  '@tiptap/starter-kit': 3.31.3

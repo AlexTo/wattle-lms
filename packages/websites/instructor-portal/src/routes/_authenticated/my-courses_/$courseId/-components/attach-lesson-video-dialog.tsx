@@ -95,9 +95,9 @@ export function AttachLessonVideoDialog({
     contentItem.createVideoUploadUrl.mutationOptions(),
   );
   const { mutateAsync: createLessonContentItem, isPending: isCreating } =
-    useMutation(contentItem.create.mutationOptions());
+    useMutation(contentItem.createVideo.mutationOptions());
   const { mutateAsync: updateLessonContentItem, isPending: isUpdating } =
-    useMutation(contentItem.update.mutationOptions());
+    useMutation(contentItem.updateVideo.mutationOptions());
   const isSaving = isCreating || isUpdating;
 
   const {
@@ -220,7 +220,7 @@ export function AttachLessonVideoDialog({
       }}
     >
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>
             {contentItemId ? 'Edit video' : 'Add video'}
