@@ -67,21 +67,32 @@ export const ViewCourseInputSchema = z.object({
 
 export type IViewCourseInput = z.output<typeof ViewCourseInputSchema>;
 
-export const ContentItemSchema = z.object({
+const ContentItemBaseSchema = {
   contentItemId: z.string(),
   lessonId: z.string(),
   moduleId: z.string(),
   courseId: z.string(),
-  type: z.literal('video'),
   title: z.string(),
   description: z.string().optional(),
-  s3Key: z.string(),
-  mimeType: z.string(),
-  durationSeconds: z.number().optional(),
   order: z.number(),
   createdAt: z.string(),
   updatedAt: z.string(),
-});
+};
+
+export const ContentItemSchema = z.discriminatedUnion('type', [
+  z.object({
+    ...ContentItemBaseSchema,
+    type: z.literal('video'),
+    s3Key: z.string(),
+    mimeType: z.string(),
+    durationSeconds: z.number().optional(),
+  }),
+  z.object({
+    ...ContentItemBaseSchema,
+    type: z.literal('text'),
+    body: z.string(),
+  }),
+]);
 
 export type IContentItem = z.output<typeof ContentItemSchema>;
 
@@ -115,3 +126,5 @@ export type IModule = z.output<typeof ModuleSchema>;
 export const ViewCourseOutputSchema = CourseSchema.extend({
   modules: z.array(ModuleSchema),
 });
+
+export type IViewCourseOutput = z.output<typeof ViewCourseOutputSchema>;

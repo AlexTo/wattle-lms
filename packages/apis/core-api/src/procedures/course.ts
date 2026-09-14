@@ -5,6 +5,7 @@
 import { TRPCError } from '@trpc/server';
 import { courseProcedure, publicCourseProcedure } from '../init.js';
 import {
+  type IViewCourseOutput,
   ListCoursesByInstructorInputSchema,
   ListCoursesByInstructorOutputSchema,
   ListInstructorsForCourseInputSchema,
@@ -125,6 +126,11 @@ export const viewCourse = courseProcedure
       lessonsByModuleId.set(lesson.moduleId, moduleLessons);
     }
 
+    // contentItem's ElectroDB-inferred type is flat (`type: 'video' | 'text'`
+    // alongside every other attribute as optional), not a proper union keyed
+    // on `type` -- ElectroDB has no native discriminated-attribute support.
+    // The cast bridges that gap to the discriminated-union output type; the
+    // zod output schema is what actually validates the shape at runtime.
     return {
       ...course,
       modules: modules
@@ -142,5 +148,5 @@ export const viewCourse = courseProcedure
                 .sort((a, b) => a.order - b.order),
             })),
         })),
-    };
+    } as IViewCourseOutput;
   });

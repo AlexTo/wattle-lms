@@ -6,12 +6,11 @@ import type { APIGatewayProxyEvent } from 'aws-lambda';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { t } from '../init.js';
 import {
-  createContentItem,
+  createContentItemVideo,
   createContentItemVideoUploadUrl,
   createContentItemVideoUrl,
-  deleteContentItem,
-  updateContentItem,
-} from './content-item.js';
+  updateContentItemVideo,
+} from './content-item-video.js';
 
 const {
   courseInstructorGet,
@@ -21,7 +20,6 @@ const {
   contentItemGet,
   contentItemPatch,
   contentItemPatchSet,
-  contentItemDelete,
   s3Send,
   getSignedUrl,
   resolveLessonMediaBucketName,
@@ -35,7 +33,6 @@ const {
   contentItemGet: vi.fn(),
   contentItemPatch: vi.fn(),
   contentItemPatchSet: vi.fn(),
-  contentItemDelete: vi.fn(),
   s3Send: vi.fn(),
   getSignedUrl: vi.fn(),
   resolveLessonMediaBucketName: vi.fn(),
@@ -59,14 +56,13 @@ vi.mock('@wattle/core-table', () => ({
         create: contentItemCreate,
         get: contentItemGet,
         patch: contentItemPatch,
-        delete: contentItemDelete,
       },
     },
   })),
 }));
 
 // Plain function expressions, not arrow functions: these are constructed
-// with `new` in content-item.ts, and arrow functions can never be
+// with `new` in content-item-video.ts, and arrow functions can never be
 // constructors.
 vi.mock('@aws-sdk/client-s3', () => ({
   S3Client: vi.fn(),
@@ -84,7 +80,7 @@ vi.mock('@aws-sdk/s3-request-presigner', () => ({
 
 // bestEffortDeleteS3Objects's own per-key error-swallowing behavior is
 // covered directly in lib/s3-client.test.ts; here it's just a mock so
-// these tests can assert content-item.ts calls it with the right keys.
+// these tests can assert content-item-video.ts calls it with the right keys.
 vi.mock('../lib/s3-client.js', () => ({
   getS3Client: () => ({ send: s3Send }),
   resolveLessonMediaBucketName,
@@ -100,10 +96,9 @@ vi.mock('../lib/cloudfront-client.js', () => ({
 
 const router = t.router({
   createContentItemVideoUploadUrl,
-  createContentItem,
-  updateContentItem,
+  createContentItemVideo,
+  updateContentItemVideo,
   createContentItemVideoUrl,
-  deleteContentItem,
 });
 const caller = t.createCallerFactory(router);
 
@@ -148,6 +143,24 @@ const contentItem = {
   updatedAt: '2024-01-01T00:00:00.000Z',
 };
 
+const textBody = JSON.stringify({
+  type: 'doc',
+  content: [{ type: 'paragraph' }],
+});
+
+const textContentItem = {
+  contentItemId: CONTENT_ITEM_ID,
+  lessonId: LESSON_ID,
+  moduleId: MODULE_ID,
+  courseId: COURSE_ID,
+  type: 'text' as const,
+  title: 'Welcome notes',
+  body: textBody,
+  order: 1,
+  createdAt: '2024-01-01T00:00:00.000Z',
+  updatedAt: '2024-01-01T00:00:00.000Z',
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
 
@@ -166,9 +179,6 @@ beforeEach(() => {
     go: vi.fn().mockResolvedValue({ data: contentItem }),
   });
   contentItemGet.mockReturnValue({
-    go: vi.fn().mockResolvedValue({ data: contentItem }),
-  });
-  contentItemDelete.mockReturnValue({
     go: vi.fn().mockResolvedValue({ data: contentItem }),
   });
   contentItemPatch.mockReturnValue({ set: contentItemPatchSet });
@@ -256,7 +266,7 @@ describe('createContentItemVideoUploadUrl', () => {
   });
 });
 
-describe('createContentItem', () => {
+describe('createContentItemVideo', () => {
   const validInput = {
     courseId: COURSE_ID,
     moduleId: MODULE_ID,
@@ -269,7 +279,7 @@ describe('createContentItem', () => {
 
   it('rejects callers who are not in the instructor group before checking course membership', async () => {
     await expect(
-      callAs(['student']).createContentItem(validInput),
+      callAs(['student']).createContentItemVideo(validInput),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect(courseInstructorGet).not.toHaveBeenCalled();
   });
@@ -279,7 +289,9 @@ describe('createContentItem', () => {
       go: vi.fn().mockResolvedValue({ data: undefined }),
     });
 
-    await expect(callAs().createContentItem(validInput)).rejects.toMatchObject({
+    await expect(
+      callAs().createContentItemVideo(validInput),
+    ).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
     expect(contentItemCreate).not.toHaveBeenCalled();
@@ -287,7 +299,7 @@ describe('createContentItem', () => {
 
   it('throws BAD_REQUEST when the objectKey does not match the lesson and content item', async () => {
     await expect(
-      callAs().createContentItem({
+      callAs().createContentItemVideo({
         ...validInput,
         objectKey: 'lessons/other-lesson/some-id.mp4',
       }),
@@ -296,7 +308,7 @@ describe('createContentItem', () => {
   });
 
   it('starts at order 1 for the first content item in a lesson', async () => {
-    await callAs().createContentItem(validInput);
+    await callAs().createContentItemVideo(validInput);
 
     expect(contentItemCreate).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'video', order: 1 }),
@@ -310,7 +322,7 @@ describe('createContentItem', () => {
       }),
     });
 
-    await callAs().createContentItem(validInput);
+    await callAs().createContentItemVideo(validInput);
 
     expect(contentItemCreate).toHaveBeenCalledWith(
       expect.objectContaining({ order: 4 }),
@@ -353,7 +365,7 @@ describe('createContentItemVideoUrl', () => {
   });
 });
 
-describe('deleteContentItem', () => {
+describe('updateContentItemVideo', () => {
   const input = {
     courseId: COURSE_ID,
     moduleId: MODULE_ID,
@@ -363,7 +375,7 @@ describe('deleteContentItem', () => {
 
   it('rejects callers who are not in the instructor group before checking course membership', async () => {
     await expect(
-      callAs(['student']).deleteContentItem(input),
+      callAs(['student']).updateContentItemVideo(input),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect(courseInstructorGet).not.toHaveBeenCalled();
   });
@@ -373,53 +385,24 @@ describe('deleteContentItem', () => {
       go: vi.fn().mockResolvedValue({ data: undefined }),
     });
 
-    await expect(callAs().deleteContentItem(input)).rejects.toMatchObject({
-      code: 'NOT_FOUND',
-    });
-    expect(contentItemDelete).not.toHaveBeenCalled();
-  });
-
-  it('deletes the content item and its S3 object', async () => {
-    const result = await callAs().deleteContentItem(input);
-
-    expect(contentItemDelete).toHaveBeenCalledWith(input);
-    expect(bestEffortDeleteS3Objects).toHaveBeenCalledWith(expect.anything(), [
-      contentItem.s3Key,
-    ]);
-    expect(result).toEqual(contentItem);
-  });
-});
-
-describe('updateContentItem', () => {
-  const input = {
-    courseId: COURSE_ID,
-    moduleId: MODULE_ID,
-    lessonId: LESSON_ID,
-    contentItemId: CONTENT_ITEM_ID,
-  };
-
-  it('rejects callers who are not in the instructor group before checking course membership', async () => {
-    await expect(
-      callAs(['student']).updateContentItem(input),
-    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
-    expect(courseInstructorGet).not.toHaveBeenCalled();
-  });
-
-  it('throws NOT_FOUND when the content item does not exist', async () => {
-    contentItemGet.mockReturnValue({
-      go: vi.fn().mockResolvedValue({ data: undefined }),
-    });
-
-    await expect(callAs().updateContentItem(input)).rejects.toMatchObject({
+    await expect(callAs().updateContentItemVideo(input)).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
     expect(contentItemPatch).not.toHaveBeenCalled();
   });
 
   it('only patches fields provided in the input', async () => {
-    await callAs().updateContentItem({ ...input, title: 'Updated title' });
+    await callAs().updateContentItemVideo({
+      ...input,
+      title: 'Updated title',
+    });
 
-    expect(contentItemPatch).toHaveBeenCalledWith(input);
+    expect(contentItemPatch).toHaveBeenCalledWith({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: LESSON_ID,
+      contentItemId: CONTENT_ITEM_ID,
+    });
     expect(contentItemPatchSet).toHaveBeenCalledWith({
       title: 'Updated title',
     });
@@ -428,7 +411,7 @@ describe('updateContentItem', () => {
 
   it('throws BAD_REQUEST when a replacement objectKey does not match the lesson and content item', async () => {
     await expect(
-      callAs().updateContentItem({
+      callAs().updateContentItemVideo({
         ...input,
         objectKey: 'lessons/other-lesson/some-id.mp4',
       }),
@@ -446,7 +429,7 @@ describe('updateContentItem', () => {
   it('deletes the old S3 object when the video file is replaced with an unrelated object id', async () => {
     const newObjectKey = `lessons/${LESSON_ID}/some-other-fresh-id.mp4`;
 
-    await callAs().updateContentItem({
+    await callAs().updateContentItemVideo({
       ...input,
       objectKey: newObjectKey,
       mimeType: 'video/webm',
@@ -462,11 +445,22 @@ describe('updateContentItem', () => {
   });
 
   it('does not attempt an S3 delete when the objectKey is unchanged', async () => {
-    await callAs().updateContentItem({
+    await callAs().updateContentItemVideo({
       ...input,
       objectKey: contentItem.s3Key,
     });
 
     expect(bestEffortDeleteS3Objects).not.toHaveBeenCalled();
+  });
+
+  it('throws BAD_REQUEST when the existing content item is not a video', async () => {
+    contentItemGet.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: textContentItem }),
+    });
+
+    await expect(callAs().updateContentItemVideo(input)).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+    expect(contentItemPatch).not.toHaveBeenCalled();
   });
 });

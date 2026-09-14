@@ -4,21 +4,45 @@
  */
 import { z } from 'zod';
 
-export const ContentItemSchema = z.object({
+const isValidJson = (value: string) => {
+  try {
+    JSON.parse(value);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const ContentItemBaseSchema = {
   contentItemId: z.string(),
   lessonId: z.string(),
   moduleId: z.string(),
   courseId: z.string(),
-  type: z.literal('video'),
   title: z.string(),
   description: z.string().optional(),
-  s3Key: z.string(),
-  mimeType: z.string(),
-  durationSeconds: z.number().optional(),
   order: z.number(),
   createdAt: z.string(),
   updatedAt: z.string(),
+};
+
+export const VideoContentItemSchema = z.object({
+  ...ContentItemBaseSchema,
+  type: z.literal('video'),
+  s3Key: z.string(),
+  mimeType: z.string(),
+  durationSeconds: z.number().optional(),
 });
+
+export const TextContentItemSchema = z.object({
+  ...ContentItemBaseSchema,
+  type: z.literal('text'),
+  body: z.string(),
+});
+
+export const ContentItemSchema = z.discriminatedUnion('type', [
+  VideoContentItemSchema,
+  TextContentItemSchema,
+]);
 
 export type IContentItem = z.output<typeof ContentItemSchema>;
 
@@ -43,7 +67,7 @@ export type ICreateContentItemVideoUploadUrlOutput = z.output<
   typeof CreateContentItemVideoUploadUrlOutputSchema
 >;
 
-export const CreateContentItemInputSchema = z.object({
+export const CreateContentItemVideoInputSchema = z.object({
   courseId: z.string(),
   moduleId: z.string(),
   lessonId: z.string(),
@@ -55,17 +79,36 @@ export const CreateContentItemInputSchema = z.object({
   durationSeconds: z.number().optional(),
 });
 
-export type ICreateContentItemInput = z.output<
-  typeof CreateContentItemInputSchema
+export type ICreateContentItemVideoInput = z.output<
+  typeof CreateContentItemVideoInputSchema
 >;
 
-export const CreateContentItemOutputSchema = ContentItemSchema;
+export const CreateContentItemVideoOutputSchema = VideoContentItemSchema;
 
-export type ICreateContentItemOutput = z.output<
-  typeof CreateContentItemOutputSchema
+export type ICreateContentItemVideoOutput = z.output<
+  typeof CreateContentItemVideoOutputSchema
 >;
 
-export const UpdateContentItemInputSchema = z.object({
+export const CreateContentItemTextInputSchema = z.object({
+  courseId: z.string(),
+  moduleId: z.string(),
+  lessonId: z.string(),
+  title: z.string().min(1).max(200),
+  description: z.string().optional(),
+  body: z.string().min(1).refine(isValidJson, 'body must be valid JSON'),
+});
+
+export type ICreateContentItemTextInput = z.output<
+  typeof CreateContentItemTextInputSchema
+>;
+
+export const CreateContentItemTextOutputSchema = TextContentItemSchema;
+
+export type ICreateContentItemTextOutput = z.output<
+  typeof CreateContentItemTextOutputSchema
+>;
+
+export const UpdateContentItemVideoInputSchema = z.object({
   courseId: z.string(),
   moduleId: z.string(),
   lessonId: z.string(),
@@ -77,14 +120,38 @@ export const UpdateContentItemInputSchema = z.object({
   durationSeconds: z.number().optional(),
 });
 
-export type IUpdateContentItemInput = z.output<
-  typeof UpdateContentItemInputSchema
+export type IUpdateContentItemVideoInput = z.output<
+  typeof UpdateContentItemVideoInputSchema
 >;
 
-export const UpdateContentItemOutputSchema = ContentItemSchema;
+export const UpdateContentItemVideoOutputSchema = VideoContentItemSchema;
 
-export type IUpdateContentItemOutput = z.output<
-  typeof UpdateContentItemOutputSchema
+export type IUpdateContentItemVideoOutput = z.output<
+  typeof UpdateContentItemVideoOutputSchema
+>;
+
+export const UpdateContentItemTextInputSchema = z.object({
+  courseId: z.string(),
+  moduleId: z.string(),
+  lessonId: z.string(),
+  contentItemId: z.string(),
+  title: z.string().min(1).max(200).optional(),
+  description: z.string().optional(),
+  body: z
+    .string()
+    .min(1)
+    .refine(isValidJson, 'body must be valid JSON')
+    .optional(),
+});
+
+export type IUpdateContentItemTextInput = z.output<
+  typeof UpdateContentItemTextInputSchema
+>;
+
+export const UpdateContentItemTextOutputSchema = TextContentItemSchema;
+
+export type IUpdateContentItemTextOutput = z.output<
+  typeof UpdateContentItemTextOutputSchema
 >;
 
 export const CreateContentItemVideoUrlInputSchema = z.object({

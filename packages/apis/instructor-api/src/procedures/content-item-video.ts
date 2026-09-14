@@ -14,17 +14,18 @@ import {
   resolveLessonMediaBucketName,
 } from '../lib/s3-client.js';
 import {
-  CreateContentItemInputSchema,
-  CreateContentItemOutputSchema,
+  CreateContentItemVideoInputSchema,
+  CreateContentItemVideoOutputSchema,
   CreateContentItemVideoUploadUrlInputSchema,
   CreateContentItemVideoUploadUrlOutputSchema,
   CreateContentItemVideoUrlInputSchema,
   CreateContentItemVideoUrlOutputSchema,
-  DeleteContentItemInputSchema,
-  DeleteContentItemOutputSchema,
-  UpdateContentItemInputSchema,
-  UpdateContentItemOutputSchema,
+  type ICreateContentItemVideoOutput,
+  type IUpdateContentItemVideoOutput,
+  UpdateContentItemVideoInputSchema,
+  UpdateContentItemVideoOutputSchema,
 } from '../schema/index.js';
+import { asContentItemOutput } from './content-item-shared.js';
 
 // Extension -> content type allowlist for lesson videos. Anything else is
 // rejected with BAD_REQUEST before a presigned URL is ever issued.
@@ -85,9 +86,9 @@ export const createContentItemVideoUploadUrl = courseProcedure
     return { contentItemId, uploadUrl, objectKey };
   });
 
-export const createContentItem = courseProcedure
-  .input(CreateContentItemInputSchema)
-  .output(CreateContentItemOutputSchema)
+export const createContentItemVideo = courseProcedure
+  .input(CreateContentItemVideoInputSchema)
+  .output(CreateContentItemVideoOutputSchema)
   .mutation(async ({ ctx, input }) => {
     const coreTable = ctx.coreTable!;
     const {
@@ -103,7 +104,7 @@ export const createContentItem = courseProcedure
     } = input;
     const { sub: currentUser } = ctx.user;
 
-    // Only instructors teaching this specific course may attach video to
+    // Only instructors teaching this specific course may add content to
     // its lessons, not just any member of the instructor group.
     const { data: membership } = await coreTable.entities.courseInstructor
       .get({ courseId, instructorId: currentUser })
@@ -158,12 +159,12 @@ export const createContentItem = courseProcedure
       })
       .go();
 
-    return contentItem;
+    return asContentItemOutput<ICreateContentItemVideoOutput>(contentItem);
   });
 
-export const updateContentItem = courseProcedure
-  .input(UpdateContentItemInputSchema)
-  .output(UpdateContentItemOutputSchema)
+export const updateContentItemVideo = courseProcedure
+  .input(UpdateContentItemVideoInputSchema)
+  .output(UpdateContentItemVideoOutputSchema)
   .mutation(async ({ ctx, input }) => {
     const coreTable = ctx.coreTable!;
     const {
@@ -180,7 +181,7 @@ export const updateContentItem = courseProcedure
     const { sub: currentUser } = ctx.user;
 
     // Only instructors teaching this specific course may edit its lesson
-    // videos, not just any member of the instructor group.
+    // content, not just any member of the instructor group.
     const { data: membership } = await coreTable.entities.courseInstructor
       .get({ courseId, instructorId: currentUser })
       .go();
@@ -195,10 +196,19 @@ export const updateContentItem = courseProcedure
       throw new TRPCError({ code: 'NOT_FOUND' });
     }
 
+    // A content item's type is fixed at creation -- there's no supported
+    // path to turn a text item into a video.
+    if (existing.type !== 'video') {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: `Content item is type '${existing.type}', not 'video'`,
+      });
+    }
+
     // Replacing the underlying video: the object key must at least be
     // scoped to this lesson, so a caller can't point the record at an
     // object outside its lesson's prefix (e.g. another lesson's video).
-    // Unlike createContentItem, it won't contain this specific
+    // Unlike createContentItemVideo, it won't contain this specific
     // contentItemId -- createContentItemVideoUploadUrl always mints a
     // fresh id for the replacement object's key, distinct from the
     // content item being updated.
@@ -226,11 +236,15 @@ export const updateContentItem = courseProcedure
     // Best-effort: replacing the video leaves the old S3 object orphaned.
     // The DynamoDB record now points at the new object regardless of
     // whether this cleanup succeeds.
-    if (objectKey !== undefined && objectKey !== existing.s3Key) {
+    if (
+      objectKey !== undefined &&
+      objectKey !== existing.s3Key &&
+      existing.s3Key
+    ) {
       await bestEffortDeleteS3Objects(ctx.logger, [existing.s3Key]);
     }
 
-    return contentItem;
+    return asContentItemOutput<IUpdateContentItemVideoOutput>(contentItem);
   });
 
 export const createContentItemVideoUrl = courseProcedure
@@ -253,50 +267,11 @@ export const createContentItemVideoUrl = courseProcedure
     const { data: contentItem } = await coreTable.entities.contentItem
       .get({ courseId, moduleId, lessonId, contentItemId })
       .go();
-    if (!contentItem) {
+    if (!contentItem || contentItem.type !== 'video' || !contentItem.s3Key) {
       throw new TRPCError({ code: 'NOT_FOUND' });
     }
 
     const url = await getSignedCloudFrontUrl(contentItem.s3Key);
 
     return { url };
-  });
-
-export const deleteContentItem = courseProcedure
-  .input(DeleteContentItemInputSchema)
-  .output(DeleteContentItemOutputSchema)
-  .mutation(async ({ ctx, input }) => {
-    const coreTable = ctx.coreTable!;
-    const { courseId, moduleId, lessonId, contentItemId } = input;
-    const { sub: currentUser } = ctx.user;
-
-    // Only instructors teaching this specific course may remove video from
-    // its lessons, not just any member of the instructor group.
-    const { data: membership } = await coreTable.entities.courseInstructor
-      .get({ courseId, instructorId: currentUser })
-      .go();
-    if (!membership) {
-      throw new TRPCError({ code: 'FORBIDDEN' });
-    }
-
-    const { data: existing } = await coreTable.entities.contentItem
-      .get({ courseId, moduleId, lessonId, contentItemId })
-      .go();
-    if (!existing) {
-      throw new TRPCError({ code: 'NOT_FOUND' });
-    }
-
-    const { data: contentItem } = await coreTable.entities.contentItem
-      .delete({ courseId, moduleId, lessonId, contentItemId })
-      .go({ response: 'all_old' });
-    if (!contentItem) {
-      throw new TRPCError({
-        code: 'INTERNAL_SERVER_ERROR',
-        message: 'Failed to delete content item',
-      });
-    }
-
-    await bestEffortDeleteS3Objects(ctx.logger, [existing.s3Key]);
-
-    return contentItem;
   });
