@@ -2,8 +2,8 @@
  * Copyright Wattle LMS Contributors. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
+import { useQuery } from '@tanstack/react-query';
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { Badge } from '@wattle/common-shadcn/components/ui/badge';
 import { Button } from '@wattle/common-shadcn/components/ui/button';
 import {
   Card,
@@ -14,23 +14,97 @@ import {
 } from '@wattle/common-shadcn/components/ui/card';
 import { Input } from '@wattle/common-shadcn/components/ui/input';
 import {
-  ArrowRight,
   BarChart3,
-  BookOpen,
   CalendarCheck,
   Clock3,
   GraduationCap,
   LayoutDashboard,
   MessageCircleMore,
   Search,
-  Sparkles,
 } from 'lucide-react';
 import { useState } from 'react';
-import { categories, courses } from '../../data/courses';
+import { Alert } from '../../components/alert';
+import { Spinner } from '../../components/spinner';
+import { useCoreApi } from '../../hooks/useCoreApi';
 
 export const Route = createFileRoute('/_public/')({
   component: RouteComponent,
 });
+
+// The real Course schema only has courseId/title/description - no code,
+// category, level, duration, or icon/colour. Those are cosmetic catalogue
+// details this prototype doesn't have a backend for yet, so they're filled
+// in deterministically from courseId (not random) so a given course keeps
+// the same look across refetches/re-renders instead of flickering.
+const MOCK_ICONS = ['🧬', '∑', '⌁', '✎', '◉', '↗', '📊', '🗂', '🎤'];
+const MOCK_SURFACES = [
+  'from-emerald-500/20 to-teal-500/5',
+  'from-blue-500/20 to-indigo-500/5',
+  'from-violet-500/20 to-fuchsia-500/5',
+  'from-amber-500/20 to-orange-500/5',
+  'from-rose-500/20 to-pink-500/5',
+  'from-cyan-500/20 to-sky-500/5',
+];
+const MOCK_CATEGORIES = [
+  'Science',
+  'Technology',
+  'Mathematics',
+  'Communication',
+  'Business',
+] as const;
+const MOCK_LEVELS = ['Beginner', 'Intermediate'] as const;
+const MOCK_DURATIONS = [
+  '3 weeks',
+  '4 weeks',
+  '6 weeks',
+  '7 weeks',
+  '8 weeks',
+  '10 weeks',
+];
+
+const categories = ['All', ...MOCK_CATEGORIES] as const;
+
+function hashString(value: string): number {
+  let hash = 0;
+  for (let index = 0; index < value.length; index++) {
+    hash = (hash * 31 + value.charCodeAt(index)) | 0;
+  }
+  return Math.abs(hash);
+}
+
+function pick<T>(pool: readonly T[], seed: number, salt: number): T {
+  return pool[(seed + salt) % pool.length];
+}
+
+interface DisplayCourse {
+  courseId: string;
+  title: string;
+  description: string;
+  category: (typeof MOCK_CATEGORIES)[number];
+  level: (typeof MOCK_LEVELS)[number];
+  duration: string;
+  icon: string;
+  surface: string;
+}
+
+function toDisplayCourse(course: {
+  courseId: string;
+  title: string;
+  description?: string;
+}): DisplayCourse {
+  const seed = hashString(course.courseId);
+  const category = pick(MOCK_CATEGORIES, seed, 0);
+  return {
+    courseId: course.courseId,
+    title: course.title,
+    description: course.description || 'No description yet.',
+    category,
+    level: pick(MOCK_LEVELS, seed, 1),
+    duration: pick(MOCK_DURATIONS, seed, 2),
+    icon: pick(MOCK_ICONS, seed, 3),
+    surface: pick(MOCK_SURFACES, seed, 4),
+  };
+}
 
 const features = [
   {
@@ -75,136 +149,34 @@ function RouteComponent() {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<(typeof categories)[number]>('All');
   const normalisedQuery = query.trim().toLowerCase();
+
+  const trpc = useCoreApi();
+  const coursesQuery = useQuery(
+    trpc.course.publicList.queryOptions({ limit: 100 }),
+  );
+  const courses = (coursesQuery.data?.items ?? []).map(toDisplayCourse);
+
   const visibleCourses = courses.filter(
     (course) =>
       (category === 'All' || course.category === category) &&
       (!normalisedQuery ||
-        `${course.title} ${course.code} ${course.description} ${course.category}`
+        `${course.title} ${course.description} ${course.category}`
           .toLowerCase()
           .includes(normalisedQuery)),
   );
 
   return (
     <div className="w-full overflow-hidden text-left">
-      <section className="relative isolate border-b px-6 py-20 sm:py-28 lg:px-8">
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,var(--color-primary)_0,transparent_34%)] opacity-10"
-        />
-        <div className="mx-auto grid max-w-6xl items-center gap-14 lg:grid-cols-[1.1fr_0.9fr]">
-          <div>
-            <Badge variant="secondary" className="mb-6 gap-2 px-3 py-1">
-              <Sparkles className="size-3.5" /> Learning that moves with you
-            </Badge>
-            <h1 className="max-w-3xl text-4xl font-bold tracking-tight text-balance sm:text-6xl">
-              Find your next course.
-            </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-muted-foreground text-pretty">
-              Browse practical courses across science, technology, business, and
-              more. Start with what interests you and learn at your pace.
-            </p>
-            <div className="relative mt-9 max-w-xl">
-              <Search className="absolute top-1/2 left-4 size-5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                aria-label="Search courses"
-                className="h-14 rounded-xl bg-background pr-32 pl-12 text-base shadow-sm"
-                placeholder="What would you like to learn?"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-              />
-              <Button className="absolute top-1.5 right-1.5 h-11" asChild>
-                <a href="#courses">Search</a>
-              </Button>
-            </div>
-            <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
-              <span>Popular:</span>
-              {['Biology', 'Data', 'Business'].map((term) => (
-                <button
-                  key={term}
-                  type="button"
-                  className="font-medium text-foreground underline-offset-4 hover:underline"
-                  onClick={() => setQuery(term)}
-                >
-                  {term}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="relative mx-auto w-full max-w-lg">
-            <div className="absolute -inset-5 -z-10 rounded-[2rem] bg-primary/10 blur-2xl" />
-            <Card className="overflow-hidden border-primary/20 shadow-xl">
-              <CardHeader className="border-b bg-muted/50">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardDescription>Welcome back, learner</CardDescription>
-                    <CardTitle className="mt-1">
-                      Your week at a glance
-                    </CardTitle>
-                  </div>
-                  <div className="flex size-11 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                    <GraduationCap className="size-5" />
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-5 p-6">
-                <div>
-                  <div className="mb-2 flex items-center justify-between text-sm">
-                    <span className="font-medium">Foundations of Biology</span>
-                    <span className="text-muted-foreground">68%</span>
-                  </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-muted">
-                    <div className="h-full w-[68%] rounded-full bg-primary" />
-                  </div>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-xl border bg-background p-4">
-                    <BookOpen className="mb-3 size-5 text-primary" />
-                    <p className="text-sm font-semibold">3 active courses</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Continue where you left off
-                    </p>
-                  </div>
-                  <div className="rounded-xl border bg-background p-4">
-                    <CalendarCheck className="mb-3 size-5 text-primary" />
-                    <p className="text-sm font-semibold">2 tasks this week</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Your next due dates
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 rounded-xl bg-primary/10 p-4">
-                  <Sparkles className="size-5 shrink-0 text-primary" />
-                  <p className="text-sm">
-                    You are making great progress. Keep it going!
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </section>
-
       <section id="courses" className="scroll-mt-20 px-6 py-20 lg:px-8">
         <div className="mx-auto max-w-6xl">
-          <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
-            <div className="max-w-2xl">
-              <p className="text-sm font-semibold uppercase tracking-widest text-primary">
-                Course catalogue
-              </p>
-              <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
-                Browse courses for every goal.
-              </h2>
-              <p className="mt-4 text-muted-foreground">
-                Search by topic or choose a category to find your next learning
-                opportunity.
-              </p>
-            </div>
-            <Button variant="outline" asChild>
-              <Link to="/signin">
-                View your courses <ArrowRight className="size-4" />
-              </Link>
-            </Button>
+          <div className="max-w-2xl">
+            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
+              Browse courses for every goal.
+            </h2>
+            <p className="mt-4 text-muted-foreground">
+              Search by topic or choose a category to find your next learning
+              opportunity.
+            </p>
           </div>
 
           <div className="mt-8 flex flex-col gap-4 rounded-2xl border bg-muted/30 p-4 sm:p-5">
@@ -213,7 +185,7 @@ function RouteComponent() {
               <Input
                 aria-label="Filter course catalogue"
                 className="h-11 bg-background pl-10"
-                placeholder="Search by course name, code, or topic"
+                placeholder="Search by course name or topic"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
@@ -236,94 +208,117 @@ function RouteComponent() {
             </div>
           </div>
 
-          <div className="mt-7 flex items-center justify-between gap-4">
-            <p className="text-sm text-muted-foreground" aria-live="polite">
-              Showing {visibleCourses.length}{' '}
-              {visibleCourses.length === 1 ? 'course' : 'courses'}
-              {category !== 'All' ? ` in ${category}` : ''}
-            </p>
-            {(query || category !== 'All') && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setQuery('');
-                  setCategory('All');
-                }}
-              >
-                Clear filters
-              </Button>
-            )}
-          </div>
-
-          <div className="mt-10 grid gap-6 md:grid-cols-3">
-            {visibleCourses.map((course) => (
-              <Card
-                key={course.code}
-                className="group overflow-hidden pt-0 transition-all hover:-translate-y-1 hover:border-primary/40 hover:shadow-lg"
-              >
-                <div
-                  className={`flex h-36 items-center justify-center bg-gradient-to-br ${course.surface}`}
-                >
-                  <span
-                    aria-hidden="true"
-                    className="text-5xl font-semibold text-foreground/80 transition-transform group-hover:scale-110"
-                  >
-                    {course.icon}
-                  </span>
-                </div>
-                <CardHeader>
-                  <div className="flex items-center justify-between gap-3">
-                    <Badge variant="secondary">{course.code}</Badge>
-                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Clock3 className="size-3.5" /> {course.duration}
-                    </span>
-                  </div>
-                  <p className="text-xs font-medium text-primary">
-                    {course.category}
-                  </p>
-                  <CardTitle className="mt-2">{course.title}</CardTitle>
-                  <CardDescription className="leading-6">
-                    {course.description}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="mt-auto flex items-center justify-between border-t pt-5">
-                  <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                    <BarChart3 className="size-4" /> {course.level}
-                  </span>
-                  <Button variant="ghost" size="sm" asChild>
-                    <Link
-                      to="/courses/$courseCode"
-                      params={{ courseCode: course.code }}
-                      aria-label={`Preview ${course.title}`}
-                    >
-                      Learn more <ArrowRight className="size-3.5" />
-                    </Link>
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-          {visibleCourses.length === 0 && (
-            <div className="mt-10 rounded-2xl border border-dashed px-6 py-14 text-center">
-              <Search className="mx-auto size-8 text-muted-foreground" />
-              <h3 className="mt-4 font-semibold">No matching courses</h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Try another keyword or clear your filters to browse all courses.
+          {!coursesQuery.isLoading && !coursesQuery.isError && (
+            <div className="mt-7 flex items-center justify-between gap-4">
+              <p className="text-sm text-muted-foreground" aria-live="polite">
+                Showing {visibleCourses.length}{' '}
+                {visibleCourses.length === 1 ? 'course' : 'courses'}
+                {category !== 'All' ? ` in ${category}` : ''}
               </p>
-              <Button
-                className="mt-5"
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setQuery('');
-                  setCategory('All');
-                }}
-              >
-                Show all courses
-              </Button>
+              {(query || category !== 'All') && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setQuery('');
+                    setCategory('All');
+                  }}
+                >
+                  Clear filters
+                </Button>
+              )}
             </div>
+          )}
+
+          {coursesQuery.isLoading ? (
+            <div className="mt-10 flex justify-center py-12">
+              <Spinner />
+            </div>
+          ) : coursesQuery.isError ? (
+            <div className="mt-10">
+              <Alert type="error" header="Couldn't load courses">
+                {coursesQuery.error.message}
+              </Alert>
+            </div>
+          ) : (
+            <>
+              <div className="mt-10 grid gap-6 md:grid-cols-3">
+                {visibleCourses.map((course) => (
+                  <Card
+                    key={course.courseId}
+                    className="group overflow-hidden pt-0 transition-all hover:-translate-y-1 hover:border-primary/40 hover:shadow-lg"
+                  >
+                    <div
+                      className={`flex h-36 items-center justify-center bg-gradient-to-br ${course.surface}`}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="text-5xl font-semibold text-foreground/80 transition-transform group-hover:scale-110"
+                      >
+                        {course.icon}
+                      </span>
+                    </div>
+                    <CardHeader>
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs font-medium text-primary">
+                          {course.category}
+                        </p>
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Clock3 className="size-3.5" /> {course.duration}
+                        </span>
+                      </div>
+                      <CardTitle className="mt-2">{course.title}</CardTitle>
+                      <CardDescription className="leading-6">
+                        {course.description}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="mt-auto flex items-center justify-between border-t pt-5">
+                      <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                        <BarChart3 className="size-4" /> {course.level}
+                      </span>
+                      <Button variant="ghost" size="sm" asChild>
+                        <Link
+                          to="/courses/$courseCode"
+                          params={{ courseCode: course.courseId }}
+                          aria-label={`Preview ${course.title}`}
+                        >
+                          Learn more
+                        </Link>
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+              {visibleCourses.length === 0 && (
+                <div className="mt-10 rounded-2xl border border-dashed px-6 py-14 text-center">
+                  <Search className="mx-auto size-8 text-muted-foreground" />
+                  <h3 className="mt-4 font-semibold">
+                    {query || category !== 'All'
+                      ? 'No matching courses'
+                      : 'No courses available yet'}
+                  </h3>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {query || category !== 'All'
+                      ? 'Try another keyword or clear your filters to browse all courses.'
+                      : 'Check back soon for new courses.'}
+                  </p>
+                  {(query || category !== 'All') && (
+                    <Button
+                      className="mt-5"
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setQuery('');
+                        setCategory('All');
+                      }}
+                    >
+                      Show all courses
+                    </Button>
+                  )}
+                </div>
+              )}
+            </>
           )}
         </div>
       </section>
@@ -405,9 +400,7 @@ function RouteComponent() {
             Sign in to view your courses, upcoming work, and latest updates.
           </p>
           <Button className="mt-7" size="lg" variant="secondary" asChild>
-            <Link to="/signin">
-              Go to your account <ArrowRight className="size-4" />
-            </Link>
+            <Link to="/signin">Go to your account</Link>
           </Button>
         </div>
       </section>
