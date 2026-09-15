@@ -40,6 +40,15 @@ import { RuntimeConfig } from '../../core/runtime-config.js';
 // String union type for all API operation names
 type Operations = Procedures<AppRouter>;
 
+// Operations built on publicProcedure/publicCourseProcedure (see
+// packages/apis/core-api/src/init.ts) rather than protectedProcedure -
+// callable without a Cognito token. Listed explicitly so a new public
+// procedure doesn't silently inherit Cognito auth at the API Gateway layer
+// just because this list wasn't updated alongside it.
+const PUBLIC_OPERATIONS: ReadonlySet<Operations> = new Set([
+  'course.publicList',
+]);
+
 /**
  * Properties for creating a CoreApi construct
  *
@@ -130,6 +139,9 @@ export class CoreApi<
           integration: new LambdaIntegration(handler, {
             responseTransferMode: ResponseTransferMode.STREAM,
           }),
+          options: PUBLIC_OPERATIONS.has(op)
+            ? { authorizationType: AuthorizationType.NONE }
+            : undefined,
         };
       },
     });

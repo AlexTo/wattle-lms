@@ -8,7 +8,7 @@ import { t } from '../init.js';
 import {
   listCoursesByInstructor,
   listInstructorsForCourse,
-  listPublicCourses,
+  publicListCourses,
   viewCourse,
 } from './course.js';
 
@@ -52,7 +52,7 @@ vi.mock('@wattle/core-table', () => ({
 const router = t.router({
   listCoursesByInstructor,
   listInstructorsForCourse,
-  listPublicCourses,
+  publicListCourses,
   viewCourse,
 });
 const caller = t.createCallerFactory(router);
@@ -262,13 +262,13 @@ describe('listInstructorsForCourse', () => {
   });
 });
 
-describe('listPublicCourses', () => {
+describe('publicListCourses', () => {
   it('allows unauthenticated callers', async () => {
     courseQueryByStatus.mockReturnValue({
       go: vi.fn().mockResolvedValue({ data: [course], cursor: null }),
     });
 
-    const result = await callAnonymously().listPublicCourses({});
+    const result = await callAnonymously().publicListCourses({});
 
     expect(result).toEqual({ items: [course], cursor: null });
   });
@@ -278,7 +278,7 @@ describe('listPublicCourses', () => {
       go: vi.fn().mockResolvedValue({ data: [], cursor: null }),
     });
 
-    await callAnonymously().listPublicCourses({});
+    await callAnonymously().publicListCourses({});
 
     expect(courseQueryByStatus).toHaveBeenCalledWith({ status: 'published' });
     expect(courseQueryByStatus.mock.results[0].value.go).toHaveBeenCalledWith({
@@ -292,7 +292,7 @@ describe('listPublicCourses', () => {
       go: vi.fn().mockResolvedValue({ data: [course], cursor: 'next-page' }),
     });
 
-    const result = await callAnonymously().listPublicCourses({
+    const result = await callAnonymously().publicListCourses({
       cursor: 'prev-page',
       limit: 20,
     });

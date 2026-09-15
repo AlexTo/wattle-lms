@@ -52,13 +52,13 @@ export type IListInstructorsForCourseInput = z.output<
 export const ListInstructorsForCourseOutputSchema =
   createPaginatedQueryOutputSchema(InstructorSchema);
 
-export const ListPublicCoursesInputSchema = QueryInputSchema;
+export const PublicListCoursesInputSchema = QueryInputSchema;
 
-export type IListPublicCoursesInput = z.output<
-  typeof ListPublicCoursesInputSchema
+export type IPublicListCoursesInput = z.output<
+  typeof PublicListCoursesInputSchema
 >;
 
-export const ListPublicCoursesOutputSchema =
+export const PublicListCoursesOutputSchema =
   createPaginatedQueryOutputSchema(CourseSchema);
 
 export const ViewCourseInputSchema = z.object({

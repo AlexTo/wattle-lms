@@ -7,6 +7,7 @@ import {
   RestApi as _RestApi,
   RestApiProps as _RestApiProps,
   AccessLogFormat,
+  AuthorizationType,
   Cors,
   IResource,
   LogGroupLogDestination,
@@ -274,11 +275,23 @@ export class RestApi<
             : details.path
           ).split('/'),
         );
-        resource.addMethod(
+        const method = resource.addMethod(
           details.method,
           integration.integration,
           integration.options,
         );
+        // Checkov flags any non-OPTIONS method without an authorizer as open
+        // backend access. That's correct by default, but a handful of
+        // operations are deliberately public (see e.g. CoreApi's
+        // PUBLIC_OPERATIONS) via integration.options.authorizationType set
+        // to NONE - suppress just those, not the whole API.
+        if (integration.options?.authorizationType === AuthorizationType.NONE) {
+          suppressRules(
+            method,
+            ['CKV_AWS_59'],
+            'Intentionally public operation - see integration.options.authorizationType on this operation',
+          );
+        }
       },
     );
 

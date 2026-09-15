@@ -10,8 +10,8 @@ import {
   ListCoursesByInstructorOutputSchema,
   ListInstructorsForCourseInputSchema,
   ListInstructorsForCourseOutputSchema,
-  ListPublicCoursesInputSchema,
-  ListPublicCoursesOutputSchema,
+  PublicListCoursesInputSchema,
+  PublicListCoursesOutputSchema,
   ViewCourseInputSchema,
   ViewCourseOutputSchema,
 } from '../schema/index.js';
@@ -71,9 +71,9 @@ export const listInstructorsForCourse = courseProcedure
     };
   });
 
-export const listPublicCourses = publicCourseProcedure
-  .input(ListPublicCoursesInputSchema)
-  .output(ListPublicCoursesOutputSchema)
+export const publicListCourses = publicCourseProcedure
+  .input(PublicListCoursesInputSchema)
+  .output(PublicListCoursesOutputSchema)
   .query(async ({ ctx, input }) => {
     const coreTable = ctx.coreTable!;
     const { cursor, limit } = input;
