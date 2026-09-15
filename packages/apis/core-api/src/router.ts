@@ -7,6 +7,7 @@ import {
   listCoursesByInstructor,
   listInstructorsForCourse,
   publicListCourses,
+  publicViewCourse,
   viewCourse,
 } from './procedures/course.js';
 
@@ -17,6 +18,7 @@ export const appRouter = router({
     listByInstructor: listCoursesByInstructor,
     listInstructors: listInstructorsForCourse,
     publicList: publicListCourses,
+    publicView: publicViewCourse,
     view: viewCourse,
   }),
 });

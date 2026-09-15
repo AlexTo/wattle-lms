@@ -2,15 +2,6 @@
  * Copyright Wattle LMS Contributors. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
-import { Link, useLocation, useMatchRoute } from '@tanstack/react-router';
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from '@wattle/common-shadcn/components/ui/breadcrumb';
 import { Input } from '@wattle/common-shadcn/components/ui/input';
 import { Separator } from '@wattle/common-shadcn/components/ui/separator';
 import {
@@ -24,54 +15,7 @@ import Config from '../../config';
 import { AppSidebar } from '../app-sidebar';
 import { UserMenu } from '../UserMenu';
 
-const getBreadcrumbs = (
-  matchRoute: ReturnType<typeof useMatchRoute>,
-  pathName: string,
-  search: string,
-  defaultBreadcrumb: string,
-  availableRoutes?: string[],
-) => {
-  const segments = [
-    defaultBreadcrumb,
-    ...pathName.split('/').filter((segment) => segment !== ''),
-  ];
-
-  return segments.map((segment, i) => {
-    const href =
-      i === 0
-        ? '/'
-        : `/${segments
-            .slice(1, i + 1)
-            .join('/')
-            .replace('//', '/')}`;
-
-    const matched =
-      !availableRoutes || availableRoutes.find((r) => matchRoute({ to: href }));
-
-    return {
-      href: matched ? `${href}${search}` : '#',
-      text: segment,
-    };
-  });
-};
-
 const AuthenticatedLayout = ({ children }: { children: React.ReactNode }) => {
-  const [activeBreadcrumbs, setActiveBreadcrumbs] = React.useState<
-    { href: string; text: string }[]
-  >([{ text: '/', href: '/' }]);
-  const matchRoute = useMatchRoute();
-  const { pathname, search } = useLocation();
-
-  React.useEffect(() => {
-    const breadcrumbs = getBreadcrumbs(
-      matchRoute,
-      pathname,
-      Object.entries(search).reduce((p, [k, v]) => p + `${k}=${v}`, ''),
-      '/',
-    );
-    setActiveBreadcrumbs(breadcrumbs);
-  }, [matchRoute, pathname, search]);
-
   return (
     <SidebarProvider
       style={{ '--sidebar-width': '13rem' } as React.CSSProperties}
@@ -112,29 +56,7 @@ const AuthenticatedLayout = ({ children }: { children: React.ReactNode }) => {
             <UserMenu />
           </div>
         </header>
-        <div className="flex flex-1 flex-col gap-6 p-6 pt-4">
-          <Breadcrumb>
-            <BreadcrumbList>
-              {activeBreadcrumbs.map((crumb, index) => (
-                <React.Fragment key={crumb.href || index}>
-                  <BreadcrumbItem>
-                    {index === activeBreadcrumbs.length - 1 ? (
-                      <BreadcrumbPage>{crumb.text}</BreadcrumbPage>
-                    ) : (
-                      <BreadcrumbLink asChild>
-                        <Link to={crumb.href}>{crumb.text}</Link>
-                      </BreadcrumbLink>
-                    )}
-                  </BreadcrumbItem>
-                  {index < activeBreadcrumbs.length - 1 && (
-                    <BreadcrumbSeparator />
-                  )}
-                </React.Fragment>
-              ))}
-            </BreadcrumbList>
-          </Breadcrumb>
-          {children}
-        </div>
+        <div className="flex flex-1 flex-col gap-6 p-6 pt-4">{children}</div>
       </SidebarInset>
     </SidebarProvider>
   );
