@@ -2,6 +2,7 @@
  * Copyright Wattle LMS Contributors. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
+import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Badge } from '@wattle/common-shadcn/components/ui/badge';
 import { Button } from '@wattle/common-shadcn/components/ui/button';
@@ -33,7 +34,10 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from 'react-oidc-context';
-import { courses } from '../../data/courses';
+import { Alert } from '../../components/alert';
+import { Spinner } from '../../components/spinner';
+import { useCoreApi } from '../../hooks/useCoreApi';
+import { toDisplayCourse } from '../../lib/course-display';
 
 export function CoursePreview({
   courseCode,
@@ -44,21 +48,44 @@ export function CoursePreview({
   backTo: string;
   backLabel: string;
 }) {
-  const course = courses.find((item) => item.code === courseCode);
-  const { isAuthenticated } = useAuth();
-  const [expandedModuleId, setExpandedModuleId] = useState(
-    course?.modules[0]?.moduleId,
+  const trpc = useCoreApi();
+  const courseQuery = useQuery(
+    trpc.course.publicView.queryOptions({ courseId: courseCode }),
   );
+  const { isAuthenticated } = useAuth();
+  const [expandedModuleId, setExpandedModuleId] = useState<string>();
   const [enrolOpen, setEnrolOpen] = useState(false);
 
-  if (!course) {
+  if (courseQuery.isLoading) {
+    return (
+      <main className="mx-auto flex w-full max-w-3xl justify-center px-6 py-24 lg:px-8">
+        <Spinner />
+      </main>
+    );
+  }
+
+  if (courseQuery.isError || !courseQuery.data) {
+    const notFound =
+      (courseQuery.error as { data?: { code?: string } } | undefined)?.data
+        ?.code === 'NOT_FOUND';
+
     return (
       <main className="mx-auto w-full max-w-3xl px-6 py-24 text-center lg:px-8">
-        <Search className="mx-auto size-8 text-muted-foreground" />
-        <h1 className="mt-4 text-xl font-semibold">Course not found</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          This course doesn't exist, or may no longer be available.
-        </p>
+        {notFound ? (
+          <>
+            <Search className="mx-auto size-8 text-muted-foreground" />
+            <h1 className="mt-4 text-xl font-semibold">Course not found</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              This course doesn't exist, or may no longer be available.
+            </p>
+          </>
+        ) : (
+          <div className="text-left">
+            <Alert type="error" header="Couldn't load this course">
+              {courseQuery.error?.message}
+            </Alert>
+          </div>
+        )}
         <Button className="mt-6" asChild>
           <Link to={backTo}>
             <ArrowLeft className="size-4" /> {backLabel}
@@ -68,7 +95,9 @@ export function CoursePreview({
     );
   }
 
-  const lessonCount = course.modules.reduce(
+  const course = toDisplayCourse(courseQuery.data);
+  const modules = courseQuery.data.modules;
+  const lessonCount = modules.reduce(
     (total, module) => total + module.lessons.length,
     0,
   );
@@ -95,7 +124,6 @@ export function CoursePreview({
         </div>
         <div className="bg-card p-6 sm:p-8">
           <div className="flex items-center gap-3">
-            <Badge variant="secondary">{course.code}</Badge>
             <span className="text-xs font-medium text-primary">
               {course.category}
             </span>
@@ -114,8 +142,8 @@ export function CoursePreview({
               <BarChart3 className="size-4" /> {course.level}
             </span>
             <span className="flex items-center gap-1.5">
-              <BookOpen className="size-4" /> {course.modules.length}{' '}
-              {course.modules.length === 1 ? 'module' : 'modules'} &middot;{' '}
+              <BookOpen className="size-4" /> {modules.length}{' '}
+              {modules.length === 1 ? 'module' : 'modules'} &middot;{' '}
               {lessonCount} {lessonCount === 1 ? 'lesson' : 'lessons'}
             </span>
           </div>
@@ -128,8 +156,10 @@ export function CoursePreview({
             Course content
           </h2>
           <div className="space-y-3">
-            {course.modules.map((module, moduleIndex) => {
-              const isExpanded = expandedModuleId === module.moduleId;
+            {modules.map((module, moduleIndex) => {
+              const isExpanded = expandedModuleId
+                ? expandedModuleId === module.moduleId
+                : moduleIndex === 0;
               return (
                 <Card
                   key={module.moduleId}
@@ -170,9 +200,6 @@ export function CoursePreview({
                         >
                           <FileText className="size-4 shrink-0 text-muted-foreground" />
                           <span className="text-sm">{lesson.title}</span>
-                          <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-                            {lesson.duration}
-                          </span>
                         </div>
                       ))}
                     </CardContent>
@@ -201,7 +228,7 @@ export function CoursePreview({
                 <div className="flex items-center justify-between">
                   <dt className="text-muted-foreground">Content</dt>
                   <dd className="font-medium">
-                    {course.modules.length} modules, {lessonCount} lessons
+                    {modules.length} modules, {lessonCount} lessons
                   </dd>
                 </div>
               </dl>

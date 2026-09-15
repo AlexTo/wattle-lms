@@ -128,3 +128,24 @@ export const ViewCourseOutputSchema = CourseSchema.extend({
 });
 
 export type IViewCourseOutput = z.output<typeof ViewCourseOutputSchema>;
+
+// Anonymous course preview (public landing page "Learn more"): titles/
+// descriptions/ordering only, no content items - those aren't meant to be
+// readable before enrolling, and aren't fetched for this procedure anyway.
+export const PublicLessonSchema = LessonSchema.omit({ contentItems: true });
+
+export type IPublicLesson = z.output<typeof PublicLessonSchema>;
+
+export const PublicModuleSchema = ModuleSchema.omit({ lessons: true }).extend({
+  lessons: z.array(PublicLessonSchema),
+});
+
+export type IPublicModule = z.output<typeof PublicModuleSchema>;
+
+export const PublicViewCourseOutputSchema = CourseSchema.extend({
+  modules: z.array(PublicModuleSchema),
+});
+
+export type IPublicViewCourseOutput = z.output<
+  typeof PublicViewCourseOutputSchema
+>;

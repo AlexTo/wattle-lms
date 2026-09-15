@@ -12,6 +12,7 @@ import {
   ListInstructorsForCourseOutputSchema,
   PublicListCoursesInputSchema,
   PublicListCoursesOutputSchema,
+  PublicViewCourseOutputSchema,
   ViewCourseInputSchema,
   ViewCourseOutputSchema,
 } from '../schema/index.js';
@@ -84,6 +85,48 @@ export const publicListCourses = publicCourseProcedure
         .go({ cursor, limit });
 
     return { items: courses, cursor: nextCursor };
+  });
+
+// Anonymous course preview for the public landing page's "Learn more" link.
+// Unlike viewCourse, this never returns content items (previewing a course's
+// shape shouldn't expose its actual lesson content) and only ever resolves
+// published courses - draft/archived courses 404 the same as a courseId that
+// doesn't exist, so their existence isn't leaked to anonymous callers.
+export const publicViewCourse = publicCourseProcedure
+  .input(ViewCourseInputSchema)
+  .output(PublicViewCourseOutputSchema)
+  .query(async ({ ctx, input }) => {
+    const coreTable = ctx.coreTable!;
+
+    const {
+      data: { course: courses, module: modules, lesson: lessons },
+    } = await coreTable.collections
+      .curriculum({ courseId: input.courseId })
+      .go();
+    const [course] = courses;
+    if (!course || course.status !== 'published') {
+      throw new TRPCError({ code: 'NOT_FOUND' });
+    }
+
+    const lessonsByModuleId = new Map<string, typeof lessons>();
+    for (const lesson of lessons) {
+      const moduleLessons = lessonsByModuleId.get(lesson.moduleId) ?? [];
+      moduleLessons.push(lesson);
+      lessonsByModuleId.set(lesson.moduleId, moduleLessons);
+    }
+
+    return {
+      ...course,
+      modules: modules
+        .slice()
+        .sort((a, b) => a.order - b.order)
+        .map((module) => ({
+          ...module,
+          lessons: (lessonsByModuleId.get(module.moduleId) ?? [])
+            .slice()
+            .sort((a, b) => a.order - b.order),
+        })),
+    };
   });
 
 export const viewCourse = courseProcedure

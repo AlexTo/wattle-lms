@@ -9,6 +9,7 @@ import {
   listCoursesByInstructor,
   listInstructorsForCourse,
   publicListCourses,
+  publicViewCourse,
   viewCourse,
 } from './course.js';
 
@@ -53,6 +54,7 @@ const router = t.router({
   listCoursesByInstructor,
   listInstructorsForCourse,
   publicListCourses,
+  publicViewCourse,
   viewCourse,
 });
 const caller = t.createCallerFactory(router);
@@ -469,5 +471,125 @@ describe('viewCourse', () => {
     await expect(
       callAsUser().viewCourse({ courseId: 'missing' }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
+
+describe('publicViewCourse', () => {
+  const publishedCourse = { ...course, status: 'published' as const };
+
+  it('allows unauthenticated callers', async () => {
+    curriculumCollection.mockReturnValue({
+      go: vi.fn().mockResolvedValue({
+        data: {
+          course: [publishedCourse],
+          module: [],
+          lesson: [],
+          contentItem: [],
+        },
+      }),
+    });
+
+    const result = await callAnonymously().publicViewCourse({
+      courseId: publishedCourse.courseId,
+    });
+
+    expect(result).toEqual({ ...publishedCourse, modules: [] });
+  });
+
+  it('throws NOT_FOUND for a draft course, without leaking that it exists', async () => {
+    curriculumCollection.mockReturnValue({
+      go: vi.fn().mockResolvedValue({
+        data: { course: [course], module: [], lesson: [], contentItem: [] },
+      }),
+    });
+
+    await expect(
+      callAnonymously().publicViewCourse({ courseId: course.courseId }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('throws NOT_FOUND when the course does not exist', async () => {
+    curriculumCollection.mockReturnValue({
+      go: vi.fn().mockResolvedValue({
+        data: { course: [], module: [], lesson: [], contentItem: [] },
+      }),
+    });
+
+    await expect(
+      callAnonymously().publicViewCourse({ courseId: 'missing' }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it("nests each module's lessons, sorted by order, without content items", async () => {
+    const module1 = {
+      moduleId: 'module-2',
+      courseId: publishedCourse.courseId,
+      title: 'Second module',
+      order: 2,
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    };
+    const module2 = {
+      moduleId: 'module-1',
+      courseId: publishedCourse.courseId,
+      title: 'First module',
+      order: 1,
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    };
+    const lesson1 = {
+      lessonId: 'lesson-2',
+      moduleId: 'module-1',
+      courseId: publishedCourse.courseId,
+      title: 'Second lesson',
+      order: 2,
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    };
+    const lesson2 = {
+      lessonId: 'lesson-1',
+      moduleId: 'module-1',
+      courseId: publishedCourse.courseId,
+      title: 'First lesson',
+      order: 1,
+      createdAt: '2024-01-01T00:00:00.000Z',
+      updatedAt: '2024-01-01T00:00:00.000Z',
+    };
+    curriculumCollection.mockReturnValue({
+      go: vi.fn().mockResolvedValue({
+        data: {
+          course: [publishedCourse],
+          module: [module1, module2],
+          lesson: [lesson1, lesson2],
+          // Content items exist but must not appear in the response.
+          contentItem: [
+            {
+              contentItemId: 'content-item-1',
+              lessonId: 'lesson-1',
+              moduleId: 'module-1',
+              courseId: publishedCourse.courseId,
+              type: 'text' as const,
+              title: 'Should not leak',
+              body: 'secret',
+              order: 1,
+              createdAt: '2024-01-01T00:00:00.000Z',
+              updatedAt: '2024-01-01T00:00:00.000Z',
+            },
+          ],
+        },
+      }),
+    });
+
+    const result = await callAnonymously().publicViewCourse({
+      courseId: publishedCourse.courseId,
+    });
+
+    expect(result).toEqual({
+      ...publishedCourse,
+      modules: [
+        { ...module2, lessons: [lesson2, lesson1] },
+        { ...module1, lessons: [] },
+      ],
+    });
   });
 });

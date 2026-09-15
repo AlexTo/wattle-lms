@@ -2,6 +2,7 @@
  * Copyright Wattle LMS Contributors. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
+import { useQuery } from '@tanstack/react-query';
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { Badge } from '@wattle/common-shadcn/components/ui/badge';
 import { Button } from '@wattle/common-shadcn/components/ui/button';
@@ -35,7 +36,6 @@ import {
   ArrowRight,
   Bell,
   BookOpen,
-  BriefcaseBusiness,
   CalendarDays,
   CheckCircle2,
   Clock3,
@@ -49,7 +49,11 @@ import {
 } from 'lucide-react';
 import { Fragment, useEffect, useState } from 'react';
 import { useAuth } from 'react-oidc-context';
+import { Alert } from '../../../components/alert';
+import { Spinner } from '../../../components/spinner';
 import { getUserIdentity } from '../../../components/UserMenu/user-profile';
+import { useCoreApi } from '../../../hooks/useCoreApi';
+import { categories, toDisplayCourse } from '../../../lib/course-display';
 
 export const Route = createFileRoute('/_authenticated/dashboard')({
   component: RouteComponent,
@@ -159,38 +163,6 @@ const todayTasks = [
   },
 ];
 
-const recommendedCourses = [
-  {
-    code: 'DAT210',
-    category: 'Data & technology',
-    title: 'Data Literacy for Decision Making',
-    provider: 'Wattle Skills Academy',
-    detail: 'Beginner · 4 weeks · Self-paced',
-    reason: 'Matches your Data Analyst goal',
-    surface: 'from-blue-500/20 to-cyan-500/10 text-blue-700 dark:text-blue-300',
-  },
-  {
-    code: 'BUS220',
-    category: 'Business',
-    title: 'Project Management Essentials',
-    provider: 'School of Business',
-    detail: 'Beginner · 6 weeks · Self-paced',
-    reason: 'Popular with students like you',
-    surface:
-      'from-violet-500/20 to-fuchsia-500/10 text-violet-700 dark:text-violet-300',
-  },
-  {
-    code: 'PDV150',
-    category: 'Personal development',
-    title: 'Presenting Data with Confidence',
-    provider: 'Career Development Centre',
-    detail: 'Intermediate · 3 weeks · Self-paced',
-    reason: 'Based on your recent learning',
-    surface:
-      'from-amber-500/20 to-orange-500/10 text-amber-700 dark:text-amber-300',
-  },
-];
-
 function RouteComponent() {
   const { user } = useAuth();
   const { displayName } = getUserIdentity(user?.profile);
@@ -201,11 +173,24 @@ function RouteComponent() {
         ? 'timeline'
         : 'courses',
   );
-  const [courseCategory, setCourseCategory] = useState('For you');
+  const [courseCategory, setCourseCategory] =
+    useState<(typeof categories)[number]>('All');
 
   useEffect(() => {
     window.localStorage.setItem('student-home-learning-view', learningView);
   }, [learningView]);
+
+  const trpc = useCoreApi();
+  const exploreCoursesQuery = useQuery(
+    trpc.course.publicList.queryOptions({ limit: 12 }),
+  );
+  const exploreCourses = (exploreCoursesQuery.data?.items ?? []).map(
+    toDisplayCourse,
+  );
+  const filteredExploreCourses =
+    courseCategory === 'All'
+      ? exploreCourses
+      : exploreCourses.filter((course) => course.category === courseCategory);
 
   return (
     <main className="w-full space-y-6 pb-8">
@@ -632,74 +617,90 @@ function RouteComponent() {
           <ToggleGroup
             type="single"
             value={courseCategory}
-            onValueChange={(value) => value && setCourseCategory(value)}
+            onValueChange={(value) => {
+              if ((categories as readonly string[]).includes(value)) {
+                setCourseCategory(value as (typeof categories)[number]);
+              }
+            }}
             spacing={2}
             variant="outline"
             className="flex flex-wrap"
             aria-label="Course categories"
           >
-            {['For you', 'Business', 'Technology', 'Personal development'].map(
-              (category) => (
-                <ToggleGroupItem
-                  key={category}
-                  value={category}
-                  aria-label={`Show ${category} courses`}
-                >
-                  {category}
-                </ToggleGroupItem>
-              ),
-            )}
+            {categories.map((category) => (
+              <ToggleGroupItem
+                key={category}
+                value={category}
+                aria-label={`Show ${category} courses`}
+              >
+                {category}
+              </ToggleGroupItem>
+            ))}
           </ToggleGroup>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          {recommendedCourses.map((course) => (
-            <Card
-              key={course.title}
-              className="group gap-4 overflow-hidden py-0 transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
-            >
-              <div
-                className={`flex h-24 items-end bg-gradient-to-br p-5 ${course.surface}`}
+        {exploreCoursesQuery.isLoading ? (
+          <div className="flex justify-center py-10">
+            <Spinner />
+          </div>
+        ) : exploreCoursesQuery.isError ? (
+          <Alert type="error" header="Couldn't load courses">
+            {exploreCoursesQuery.error.message}
+          </Alert>
+        ) : filteredExploreCourses.length === 0 ? (
+          <div className="rounded-2xl border border-dashed px-6 py-10 text-center text-sm text-muted-foreground">
+            No courses to show in this category yet.
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-3">
+            {filteredExploreCourses.map((course) => (
+              <Card
+                key={course.courseId}
+                className="group gap-4 overflow-hidden py-0 transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md"
               >
-                <div className="flex size-10 items-center justify-center rounded-xl bg-background/80 shadow-sm backdrop-blur-sm">
-                  <BriefcaseBusiness className="size-5" />
+                <div
+                  className={`flex h-24 items-end bg-gradient-to-br p-5 ${course.surface}`}
+                >
+                  <div className="flex size-10 items-center justify-center rounded-xl bg-background/80 text-lg shadow-sm backdrop-blur-sm">
+                    <span aria-hidden="true">{course.icon}</span>
+                  </div>
                 </div>
-              </div>
-              <CardContent className="flex flex-1 flex-col gap-3 px-5 pb-5">
-                <div>
-                  <p className="text-xs font-semibold text-primary">
-                    {course.category}
-                  </p>
-                  <CardTitle className="mt-1 text-base leading-5">
-                    {course.title}
-                  </CardTitle>
-                  <CardDescription className="mt-1">
-                    {course.provider}
-                  </CardDescription>
-                </div>
-                <p className="text-xs text-muted-foreground">{course.detail}</p>
-                <div className="mt-auto flex items-center justify-between gap-3 border-t pt-3">
-                  <span className="text-xs text-muted-foreground">
-                    {course.reason}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`Preview ${course.title}`}
-                    asChild
-                  >
-                    <Link
-                      to="/preview/$courseCode"
-                      params={{ courseCode: course.code }}
+                <CardContent className="flex flex-1 flex-col gap-3 px-5 pb-5">
+                  <div>
+                    <p className="text-xs font-semibold text-primary">
+                      {course.category}
+                    </p>
+                    <CardTitle className="mt-1 text-base leading-5">
+                      {course.title}
+                    </CardTitle>
+                    <CardDescription className="mt-1 line-clamp-2">
+                      {course.description}
+                    </CardDescription>
+                  </div>
+                  <div className="mt-auto flex items-center justify-between gap-3 border-t pt-3">
+                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Clock3 className="size-3.5" /> {course.duration} ·{' '}
+                      {course.level}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`Preview ${course.title}`}
+                      asChild
                     >
-                      Preview <ArrowRight />
-                    </Link>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                      <Link
+                        to="/preview/$courseCode"
+                        params={{ courseCode: course.courseId }}
+                      >
+                        Preview <ArrowRight />
+                      </Link>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed bg-muted/30 px-4 py-3">
           <p className="text-xs text-muted-foreground">
