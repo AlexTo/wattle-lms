@@ -42,7 +42,7 @@ const CognitoAuth: React.FC<PropsWithChildren> = ({ children }) => {
       // Runs above <RouterProvider> (see main.tsx), so useNavigate isn't
       // available here — navigate via the router instance directly instead
       // of window.location.replace, to avoid a full page reload.
-      router.navigate({ to: '/home', replace: true });
+      router.navigate({ to: '/', replace: true });
     },
   };
 
