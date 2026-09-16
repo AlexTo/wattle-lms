@@ -5,9 +5,9 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useEffect, useRef } from 'react';
 import { useAuth } from 'react-oidc-context';
-import { Spinner } from '../../components/spinner';
+import { Spinner } from '../components/spinner';
 
-export const Route = createFileRoute('/_public/signin')({
+export const Route = createFileRoute('/signin')({
   component: RouteComponent,
 });
 
@@ -26,7 +26,7 @@ function RouteComponent() {
       return;
     }
     if (auth.isAuthenticated) {
-      navigate({ to: '/home' });
+      navigate({ to: '/' });
       return;
     }
     if (!signinAttempted.current) {
