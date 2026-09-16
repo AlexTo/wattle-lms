@@ -14,6 +14,7 @@ import { Route as PublicRouteImport } from './routes/_public'
 import { Route as AuthenticatedDashboardRouteRouteImport } from './routes/_authenticated/dashboard/route'
 import { Route as PublicIndexRouteImport } from './routes/_public/index'
 import { Route as PublicSigninRouteImport } from './routes/_public/signin'
+import { Route as AuthenticatedCourseCourseCodeRouteImport } from './routes/_authenticated/course/$courseCode'
 import { Route as AuthenticatedPreviewCourseCodeRouteImport } from './routes/_authenticated/preview/$courseCode'
 import { Route as PublicCoursesCourseCodeRouteImport } from './routes/_public/courses/$courseCode'
 
@@ -41,6 +42,12 @@ const PublicSigninRoute = PublicSigninRouteImport.update({
   path: '/signin',
   getParentRoute: () => PublicRoute,
 } as any)
+const AuthenticatedCourseCourseCodeRoute =
+  AuthenticatedCourseCourseCodeRouteImport.update({
+    id: '/course/$courseCode',
+    path: '/course/$courseCode',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedPreviewCourseCodeRoute =
   AuthenticatedPreviewCourseCodeRouteImport.update({
     id: '/preview/$courseCode',
@@ -57,6 +64,7 @@ export interface FileRoutesByFullPath {
   '/': typeof PublicIndexRoute
   '/dashboard': typeof AuthenticatedDashboardRouteRoute
   '/signin': typeof PublicSigninRoute
+  '/course/$courseCode': typeof AuthenticatedCourseCourseCodeRoute
   '/preview/$courseCode': typeof AuthenticatedPreviewCourseCodeRoute
   '/courses/$courseCode': typeof PublicCoursesCourseCodeRoute
 }
@@ -64,6 +72,7 @@ export interface FileRoutesByTo {
   '/': typeof PublicIndexRoute
   '/dashboard': typeof AuthenticatedDashboardRouteRoute
   '/signin': typeof PublicSigninRoute
+  '/course/$courseCode': typeof AuthenticatedCourseCourseCodeRoute
   '/preview/$courseCode': typeof AuthenticatedPreviewCourseCodeRoute
   '/courses/$courseCode': typeof PublicCoursesCourseCodeRoute
 }
@@ -74,6 +83,7 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRouteRoute
   '/_public/signin': typeof PublicSigninRoute
   '/_public/': typeof PublicIndexRoute
+  '/_authenticated/course/$courseCode': typeof AuthenticatedCourseCourseCodeRoute
   '/_authenticated/preview/$courseCode': typeof AuthenticatedPreviewCourseCodeRoute
   '/_public/courses/$courseCode': typeof PublicCoursesCourseCodeRoute
 }
@@ -83,6 +93,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/signin'
+    | '/course/$courseCode'
     | '/preview/$courseCode'
     | '/courses/$courseCode'
   fileRoutesByTo: FileRoutesByTo
@@ -90,6 +101,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/signin'
+    | '/course/$courseCode'
     | '/preview/$courseCode'
     | '/courses/$courseCode'
   id:
@@ -99,6 +111,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_public/signin'
     | '/_public/'
+    | '/_authenticated/course/$courseCode'
     | '/_authenticated/preview/$courseCode'
     | '/_public/courses/$courseCode'
   fileRoutesById: FileRoutesById
@@ -145,6 +158,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PublicSigninRouteImport
       parentRoute: typeof PublicRoute
     }
+    '/_authenticated/course/$courseCode': {
+      id: '/_authenticated/course/$courseCode'
+      path: '/course/$courseCode'
+      fullPath: '/course/$courseCode'
+      preLoaderRoute: typeof AuthenticatedCourseCourseCodeRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/preview/$courseCode': {
       id: '/_authenticated/preview/$courseCode'
       path: '/preview/$courseCode'
@@ -164,11 +184,13 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRouteRoute: typeof AuthenticatedDashboardRouteRoute
+  AuthenticatedCourseCourseCodeRoute: typeof AuthenticatedCourseCourseCodeRoute
   AuthenticatedPreviewCourseCodeRoute: typeof AuthenticatedPreviewCourseCodeRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRouteRoute: AuthenticatedDashboardRouteRoute,
+  AuthenticatedCourseCourseCodeRoute: AuthenticatedCourseCourseCodeRoute,
   AuthenticatedPreviewCourseCodeRoute: AuthenticatedPreviewCourseCodeRoute,
 }
 
