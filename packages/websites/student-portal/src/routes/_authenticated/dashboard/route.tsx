@@ -434,9 +434,17 @@ function RouteComponent() {
                             indicatorClassName={course.colour}
                           />
                         </div>
-                        <Button className="h-auto min-h-9 w-full whitespace-normal px-3 py-2 leading-5">
-                          <span>Continue</span>
-                          <ArrowRight className="shrink-0" />
+                        <Button
+                          className="h-auto min-h-9 w-full whitespace-normal px-3 py-2 leading-5"
+                          asChild
+                        >
+                          <Link
+                            to="/course/$courseCode"
+                            params={{ courseCode: course.code }}
+                          >
+                            <span>Continue</span>
+                            <ArrowRight className="shrink-0" />
+                          </Link>
                         </Button>
                       </CardContent>
                     </Card>
