@@ -23,7 +23,7 @@ export function AppSidebar() {
   const navItems = [
     {
       label: 'Home',
-      to: '/home',
+      to: '/',
       icon: Home,
     },
     {
