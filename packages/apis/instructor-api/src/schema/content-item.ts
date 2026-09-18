@@ -13,11 +13,14 @@ const isValidJson = (value: string) => {
   }
 };
 
+export const ContentItemStatusSchema = z.enum(['pending', 'ready', 'failed']);
+
 const ContentItemBaseSchema = {
   contentItemId: z.string(),
   lessonId: z.string(),
   moduleId: z.string(),
   courseId: z.string(),
+  status: ContentItemStatusSchema,
   title: z.string(),
   description: z.string().optional(),
   order: z.number(),

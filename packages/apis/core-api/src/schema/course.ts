@@ -72,6 +72,7 @@ const ContentItemBaseSchema = {
   lessonId: z.string(),
   moduleId: z.string(),
   courseId: z.string(),
+  status: z.enum(['pending', 'ready', 'failed']),
   title: z.string(),
   description: z.string().optional(),
   order: z.number(),

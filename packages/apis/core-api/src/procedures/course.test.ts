@@ -354,8 +354,10 @@ describe('viewCourse', () => {
       moduleId: 'module-1',
       courseId: course.courseId,
       type: 'video' as const,
+      status: 'ready' as const,
       title: 'Second video',
-      s3Key: 'lessons/lesson-1/content-item-2.mp4',
+      s3Key:
+        'courses/course-1/modules/module-1/lessons/lesson-1/content-items/content-item-2.mp4',
       mimeType: 'video/mp4',
       order: 2,
       createdAt: '2024-01-01T00:00:00.000Z',
@@ -367,8 +369,10 @@ describe('viewCourse', () => {
       moduleId: 'module-1',
       courseId: course.courseId,
       type: 'video' as const,
+      status: 'ready' as const,
       title: 'First video',
-      s3Key: 'lessons/lesson-1/content-item-1.mp4',
+      s3Key:
+        'courses/course-1/modules/module-1/lessons/lesson-1/content-items/content-item-1.mp4',
       mimeType: 'video/mp4',
       order: 1,
       createdAt: '2024-01-01T00:00:00.000Z',
