@@ -129,14 +129,17 @@ const lesson = {
   updatedAt: '2024-01-01T00:00:00.000Z',
 };
 
+const OBJECT_KEY_PREFIX = `courses/${COURSE_ID}/modules/${MODULE_ID}/lessons/${LESSON_ID}/content-items/`;
+
 const contentItem = {
   contentItemId: CONTENT_ITEM_ID,
   lessonId: LESSON_ID,
   moduleId: MODULE_ID,
   courseId: COURSE_ID,
   type: 'video' as const,
+  status: 'ready' as const,
   title: 'Intro video',
-  s3Key: `lessons/${LESSON_ID}/${CONTENT_ITEM_ID}.mp4`,
+  s3Key: `${OBJECT_KEY_PREFIX}${CONTENT_ITEM_ID}.mp4`,
   mimeType: 'video/mp4',
   order: 1,
   createdAt: '2024-01-01T00:00:00.000Z',
@@ -154,6 +157,7 @@ const textContentItem = {
   moduleId: MODULE_ID,
   courseId: COURSE_ID,
   type: 'text' as const,
+  status: 'ready' as const,
   title: 'Welcome notes',
   body: textBody,
   order: 1,
@@ -259,7 +263,7 @@ describe('createContentItemVideoUploadUrl', () => {
       fileName: 'intro.mp4',
     });
 
-    expect(result.objectKey).toMatch(new RegExp(`^lessons/${LESSON_ID}/`));
+    expect(result.objectKey.startsWith(OBJECT_KEY_PREFIX)).toBe(true);
     expect(result.objectKey.endsWith('.mp4')).toBe(true);
     expect(result.uploadUrl).toBe('https://example.com/signed-url');
     expect(result.contentItemId).toBeTruthy();
@@ -273,7 +277,7 @@ describe('createContentItemVideo', () => {
     lessonId: LESSON_ID,
     contentItemId: CONTENT_ITEM_ID,
     title: 'Intro video',
-    objectKey: `lessons/${LESSON_ID}/${CONTENT_ITEM_ID}.mp4`,
+    objectKey: `${OBJECT_KEY_PREFIX}${CONTENT_ITEM_ID}.mp4`,
     mimeType: 'video/mp4',
   };
 
@@ -301,17 +305,17 @@ describe('createContentItemVideo', () => {
     await expect(
       callAs().createContentItemVideo({
         ...validInput,
-        objectKey: 'lessons/other-lesson/some-id.mp4',
+        objectKey: `courses/${COURSE_ID}/modules/${MODULE_ID}/lessons/other-lesson/content-items/some-id.mp4`,
       }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     expect(contentItemCreate).not.toHaveBeenCalled();
   });
 
-  it('starts at order 1 for the first content item in a lesson', async () => {
+  it('starts at order 1 and sets status pending for the first content item in a lesson', async () => {
     await callAs().createContentItemVideo(validInput);
 
     expect(contentItemCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'video', order: 1 }),
+      expect.objectContaining({ type: 'video', status: 'pending', order: 1 }),
     );
   });
 
@@ -363,6 +367,20 @@ describe('createContentItemVideoUrl', () => {
       url: 'https://example.cloudfront.net/signed-url',
     });
   });
+
+  it.each(['pending', 'failed'] as const)(
+    'throws NOT_FOUND when the content item status is %s',
+    async (status) => {
+      contentItemGet.mockReturnValue({
+        go: vi.fn().mockResolvedValue({ data: { ...contentItem, status } }),
+      });
+
+      await expect(
+        callAs().createContentItemVideoUrl(input),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      expect(getSignedCloudFrontUrl).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('updateContentItemVideo', () => {
@@ -413,7 +431,7 @@ describe('updateContentItemVideo', () => {
     await expect(
       callAs().updateContentItemVideo({
         ...input,
-        objectKey: 'lessons/other-lesson/some-id.mp4',
+        objectKey: `courses/${COURSE_ID}/modules/${MODULE_ID}/lessons/other-lesson/content-items/some-id.mp4`,
       }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     expect(contentItemPatch).not.toHaveBeenCalled();
@@ -426,8 +444,8 @@ describe('updateContentItemVideo', () => {
   // the replacement object's key (see its own test above), distinct from
   // the contentItemId being updated -- the replacement objectKey must not
   // be required to contain the target contentItemId.
-  it('deletes the old S3 object when the video file is replaced with an unrelated object id', async () => {
-    const newObjectKey = `lessons/${LESSON_ID}/some-other-fresh-id.mp4`;
+  it('deletes the old S3 object and resets status to pending when the video file is replaced with an unrelated object id', async () => {
+    const newObjectKey = `${OBJECT_KEY_PREFIX}some-other-fresh-id.mp4`;
 
     await callAs().updateContentItemVideo({
       ...input,
@@ -437,6 +455,7 @@ describe('updateContentItemVideo', () => {
 
     expect(contentItemPatchSet).toHaveBeenCalledWith({
       s3Key: newObjectKey,
+      status: 'pending',
       mimeType: 'video/webm',
     });
     expect(bestEffortDeleteS3Objects).toHaveBeenCalledWith(expect.anything(), [

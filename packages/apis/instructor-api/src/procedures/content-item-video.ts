@@ -71,7 +71,7 @@ export const createContentItemVideoUploadUrl = courseProcedure
     }
 
     const contentItemId = uuidv7();
-    const objectKey = `lessons/${lessonId}/${contentItemId}.${ext}`;
+    const objectKey = `courses/${courseId}/modules/${moduleId}/lessons/${lessonId}/content-items/${contentItemId}.${ext}`;
 
     const uploadUrl = await getSignedUrl(
       getS3Client(),
@@ -124,7 +124,9 @@ export const createContentItemVideo = courseProcedure
     // could have issued, so a caller can't record metadata pointing at an
     // object outside this lesson's prefix (e.g. another lesson's video).
     if (
-      !objectKey.startsWith(`lessons/${lessonId}/`) ||
+      !objectKey.startsWith(
+        `courses/${courseId}/modules/${moduleId}/lessons/${lessonId}/content-items/`,
+      ) ||
       !objectKey.includes(contentItemId)
     ) {
       throw new TRPCError({
@@ -150,6 +152,7 @@ export const createContentItemVideo = courseProcedure
         moduleId,
         courseId,
         type: 'video',
+        status: 'pending',
         title,
         description,
         s3Key: objectKey,
@@ -214,7 +217,9 @@ export const updateContentItemVideo = courseProcedure
     // content item being updated.
     if (
       objectKey !== undefined &&
-      !objectKey.startsWith(`lessons/${lessonId}/`)
+      !objectKey.startsWith(
+        `courses/${courseId}/modules/${moduleId}/lessons/${lessonId}/content-items/`,
+      )
     ) {
       throw new TRPCError({
         code: 'BAD_REQUEST',
@@ -227,7 +232,10 @@ export const updateContentItemVideo = courseProcedure
       .set({
         ...(title !== undefined && { title }),
         ...(description !== undefined && { description }),
-        ...(objectKey !== undefined && { s3Key: objectKey }),
+        // Replacing the file invalidates whatever transcode already ran
+        // against the old one -- the new object needs to go through it
+        // again before it's playable.
+        ...(objectKey !== undefined && { s3Key: objectKey, status: 'pending' }),
         ...(mimeType !== undefined && { mimeType }),
         ...(durationSeconds !== undefined && { durationSeconds }),
       })
@@ -267,7 +275,12 @@ export const createContentItemVideoUrl = courseProcedure
     const { data: contentItem } = await coreTable.entities.contentItem
       .get({ courseId, moduleId, lessonId, contentItemId })
       .go();
-    if (!contentItem || contentItem.type !== 'video' || !contentItem.s3Key) {
+    if (
+      !contentItem ||
+      contentItem.type !== 'video' ||
+      !contentItem.s3Key ||
+      contentItem.status !== 'ready'
+    ) {
       throw new TRPCError({ code: 'NOT_FOUND' });
     }
 
