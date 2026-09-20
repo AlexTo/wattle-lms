@@ -18,6 +18,9 @@ catalogs:
     '@aws-lambda-powertools/parameters':
       specifier: 2.35.0
       version: 2.35.0
+    '@aws-lambda-powertools/parser':
+      specifier: 2.35.0
+      version: 2.35.0
     '@aws-lambda-powertools/tracer':
       specifier: 2.35.0
       version: 2.35.0
@@ -34,6 +37,9 @@ catalogs:
       specifier: 3.1126.0
       version: 3.1126.0
     '@aws-sdk/client-iam':
+      specifier: 3.1126.0
+      version: 3.1126.0
+    '@aws-sdk/client-mediaconvert':
       specifier: 3.1126.0
       version: 3.1126.0
     '@aws-sdk/client-s3':
@@ -693,6 +699,9 @@ importers:
       '@aws-lambda-powertools/parameters':
         specifier: 'catalog:'
         version: 2.35.0(@aws-sdk/client-appconfigdata@3.1126.0)(@aws-sdk/client-dynamodb@3.1126.0)(@aws-sdk/client-secrets-manager@3.1126.0)(@aws-sdk/util-dynamodb@3.996.9(@aws-sdk/client-dynamodb@3.1126.0))(@middy/core@7.9.2)
+      '@aws-lambda-powertools/parser':
+        specifier: 'catalog:'
+        version: 2.35.0(@middy/core@7.9.2)(zod@4.5.4)
       '@aws-lambda-powertools/tracer':
         specifier: 'catalog:'
         version: 2.35.0(@middy/core@7.9.2)
@@ -702,12 +711,30 @@ importers:
       '@aws-sdk/client-cognito-identity-provider':
         specifier: 'catalog:'
         version: 3.1126.0
+      '@aws-sdk/client-dynamodb':
+        specifier: 'catalog:'
+        version: 3.1126.0
+      '@aws-sdk/client-mediaconvert':
+        specifier: 'catalog:'
+        version: 3.1126.0
+      '@aws-sdk/client-s3':
+        specifier: 'catalog:'
+        version: 3.1126.0
       '@middy/core':
         specifier: 'catalog:'
         version: 7.9.2
+      '@wattle/core-table':
+        specifier: workspace:*
+        version: link:../databases/core-table
+      electrodb:
+        specifier: 'catalog:'
+        version: 3.9.3(@aws-sdk/client-dynamodb@3.1126.0)
       tslib:
         specifier: ^2.3.0
         version: 2.8.1
+      zod:
+        specifier: 'catalog:'
+        version: 4.5.4
     devDependencies:
       '@types/aws-lambda':
         specifier: 'catalog:'
@@ -1129,6 +1156,17 @@ packages:
       '@middy/core':
         optional: true
 
+  '@aws-lambda-powertools/parser@2.35.0':
+    resolution: {integrity: sha512-Je9jCP8vnOfX7K5GBFosrUYvq1t/54MfboacABvnNBI32uN6UUowDStO2r4jIxpNgv86vrO2YrGH4rbP9h5ufw==}
+    peerDependencies:
+      '@middy/core': 4.x || 5.x || 6.x || 7.x
+      zod: 4.x
+    peerDependenciesMeta:
+      '@middy/core':
+        optional: true
+      zod:
+        optional: true
+
   '@aws-lambda-powertools/tracer@2.35.0':
     resolution: {integrity: sha512-oYsWgjR7hB9C7YQVa3AGCpnC/R1cBGLkz1AEYPPzb+pvRaXtaPhE4clg/YIid9m90NXEHHJdHebp1Egfd4z1vQ==}
     peerDependencies:
@@ -1163,6 +1201,10 @@ packages:
 
   '@aws-sdk/client-iam@3.1126.0':
     resolution: {integrity: sha512-UsDAqfqNPzD8avW8MY0PHAGdCIfMyf3cv4CtQwqKghIRE5wD7jr/v3raKweao7AxvCDINDAJE7+fEblPNYLUoA==}
+    engines: {node: '>=20.0.0'}
+
+  '@aws-sdk/client-mediaconvert@3.1126.0':
+    resolution: {integrity: sha512-CrdWhSLEfMDZCJwA9UiR9hJovPQ+pAD3IZ4PHuhCGRlsy34HVTGnrr7vOgDRBuLwz0S3+znXLWJ/J2xtL8LPHA==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/client-s3@3.1126.0':
@@ -9092,6 +9134,14 @@ snapshots:
       '@aws-sdk/util-dynamodb': 3.996.9(@aws-sdk/client-dynamodb@3.1126.0)
       '@middy/core': 7.9.2
 
+  '@aws-lambda-powertools/parser@2.35.0(@middy/core@7.9.2)(zod@4.5.4)':
+    dependencies:
+      '@aws-lambda-powertools/commons': 2.35.0
+      '@standard-schema/spec': 1.1.0
+    optionalDependencies:
+      '@middy/core': 7.9.2
+      zod: 4.5.4
+
   '@aws-lambda-powertools/tracer@2.35.0(@middy/core@7.9.2)':
     dependencies:
       '@aws-lambda-powertools/commons': 2.35.0
@@ -9179,6 +9229,17 @@ snapshots:
       '@smithy/fetch-http-handler': 5.7.2
       '@smithy/node-http-handler': 4.11.3
       '@smithy/types': 4.17.2
+      tslib: 2.8.1
+
+  '@aws-sdk/client-mediaconvert@3.1126.0':
+    dependencies:
+      '@aws-sdk/core': 3.978.0
+      '@aws-sdk/credential-provider-node': 3.972.82
+      '@aws-sdk/types': 3.974.5
+      '@smithy/core': 3.33.3
+      '@smithy/fetch-http-handler': 5.7.2
+      '@smithy/node-http-handler': 4.11.3
+      '@smithy/types': 4.18.0
       tslib: 2.8.1
 
   '@aws-sdk/client-s3@3.1126.0':
