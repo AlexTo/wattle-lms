@@ -113,6 +113,14 @@ describe('transcodeComplete', () => {
     expect(s3Send).not.toHaveBeenCalled();
   });
 
+  it('swallows a raw upload delete failure so it does not crash the handler', async () => {
+    s3Send.mockRejectedValue(new Error('S3 is unavailable'));
+
+    await expect(
+      transcodeComplete(buildEvent('COMPLETE') as any),
+    ).resolves.toBeUndefined();
+  });
+
   it('marks the content item failed and leaves the raw upload in place on ERROR', async () => {
     await transcodeComplete(buildEvent('ERROR') as any);
 
