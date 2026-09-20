@@ -22,8 +22,8 @@ const {
   contentItemPatchSet,
   s3Send,
   getSignedUrl,
-  resolveLessonMediaBucketName,
-  bestEffortDeleteS3Objects,
+  resolveLessonMediaUploadBucketName,
+  bestEffortDeleteContentItemVideos,
   getSignedCloudFrontUrl,
 } = vi.hoisted(() => ({
   courseInstructorGet: vi.fn(),
@@ -35,8 +35,8 @@ const {
   contentItemPatchSet: vi.fn(),
   s3Send: vi.fn(),
   getSignedUrl: vi.fn(),
-  resolveLessonMediaBucketName: vi.fn(),
-  bestEffortDeleteS3Objects: vi.fn(),
+  resolveLessonMediaUploadBucketName: vi.fn(),
+  bestEffortDeleteContentItemVideos: vi.fn(),
   getSignedCloudFrontUrl: vi.fn(),
 }));
 
@@ -78,13 +78,13 @@ vi.mock('@aws-sdk/s3-request-presigner', () => ({
   getSignedUrl,
 }));
 
-// bestEffortDeleteS3Objects's own per-key error-swallowing behavior is
-// covered directly in lib/s3-client.test.ts; here it's just a mock so
-// these tests can assert content-item-video.ts calls it with the right keys.
+// bestEffortDeleteContentItemVideos's own error-swallowing/bucket-selection
+// behavior is covered directly in lib/s3-client.test.ts; here it's just a
+// mock so these tests can assert content-item-video.ts calls it correctly.
 vi.mock('../lib/s3-client.js', () => ({
   getS3Client: () => ({ send: s3Send }),
-  resolveLessonMediaBucketName,
-  bestEffortDeleteS3Objects,
+  resolveLessonMediaUploadBucketName,
+  bestEffortDeleteContentItemVideos,
 }));
 
 // getSignedCloudFrontUrl's own config-resolution/signing behavior is
@@ -191,8 +191,8 @@ beforeEach(() => {
   });
   s3Send.mockResolvedValue({});
   getSignedUrl.mockResolvedValue('https://example.com/signed-url');
-  resolveLessonMediaBucketName.mockResolvedValue(BUCKET_NAME);
-  bestEffortDeleteS3Objects.mockResolvedValue(undefined);
+  resolveLessonMediaUploadBucketName.mockResolvedValue(BUCKET_NAME);
+  bestEffortDeleteContentItemVideos.mockResolvedValue(undefined);
   getSignedCloudFrontUrl.mockResolvedValue(
     'https://example.cloudfront.net/signed-url',
   );
@@ -267,6 +267,66 @@ describe('createContentItemVideoUploadUrl', () => {
     expect(result.objectKey.endsWith('.mp4')).toBe(true);
     expect(result.uploadUrl).toBe('https://example.com/signed-url');
     expect(result.contentItemId).toBeTruthy();
+  });
+
+  // Invariant: the transcode pipeline parses courseId/moduleId/lessonId/
+  // contentItemId straight out of the S3 key, with no DynamoDB lookup. A
+  // replacement upload must reuse the existing content item's real id in
+  // the key instead of minting an unrelated one, or the pipeline can never
+  // find the record to update once transcoding finishes.
+  it('reuses the given contentItemId in the object key when replacing an existing video', async () => {
+    const result = await callAs().createContentItemVideoUploadUrl({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: LESSON_ID,
+      fileName: 'intro.webm',
+      contentItemId: CONTENT_ITEM_ID,
+    });
+
+    expect(contentItemGet).toHaveBeenCalledWith({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: LESSON_ID,
+      contentItemId: CONTENT_ITEM_ID,
+    });
+    expect(result.contentItemId).toBe(CONTENT_ITEM_ID);
+    expect(result.objectKey).toBe(
+      `${OBJECT_KEY_PREFIX}${CONTENT_ITEM_ID}.webm`,
+    );
+  });
+
+  it('throws NOT_FOUND when the given contentItemId does not exist', async () => {
+    contentItemGet.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: undefined }),
+    });
+
+    await expect(
+      callAs().createContentItemVideoUploadUrl({
+        courseId: COURSE_ID,
+        moduleId: MODULE_ID,
+        lessonId: LESSON_ID,
+        fileName: 'intro.mp4',
+        contentItemId: 'missing-content-item',
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(getSignedUrl).not.toHaveBeenCalled();
+  });
+
+  it('throws NOT_FOUND when the given contentItemId is not a video', async () => {
+    contentItemGet.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: textContentItem }),
+    });
+
+    await expect(
+      callAs().createContentItemVideoUploadUrl({
+        courseId: COURSE_ID,
+        moduleId: MODULE_ID,
+        lessonId: LESSON_ID,
+        fileName: 'intro.mp4',
+        contentItemId: CONTENT_ITEM_ID,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(getSignedUrl).not.toHaveBeenCalled();
   });
 });
 
@@ -424,7 +484,7 @@ describe('updateContentItemVideo', () => {
     expect(contentItemPatchSet).toHaveBeenCalledWith({
       title: 'Updated title',
     });
-    expect(bestEffortDeleteS3Objects).not.toHaveBeenCalled();
+    expect(bestEffortDeleteContentItemVideos).not.toHaveBeenCalled();
   });
 
   it('throws BAD_REQUEST when a replacement objectKey does not match the lesson and content item', async () => {
@@ -439,11 +499,11 @@ describe('updateContentItemVideo', () => {
 
   // Invariant: replacing a video's underlying file must not leave the old
   // object in the bucket, or the lesson media bucket accumulates orphans
-  // every time an instructor swaps a video out.
-  // Regression: createContentItemVideoUploadUrl always mints a fresh id for
-  // the replacement object's key (see its own test above), distinct from
-  // the contentItemId being updated -- the replacement objectKey must not
-  // be required to contain the target contentItemId.
+  // every time an instructor swaps a video out. While
+  // createContentItemVideoUploadUrl now reuses the real contentItemId in
+  // the key when told it's a replacement (see its own tests above), this
+  // procedure doesn't require that -- an objectKey scoped to the lesson but
+  // carrying an unrelated id must still be accepted and cleaned up.
   it('deletes the old S3 object and resets status to pending when the video file is replaced with an unrelated object id', async () => {
     const newObjectKey = `${OBJECT_KEY_PREFIX}some-other-fresh-id.mp4`;
 
@@ -458,9 +518,10 @@ describe('updateContentItemVideo', () => {
       status: 'pending',
       mimeType: 'video/webm',
     });
-    expect(bestEffortDeleteS3Objects).toHaveBeenCalledWith(expect.anything(), [
-      contentItem.s3Key,
-    ]);
+    expect(bestEffortDeleteContentItemVideos).toHaveBeenCalledWith(
+      expect.anything(),
+      [contentItem],
+    );
   });
 
   it('does not attempt an S3 delete when the objectKey is unchanged', async () => {
@@ -469,7 +530,7 @@ describe('updateContentItemVideo', () => {
       objectKey: contentItem.s3Key,
     });
 
-    expect(bestEffortDeleteS3Objects).not.toHaveBeenCalled();
+    expect(bestEffortDeleteContentItemVideos).not.toHaveBeenCalled();
   });
 
   it('throws BAD_REQUEST when the existing content item is not a video', async () => {

@@ -2,6 +2,7 @@
  * Copyright Wattle LMS Contributors. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
+import { extname } from 'node:path';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { TRPCError } from '@trpc/server';
@@ -9,9 +10,9 @@ import { v7 as uuidv7 } from 'uuid';
 import { courseProcedure } from '../init.js';
 import { getSignedCloudFrontUrl } from '../lib/cloudfront-client.js';
 import {
-  bestEffortDeleteS3Objects,
+  bestEffortDeleteContentItemVideos,
   getS3Client,
-  resolveLessonMediaBucketName,
+  resolveLessonMediaUploadBucketName,
 } from '../lib/s3-client.js';
 import {
   CreateContentItemVideoInputSchema,
@@ -61,8 +62,8 @@ export const createContentItemVideoUploadUrl = courseProcedure
       throw new TRPCError({ code: 'NOT_FOUND' });
     }
 
-    const ext = fileName.split('.').pop()?.toLowerCase();
-    const contentType = ext ? ALLOWED_VIDEO_TYPES[ext] : undefined;
+    const ext = extname(fileName).slice(1).toLowerCase();
+    const contentType = ALLOWED_VIDEO_TYPES[ext];
     if (!contentType) {
       throw new TRPCError({
         code: 'BAD_REQUEST',
@@ -70,13 +71,31 @@ export const createContentItemVideoUploadUrl = courseProcedure
       });
     }
 
-    const contentItemId = uuidv7();
+    // When replacing an existing video, reuse its id in the object key
+    // instead of minting a fresh one, so the key's id segment always
+    // matches a real content item -- the transcode-trigger Lambda parses
+    // this id straight out of the S3 key with no DynamoDB lookup.
+    if (input.contentItemId !== undefined) {
+      const { data: existing } = await coreTable.entities.contentItem
+        .get({
+          courseId,
+          moduleId,
+          lessonId,
+          contentItemId: input.contentItemId,
+        })
+        .go();
+      if (!existing || existing.type !== 'video') {
+        throw new TRPCError({ code: 'NOT_FOUND' });
+      }
+    }
+
+    const contentItemId = input.contentItemId ?? uuidv7();
     const objectKey = `courses/${courseId}/modules/${moduleId}/lessons/${lessonId}/content-items/${contentItemId}.${ext}`;
 
     const uploadUrl = await getSignedUrl(
       getS3Client(),
       new PutObjectCommand({
-        Bucket: await resolveLessonMediaBucketName(),
+        Bucket: await resolveLessonMediaUploadBucketName(),
         Key: objectKey,
         ContentType: contentType,
       }),
@@ -211,10 +230,10 @@ export const updateContentItemVideo = courseProcedure
     // Replacing the underlying video: the object key must at least be
     // scoped to this lesson, so a caller can't point the record at an
     // object outside its lesson's prefix (e.g. another lesson's video).
-    // Unlike createContentItemVideo, it won't contain this specific
-    // contentItemId -- createContentItemVideoUploadUrl always mints a
-    // fresh id for the replacement object's key, distinct from the
-    // content item being updated.
+    // createContentItemVideoUploadUrl reuses this contentItemId in the key
+    // when told it's a replacement, but doesn't have to be -- a caller
+    // could still supply an unrelated key from within this lesson, so this
+    // check doesn't require an exact contentItemId match.
     if (
       objectKey !== undefined &&
       !objectKey.startsWith(
@@ -249,7 +268,7 @@ export const updateContentItemVideo = courseProcedure
       objectKey !== existing.s3Key &&
       existing.s3Key
     ) {
-      await bestEffortDeleteS3Objects(ctx.logger, [existing.s3Key]);
+      await bestEffortDeleteContentItemVideos(ctx.logger, [existing]);
     }
 
     return asContentItemOutput<IUpdateContentItemVideoOutput>(contentItem);

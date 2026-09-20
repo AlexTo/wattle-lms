@@ -54,6 +54,11 @@ export const CreateContentItemVideoUploadUrlInputSchema = z.object({
   moduleId: z.string(),
   lessonId: z.string(),
   fileName: z.string().min(1),
+  // Set when replacing an existing video's file, so the object key's id
+  // segment matches the content item being updated instead of a fresh,
+  // unrelated one -- the transcode pipeline parses this id straight out of
+  // the S3 key.
+  contentItemId: z.string().optional(),
 });
 
 export type ICreateContentItemVideoUploadUrlInput = z.output<

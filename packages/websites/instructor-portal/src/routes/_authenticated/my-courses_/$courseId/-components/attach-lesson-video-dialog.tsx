@@ -132,6 +132,9 @@ export function AttachLessonVideoDialog({
         moduleId,
         lessonId,
         fileName: file.name,
+        // Replacing an existing video: reuse its id so the uploaded
+        // object's key matches the content item being updated.
+        ...(contentItemId && { contentItemId }),
       });
 
       await putFileWithProgress(uploadUrl, file, setUploadProgress);
