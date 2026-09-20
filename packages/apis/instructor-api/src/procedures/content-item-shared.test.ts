@@ -12,11 +12,13 @@ const {
   contentItemGet,
   contentItemDelete,
   bestEffortDeleteContentItemVideos,
+  bestEffortCancelTranscodeJobs,
 } = vi.hoisted(() => ({
   courseInstructorGet: vi.fn(),
   contentItemGet: vi.fn(),
   contentItemDelete: vi.fn(),
   bestEffortDeleteContentItemVideos: vi.fn(),
+  bestEffortCancelTranscodeJobs: vi.fn(),
 }));
 
 vi.mock('@wattle/core-table', () => ({
@@ -38,6 +40,13 @@ vi.mock('@wattle/core-table', () => ({
 // mock so these tests can assert content-item-shared.ts calls it correctly.
 vi.mock('../lib/s3-client.js', () => ({
   bestEffortDeleteContentItemVideos,
+}));
+
+// bestEffortCancelTranscodeJobs's own status/job-id filtering is covered
+// directly in lib/mediaconvert-client.test.ts; here it's just a mock so
+// these tests can assert content-item-shared.ts calls it correctly.
+vi.mock('../lib/mediaconvert-client.js', () => ({
+  bestEffortCancelTranscodeJobs,
 }));
 
 const router = t.router({ deleteContentItem });
@@ -103,6 +112,7 @@ beforeEach(() => {
     go: vi.fn().mockResolvedValue({ data: videoContentItem }),
   });
   bestEffortDeleteContentItemVideos.mockResolvedValue(undefined);
+  bestEffortCancelTranscodeJobs.mockResolvedValue(undefined);
 });
 
 describe('deleteContentItem', () => {
@@ -139,10 +149,37 @@ describe('deleteContentItem', () => {
       expect.anything(),
       [videoContentItem],
     );
+    expect(bestEffortCancelTranscodeJobs).toHaveBeenCalledWith(
+      expect.anything(),
+      [videoContentItem],
+    );
     expect(result).toEqual(videoContentItem);
   });
 
-  it('deletes a text content item without attempting an S3 cleanup', async () => {
+  // A still-transcoding video's job has nothing left to report to once its
+  // content item is gone -- see the mediaConvertJobId design in #123.
+  it('cancels an in-flight transcode job when deleting a still-pending video', async () => {
+    const pendingVideoContentItem = {
+      ...videoContentItem,
+      status: 'pending' as const,
+      mediaConvertJobId: 'job-1',
+    };
+    contentItemGet.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: pendingVideoContentItem }),
+    });
+    contentItemDelete.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: pendingVideoContentItem }),
+    });
+
+    await callAs().deleteContentItem(input);
+
+    expect(bestEffortCancelTranscodeJobs).toHaveBeenCalledWith(
+      expect.anything(),
+      [pendingVideoContentItem],
+    );
+  });
+
+  it('deletes a text content item without attempting an S3 cleanup or job cancellation', async () => {
     contentItemGet.mockReturnValue({
       go: vi.fn().mockResolvedValue({ data: textContentItem }),
     });
@@ -153,6 +190,7 @@ describe('deleteContentItem', () => {
     const result = await callAs().deleteContentItem(input);
 
     expect(bestEffortDeleteContentItemVideos).not.toHaveBeenCalled();
+    expect(bestEffortCancelTranscodeJobs).not.toHaveBeenCalled();
     expect(result).toEqual(textContentItem);
   });
 });

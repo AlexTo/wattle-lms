@@ -5,6 +5,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   bestEffortCancelTranscodeJob,
+  bestEffortCancelTranscodeJobs,
   submitTranscodeJob,
 } from './mediaconvert-client.js';
 
@@ -170,7 +171,7 @@ describe('bestEffortCancelTranscodeJob', () => {
       bestEffortCancelTranscodeJob(logger as any, 'job-1'),
     ).resolves.toBeUndefined();
     expect(logger.error).toHaveBeenCalledWith(
-      'Failed to cancel superseded transcode job',
+      'Failed to cancel transcode job',
       expect.objectContaining({ jobId: 'job-1' }),
     );
   });
@@ -181,5 +182,31 @@ describe('bestEffortCancelTranscodeJob', () => {
     await expect(
       bestEffortCancelTranscodeJob(undefined, 'job-1'),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe('bestEffortCancelTranscodeJobs', () => {
+  it('cancels only pending items that have a job id', async () => {
+    mediaConvertSend.mockResolvedValue({});
+
+    await bestEffortCancelTranscodeJobs(undefined, [
+      { status: 'pending', mediaConvertJobId: 'job-1' },
+      { status: 'ready', mediaConvertJobId: 'job-2' },
+      { status: 'pending', mediaConvertJobId: undefined },
+      { status: 'failed', mediaConvertJobId: 'job-3' },
+    ]);
+
+    expect(mediaConvertSend).toHaveBeenCalledTimes(1);
+    expect(mediaConvertSend).toHaveBeenCalledWith(
+      expect.objectContaining({ __command: 'CancelJob', Id: 'job-1' }),
+    );
+  });
+
+  it('does nothing when given no cancelable items', async () => {
+    await bestEffortCancelTranscodeJobs(undefined, [
+      { status: 'ready', mediaConvertJobId: 'job-1' },
+    ]);
+
+    expect(mediaConvertSend).not.toHaveBeenCalled();
   });
 });

@@ -10,7 +10,7 @@ import { v7 as uuidv7 } from 'uuid';
 import { courseProcedure } from '../init.js';
 import { getSignedCloudFrontUrl } from '../lib/cloudfront-client.js';
 import {
-  bestEffortCancelTranscodeJob,
+  bestEffortCancelTranscodeJobs,
   submitTranscodeJob,
 } from '../lib/mediaconvert-client.js';
 import {
@@ -287,15 +287,8 @@ export const updateContentItemVideo = courseProcedure
     // otherwise leave that job running against the raw object the cleanup
     // below is about to delete, and racing the new job to write the same
     // S3 destination (#123) -- cancel it first so it stops doing either.
-    if (
-      objectKey !== undefined &&
-      existing.status === 'pending' &&
-      existing.mediaConvertJobId
-    ) {
-      await bestEffortCancelTranscodeJob(
-        ctx.logger,
-        existing.mediaConvertJobId,
-      );
+    if (objectKey !== undefined) {
+      await bestEffortCancelTranscodeJobs(ctx.logger, [existing]);
     }
 
     const { data: contentItem } = await coreTable.entities.contentItem

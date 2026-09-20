@@ -26,7 +26,7 @@ const {
   bestEffortDeleteContentItemVideos,
   getSignedCloudFrontUrl,
   submitTranscodeJob,
-  bestEffortCancelTranscodeJob,
+  bestEffortCancelTranscodeJobs,
   videoUploadExists,
 } = vi.hoisted(() => ({
   courseInstructorGet: vi.fn(),
@@ -42,7 +42,7 @@ const {
   bestEffortDeleteContentItemVideos: vi.fn(),
   getSignedCloudFrontUrl: vi.fn(),
   submitTranscodeJob: vi.fn(),
-  bestEffortCancelTranscodeJob: vi.fn(),
+  bestEffortCancelTranscodeJobs: vi.fn(),
   videoUploadExists: vi.fn(),
 }));
 
@@ -106,7 +106,7 @@ vi.mock('../lib/cloudfront-client.js', () => ({
 // these tests can assert create/updateContentItemVideo call it correctly.
 vi.mock('../lib/mediaconvert-client.js', () => ({
   submitTranscodeJob,
-  bestEffortCancelTranscodeJob,
+  bestEffortCancelTranscodeJobs,
 }));
 
 const router = t.router({
@@ -212,7 +212,7 @@ beforeEach(() => {
     'https://example.cloudfront.net/signed-url',
   );
   submitTranscodeJob.mockResolvedValue('job-1');
-  bestEffortCancelTranscodeJob.mockResolvedValue(undefined);
+  bestEffortCancelTranscodeJobs.mockResolvedValue(undefined);
   videoUploadExists.mockResolvedValue(true);
 });
 
@@ -562,6 +562,7 @@ describe('updateContentItemVideo', () => {
     expect(bestEffortDeleteContentItemVideos).not.toHaveBeenCalled();
     // No new file was uploaded, so there's nothing to transcode.
     expect(submitTranscodeJob).not.toHaveBeenCalled();
+    expect(bestEffortCancelTranscodeJobs).not.toHaveBeenCalled();
   });
 
   it('throws BAD_REQUEST when a replacement objectKey does not match the lesson and content item', async () => {
@@ -665,7 +666,11 @@ describe('updateContentItemVideo', () => {
     });
   });
 
-  it('does not cancel anything when replacing an already-ready video', async () => {
+  // bestEffortCancelTranscodeJobs itself decides which items are actually
+  // cancelable (status/job-id filtering covered in mediaconvert-client.test.ts);
+  // this only needs to confirm updateContentItemVideo hands it the
+  // pre-patch record whenever a replacement happens.
+  it('passes the pre-replacement record to bestEffortCancelTranscodeJobs when replacing the file', async () => {
     const newObjectKey = `${OBJECT_KEY_PREFIX}some-other-fresh-id.mp4`;
 
     await callAs().updateContentItemVideo({
@@ -673,50 +678,10 @@ describe('updateContentItemVideo', () => {
       objectKey: newObjectKey,
     });
 
-    expect(bestEffortCancelTranscodeJob).not.toHaveBeenCalled();
-  });
-
-  it('cancels the superseded job when replacing a video that is still transcoding', async () => {
-    const newObjectKey = `${OBJECT_KEY_PREFIX}some-other-fresh-id.mp4`;
-    contentItemGet.mockReturnValue({
-      go: vi.fn().mockResolvedValue({
-        data: {
-          ...contentItem,
-          status: 'pending',
-          mediaConvertJobId: 'old-job-1',
-        },
-      }),
-    });
-
-    await callAs().updateContentItemVideo({
-      ...input,
-      objectKey: newObjectKey,
-    });
-
-    expect(bestEffortCancelTranscodeJob).toHaveBeenCalledWith(
+    expect(bestEffortCancelTranscodeJobs).toHaveBeenCalledWith(
       expect.anything(),
-      'old-job-1',
+      [contentItem],
     );
-  });
-
-  it('does not attempt to cancel a still-transcoding record with no job id yet', async () => {
-    const newObjectKey = `${OBJECT_KEY_PREFIX}some-other-fresh-id.mp4`;
-    contentItemGet.mockReturnValue({
-      go: vi.fn().mockResolvedValue({
-        data: {
-          ...contentItem,
-          status: 'pending',
-          mediaConvertJobId: undefined,
-        },
-      }),
-    });
-
-    await callAs().updateContentItemVideo({
-      ...input,
-      objectKey: newObjectKey,
-    });
-
-    expect(bestEffortCancelTranscodeJob).not.toHaveBeenCalled();
   });
 
   it('does not attempt an S3 delete when the objectKey is unchanged', async () => {

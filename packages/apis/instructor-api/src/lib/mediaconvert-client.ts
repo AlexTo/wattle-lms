@@ -108,13 +108,15 @@ export const submitTranscodeJob = async ({
 };
 
 /**
- * Cancels a MediaConvert job that a replacement upload has superseded,
- * best-effort -- the job may already be too far along to cancel, or already
- * finished, and updateContentItemVideo must still succeed regardless.
- * transcodeComplete's mediaConvertJobId check is what actually guards
- * DynamoDB against a job this fails to stop; this just narrows how long
- * such a job keeps reading the raw upload or writing to the shared S3
- * destination both jobs share.
+ * Cancels a MediaConvert job that no longer has anywhere to report to --
+ * either a replacement upload has superseded it, or the content item it was
+ * transcoding for has been deleted -- best-effort, since the job may already
+ * be too far along to cancel, or already finished, and the caller (a video
+ * mutation or delete) must still succeed regardless. transcodeComplete's
+ * mediaConvertJobId check is what actually guards DynamoDB against a
+ * replacement job this fails to stop; for a delete there's no longer any
+ * record to guard, so this just avoids wasting MediaConvert time and
+ * leaving an orphaned HLS output with nothing pointing at it.
  */
 export const bestEffortCancelTranscodeJob = async (
   logger: Logger | undefined,
@@ -123,9 +125,39 @@ export const bestEffortCancelTranscodeJob = async (
   try {
     await getMediaConvertClient().send(new CancelJobCommand({ Id: jobId }));
   } catch (error) {
-    logger?.error('Failed to cancel superseded transcode job', {
+    logger?.error('Failed to cancel transcode job', {
       error,
       jobId,
     });
   }
+};
+
+export type ICancelableVideoContentItem = {
+  status: string;
+  mediaConvertJobId?: string;
+};
+
+/**
+ * Cancels the still-running transcode job (if any) for each content item
+ * that's mid-transcode, best-effort. A `'ready'`/`'failed'` item has no job
+ * left to cancel; a `'pending'` item with no `mediaConvertJobId` yet hasn't
+ * gotten far enough into submission to have one.
+ */
+export const bestEffortCancelTranscodeJobs = async (
+  logger: Logger | undefined,
+  contentItems: readonly ICancelableVideoContentItem[],
+): Promise<void> => {
+  await Promise.all(
+    contentItems
+      .filter(
+        (
+          item,
+        ): item is ICancelableVideoContentItem & {
+          mediaConvertJobId: string;
+        } => item.status === 'pending' && !!item.mediaConvertJobId,
+      )
+      .map((item) =>
+        bestEffortCancelTranscodeJob(logger, item.mediaConvertJobId),
+      ),
+  );
 };

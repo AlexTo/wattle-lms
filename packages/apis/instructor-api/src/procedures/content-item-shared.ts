@@ -4,6 +4,7 @@
  */
 import { TRPCError } from '@trpc/server';
 import { courseProcedure } from '../init.js';
+import { bestEffortCancelTranscodeJobs } from '../lib/mediaconvert-client.js';
 import { bestEffortDeleteContentItemVideos } from '../lib/s3-client.js';
 import {
   DeleteContentItemInputSchema,
@@ -59,8 +60,14 @@ export const deleteContentItem = courseProcedure
       });
     }
 
-    if (existing.type === 'video' && existing.s3Key) {
-      await bestEffortDeleteContentItemVideos(ctx.logger, [existing]);
+    if (existing.type === 'video') {
+      // A still-transcoding job has nothing left to report to once its
+      // content item is gone -- cancel it so it doesn't keep running only
+      // to leave an orphaned HLS output with no record pointing at it.
+      await bestEffortCancelTranscodeJobs(ctx.logger, [existing]);
+      if (existing.s3Key) {
+        await bestEffortDeleteContentItemVideos(ctx.logger, [existing]);
+      }
     }
 
     return asContentItemOutput<IDeleteContentItemOutput>(contentItem);

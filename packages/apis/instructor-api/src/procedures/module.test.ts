@@ -22,6 +22,7 @@ const {
   transactionWrite,
   transactionGo,
   bestEffortDeleteContentItemVideos,
+  bestEffortCancelTranscodeJobs,
 } = vi.hoisted(() => ({
   courseInstructorGet: vi.fn(),
   moduleQueryPrimary: vi.fn(),
@@ -37,6 +38,7 @@ const {
   transactionWrite: vi.fn(),
   transactionGo: vi.fn(),
   bestEffortDeleteContentItemVideos: vi.fn(),
+  bestEffortCancelTranscodeJobs: vi.fn(),
 }));
 
 vi.mock('@wattle/core-table', () => ({
@@ -74,6 +76,13 @@ vi.mock('@wattle/core-table', () => ({
 }));
 
 vi.mock('../lib/s3-client.js', () => ({ bestEffortDeleteContentItemVideos }));
+
+// bestEffortCancelTranscodeJobs's own status/job-id filtering is covered
+// directly in lib/mediaconvert-client.test.ts; here it's just a mock so
+// these tests can assert module.ts calls it correctly.
+vi.mock('../lib/mediaconvert-client.js', () => ({
+  bestEffortCancelTranscodeJobs,
+}));
 
 const router = t.router({ createModule, updateModule, deleteModule });
 const caller = t.createCallerFactory(router);
@@ -155,6 +164,7 @@ beforeEach(() => {
     commit: () => ({ item: null, attrs }),
   }));
   bestEffortDeleteContentItemVideos.mockResolvedValue(undefined);
+  bestEffortCancelTranscodeJobs.mockResolvedValue(undefined);
   transactionWrite.mockImplementation((fn) => {
     fn({
       module: { delete: moduleDelete },
@@ -511,6 +521,10 @@ describe('deleteModule', () => {
       expect.anything(),
       [contentItem, contentItem2],
     );
+    expect(bestEffortCancelTranscodeJobs).toHaveBeenCalledWith(
+      expect.anything(),
+      [contentItem, contentItem2],
+    );
   });
 
   it('does not attempt to delete any content items when the module has none', async () => {
@@ -520,6 +534,31 @@ describe('deleteModule', () => {
     expect(bestEffortDeleteContentItemVideos).toHaveBeenCalledWith(
       expect.anything(),
       [],
+    );
+    expect(bestEffortCancelTranscodeJobs).toHaveBeenCalledWith(
+      expect.anything(),
+      [],
+    );
+  });
+
+  // A still-transcoding video's job has nothing left to report to once its
+  // module (and content item) is gone -- see the mediaConvertJobId design
+  // in #123.
+  it('cancels in-flight transcode jobs for still-pending content items in the cascade', async () => {
+    const pendingContentItem = {
+      ...contentItem,
+      status: 'pending' as const,
+      mediaConvertJobId: 'job-1',
+    };
+    contentItemQueryPrimary.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: [pendingContentItem] }),
+    });
+
+    await callAs().deleteModule({ courseId: COURSE_ID, moduleId: MODULE_ID });
+
+    expect(bestEffortCancelTranscodeJobs).toHaveBeenCalledWith(
+      expect.anything(),
+      [pendingContentItem],
     );
   });
 });

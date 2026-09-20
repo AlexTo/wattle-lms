@@ -416,24 +416,30 @@ export class ApplicationStack extends Stack {
       );
     }
 
-    // Only a replacement upload cancels a still-running job (see #123), so
-    // only updateVideo needs this -- and unlike CreateJob, a job to cancel
-    // already exists, so this can be scoped to the resource type instead of
-    // needing a suppression.
-    instructorApiIntegrations[
-      'contentItem.updateVideo'
-    ].handler.addToRolePolicy(
-      new PolicyStatement({
-        actions: ['mediaconvert:CancelJob'],
-        resources: [
-          Stack.of(this).formatArn({
-            service: 'mediaconvert',
-            resource: 'jobs',
-            resourceName: '*',
-          }),
-        ],
-      }),
-    );
+    // Replacing or deleting a still-transcoding video cancels its job (see
+    // #123 and the delete-mid-transcode follow-up) -- unlike CreateJob, a
+    // job to cancel already exists here, so this can be scoped to the
+    // resource type instead of needing a suppression.
+    const cancelHandlers = [
+      instructorApiIntegrations['contentItem.updateVideo'].handler,
+      instructorApiIntegrations['contentItem.delete'].handler,
+      instructorApiIntegrations['lesson.delete'].handler,
+      instructorApiIntegrations['module.delete'].handler,
+    ];
+    for (const handler of cancelHandlers) {
+      handler.addToRolePolicy(
+        new PolicyStatement({
+          actions: ['mediaconvert:CancelJob'],
+          resources: [
+            Stack.of(this).formatArn({
+              service: 'mediaconvert',
+              resource: 'jobs',
+              resourceName: '*',
+            }),
+          ],
+        }),
+      );
+    }
   }
 
   private createTranscodeCompleteLambda(

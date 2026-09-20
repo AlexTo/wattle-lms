@@ -5,6 +5,7 @@
 import { TRPCError } from '@trpc/server';
 import { v7 as uuidv7 } from 'uuid';
 import { courseProcedure } from '../init.js';
+import { bestEffortCancelTranscodeJobs } from '../lib/mediaconvert-client.js';
 import { bestEffortDeleteContentItemVideos } from '../lib/s3-client.js';
 import {
   CreateModuleInputSchema,
@@ -159,11 +160,12 @@ export const deleteModule = courseProcedure
     // Best-effort: the DynamoDB records are the source of truth for the
     // module's content, so a failure to remove the underlying S3 objects
     // is logged rather than thrown. Only video content items have an S3
-    // object to clean up.
-    await bestEffortDeleteContentItemVideos(
-      ctx.logger,
-      contentItems.filter((item) => item.type === 'video' && item.s3Key),
+    // object to clean up (and possibly a still-running transcode job).
+    const videoContentItems = contentItems.filter(
+      (item) => item.type === 'video',
     );
+    await bestEffortCancelTranscodeJobs(ctx.logger, videoContentItems);
+    await bestEffortDeleteContentItemVideos(ctx.logger, videoContentItems);
 
     // DynamoDB transactions don't return the deleted attributes, but we
     // already fetched the module's pre-delete state above for the
