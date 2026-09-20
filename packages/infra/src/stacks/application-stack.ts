@@ -8,7 +8,6 @@ import {
   CoreTable,
   EventsPostConfirmation,
   EventsTranscodeComplete,
-  EventsTranscodeVideo,
   InstructorApi,
   InstructorPortal,
   LessonMediaBucket,
@@ -35,8 +34,7 @@ import { TableEncryption } from 'aws-cdk-lib/aws-dynamodb';
 import { Rule } from 'aws-cdk-lib/aws-events';
 import { LambdaFunction } from 'aws-cdk-lib/aws-events-targets';
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
-import { BucketEncryption, EventType } from 'aws-cdk-lib/aws-s3';
-import { LambdaDestination } from 'aws-cdk-lib/aws-s3-notifications';
+import { BucketEncryption } from 'aws-cdk-lib/aws-s3';
 import { Construct } from 'constructs';
 
 type InstructorApiIntegrations = ReturnType<
@@ -99,9 +97,9 @@ export class ApplicationStack extends Stack {
       lessonMediaUploadBucket,
       lessonMediaBucket,
     );
-    this.createTranscodeVideoLambda(
+    this.grantTranscodeJobSubmission(
       videoTranscodePipeline,
-      lessonMediaUploadBucket,
+      instructorApiIntegrations,
     );
     this.createTranscodeCompleteLambda(lessonMediaUploadBucket, coreTable);
 
@@ -370,51 +368,47 @@ export class ApplicationStack extends Stack {
     });
   }
 
-  private createTranscodeVideoLambda(
+  // createContentItemVideo/updateContentItemVideo submit the MediaConvert
+  // job themselves once they've written the DynamoDB record (not an S3
+  // upload event, which could otherwise let a fast transcode complete
+  // before the record it needs to patch exists) -- see
+  // packages/apis/instructor-api/src/lib/mediaconvert-client.ts. Both
+  // handlers already get RUNTIME_CONFIG_APP_ID/AppConfig read access from
+  // InstructorApi.defaultIntegrations, so only the MediaConvert-specific
+  // permissions are needed here.
+  private grantTranscodeJobSubmission(
     videoTranscodePipeline: VideoTranscodePipeline,
-    lessonMediaUploadBucket: LessonMediaUploadBucket,
+    instructorApiIntegrations: InstructorApiIntegrations,
   ) {
-    // S3 ObjectCreated on the upload bucket -> submit a MediaConvert job.
-    const transcodeVideo = new EventsTranscodeVideo(this, 'TranscodeVideo');
-    // Bucket names / role / job template ARNs are resolved at runtime via
-    // RuntimeConfig/AppConfig (packages/events/src/lib/runtime-config.ts)
-    // rather than plain env vars, so a future local-dev version of this
-    // Lambda can resolve them the same way the tRPC APIs already do.
-    const runtimeConfig = RuntimeConfig.ensure(this);
-    transcodeVideo.addEnvironment(
-      'RUNTIME_CONFIG_APP_ID',
-      runtimeConfig.appConfigApplicationId,
-    );
-    runtimeConfig.grantReadAppConfig(transcodeVideo);
-    // MediaConvert's CreateJob isn't meaningfully resource-scoped for a
-    // submitter role (the job doesn't exist yet), so this is the widest
-    // permission in this stack that's still limited to one action.
-    transcodeVideo.addToRolePolicy(
-      new PolicyStatement({
-        actions: ['mediaconvert:CreateJob'],
-        resources: ['*'],
-      }),
-    );
-    suppressRules(
-      transcodeVideo,
-      ['CKV_AWS_111'],
-      'CreateJob has no meaningful resource to scope to before the job exists; narrowed to just this one action instead',
-      (c) =>
-        CfnResource.isCfnResource(c) &&
-        c.cfnResourceType === 'AWS::IAM::Policy',
-    );
-    transcodeVideo.addToRolePolicy(
-      new PolicyStatement({
-        actions: ['iam:PassRole'],
-        resources: [videoTranscodePipeline.role.roleArn],
-      }),
-    );
-    lessonMediaUploadBucket.bucket.addEventNotification(
-      EventType.OBJECT_CREATED,
-      new LambdaDestination(transcodeVideo),
-    );
-
-    return transcodeVideo;
+    const handlers = [
+      instructorApiIntegrations['contentItem.createVideo'].handler,
+      instructorApiIntegrations['contentItem.updateVideo'].handler,
+    ];
+    for (const handler of handlers) {
+      // MediaConvert's CreateJob isn't meaningfully resource-scoped for a
+      // submitter role (the job doesn't exist yet), so this is the widest
+      // permission in this stack that's still limited to one action.
+      handler.addToRolePolicy(
+        new PolicyStatement({
+          actions: ['mediaconvert:CreateJob'],
+          resources: ['*'],
+        }),
+      );
+      suppressRules(
+        handler,
+        ['CKV_AWS_111'],
+        'CreateJob has no meaningful resource to scope to before the job exists; narrowed to just this one action instead',
+        (c) =>
+          CfnResource.isCfnResource(c) &&
+          c.cfnResourceType === 'AWS::IAM::Policy',
+      );
+      handler.addToRolePolicy(
+        new PolicyStatement({
+          actions: ['iam:PassRole'],
+          resources: [videoTranscodePipeline.role.roleArn],
+        }),
+      );
+    }
   }
 
   private createTranscodeCompleteLambda(
@@ -428,8 +422,8 @@ export class ApplicationStack extends Stack {
       'TranscodeComplete',
     );
     // The upload bucket's name is resolved at runtime via RuntimeConfig/
-    // AppConfig (see createTranscodeVideoLambda), granted below alongside
-    // the DynamoDB table name lookup @wattle/core-table already needs.
+    // AppConfig, granted below alongside the DynamoDB table name lookup
+    // @wattle/core-table already needs.
     const runtimeConfig = RuntimeConfig.ensure(this);
     transcodeComplete.addEnvironment(
       'RUNTIME_CONFIG_APP_ID',

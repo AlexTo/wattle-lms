@@ -15,12 +15,6 @@
       },
       {
         "generator": "ts#lambda-function",
-        "path": "src/media/transcode-video.ts",
-        "name": "transcode-video",
-        "iac": "cdk"
-      },
-      {
-        "generator": "ts#lambda-function",
         "path": "src/media/transcode-complete.ts",
         "name": "transcode-complete",
         "iac": "cdk"

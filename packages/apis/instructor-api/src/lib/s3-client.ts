@@ -3,12 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import type { Logger } from '@aws-lambda-powertools/logger';
-import { getAppConfig } from '@aws-lambda-powertools/parameters/appconfig';
 import {
   DeleteObjectsCommand,
   ListObjectsV2Command,
   S3Client,
 } from '@aws-sdk/client-s3';
+import { resolveAppConfigValue } from './runtime-config.js';
 
 let _client: S3Client | undefined;
 
@@ -23,40 +23,17 @@ type S3Config = {
   bucketName: string;
 };
 
-const resolveBucketName = (() => {
-  const cache = new Map<string, string>();
-  return async (runtimeConfigKey: string): Promise<string> => {
-    const cached = cache.get(runtimeConfigKey);
-    if (cached !== undefined) {
-      return cached;
-    }
-    const appId = process.env.RUNTIME_CONFIG_APP_ID;
-    if (!appId) {
-      throw new Error('RUNTIME_CONFIG_APP_ID environment variable is not set');
-    }
-    const config = await getAppConfig<{
-      [key: string]: S3Config | undefined;
-    }>('s3', {
-      application: appId,
-      environment: 'default',
-      transform: 'json',
-    });
-    const bucketName = config?.[runtimeConfigKey]?.bucketName;
-    if (!bucketName) {
-      throw new Error('Could not resolve bucket name from runtime config');
-    }
-    cache.set(runtimeConfigKey, bucketName);
-    return bucketName;
-  };
-})();
+const resolveBucketName = async (runtimeConfigKey: string): Promise<string> =>
+  (await resolveAppConfigValue<S3Config>('s3', runtimeConfigKey)).bucketName;
 
 export const resolveLessonMediaBucketName = (): Promise<string> =>
   resolveBucketName('LessonMediaBucket');
 
 // The raw, untranscoded upload -- never served directly, see decision log
 // in #110. createContentItemVideoUploadUrl targets this bucket instead of
-// LessonMediaBucket; TranscodeComplete (packages/events) moves the finished
-// object over and deletes the raw one once transcoding succeeds.
+// LessonMediaBucket; createContentItemVideo/updateContentItemVideo submit
+// the transcode job that eventually moves the finished object over and
+// deletes the raw one (see lib/mediaconvert-client.ts).
 export const resolveLessonMediaUploadBucketName = (): Promise<string> =>
   resolveBucketName('LessonMediaUploadBucket');
 

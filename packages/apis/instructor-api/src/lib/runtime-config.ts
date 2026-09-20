@@ -4,11 +4,12 @@
  */
 import { getAppConfig } from '@aws-lambda-powertools/parameters/appconfig';
 
-type S3Config = {
-  bucketName: string;
-};
-
-const resolveAppConfigValue = (() => {
+/**
+ * Resolves and caches a single key within a RuntimeConfig/AppConfig
+ * namespace (e.g. namespace `s3`, key `LessonMediaBucket`). Shared by every
+ * `lib/*-client.ts` resolver in this package.
+ */
+export const resolveAppConfigValue = (() => {
   const cache = new Map<string, unknown>();
   return async <T>(namespace: string, key: string): Promise<T> => {
     const cacheKey = `${namespace}.${key}`;
@@ -38,7 +39,3 @@ const resolveAppConfigValue = (() => {
     return value;
   };
 })();
-
-export const resolveLessonMediaUploadBucketName = async (): Promise<string> =>
-  (await resolveAppConfigValue<S3Config>('s3', 'LessonMediaUploadBucket'))
-    .bucketName;

@@ -25,6 +25,7 @@ const {
   resolveLessonMediaUploadBucketName,
   bestEffortDeleteContentItemVideos,
   getSignedCloudFrontUrl,
+  submitTranscodeJob,
 } = vi.hoisted(() => ({
   courseInstructorGet: vi.fn(),
   lessonGet: vi.fn(),
@@ -38,6 +39,7 @@ const {
   resolveLessonMediaUploadBucketName: vi.fn(),
   bestEffortDeleteContentItemVideos: vi.fn(),
   getSignedCloudFrontUrl: vi.fn(),
+  submitTranscodeJob: vi.fn(),
 }));
 
 vi.mock('@wattle/core-table', () => ({
@@ -92,6 +94,13 @@ vi.mock('../lib/s3-client.js', () => ({
 // so these tests can assert createContentItemVideoUrl calls it correctly.
 vi.mock('../lib/cloudfront-client.js', () => ({
   getSignedCloudFrontUrl,
+}));
+
+// submitTranscodeJob's own MediaConvert-request-shape behavior is covered
+// directly in lib/mediaconvert-client.test.ts; here it's just a mock so
+// these tests can assert create/updateContentItemVideo call it correctly.
+vi.mock('../lib/mediaconvert-client.js', () => ({
+  submitTranscodeJob,
 }));
 
 const router = t.router({
@@ -196,6 +205,7 @@ beforeEach(() => {
   getSignedCloudFrontUrl.mockResolvedValue(
     'https://example.cloudfront.net/signed-url',
   );
+  submitTranscodeJob.mockResolvedValue(undefined);
 });
 
 describe('createContentItemVideoUploadUrl', () => {
@@ -379,6 +389,33 @@ describe('createContentItemVideo', () => {
     );
   });
 
+  // Invariant: the transcode job must only be submitted once the record
+  // exists, so a fast transcode can never race the DynamoDB write it needs
+  // to patch. Submitting from an S3 upload event instead would break this.
+  it('submits the transcode job only after the content item record is created', async () => {
+    const callOrder: string[] = [];
+    contentItemCreate.mockReturnValue({
+      go: vi.fn().mockImplementation(async () => {
+        callOrder.push('create');
+        return { data: contentItem };
+      }),
+    });
+    submitTranscodeJob.mockImplementation(async () => {
+      callOrder.push('submitTranscodeJob');
+    });
+
+    await callAs().createContentItemVideo(validInput);
+
+    expect(submitTranscodeJob).toHaveBeenCalledWith({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: LESSON_ID,
+      contentItemId: CONTENT_ITEM_ID,
+      objectKey: validInput.objectKey,
+    });
+    expect(callOrder).toEqual(['create', 'submitTranscodeJob']);
+  });
+
   it('appends after the highest existing order', async () => {
     contentItemQueryPrimary.mockReturnValue({
       go: vi.fn().mockResolvedValue({
@@ -485,6 +522,8 @@ describe('updateContentItemVideo', () => {
       title: 'Updated title',
     });
     expect(bestEffortDeleteContentItemVideos).not.toHaveBeenCalled();
+    // No new file was uploaded, so there's nothing to transcode.
+    expect(submitTranscodeJob).not.toHaveBeenCalled();
   });
 
   it('throws BAD_REQUEST when a replacement objectKey does not match the lesson and content item', async () => {
@@ -522,6 +561,37 @@ describe('updateContentItemVideo', () => {
       expect.anything(),
       [contentItem],
     );
+  });
+
+  // Invariant: same as createContentItemVideo -- submitting the job only
+  // after the DynamoDB patch has landed means a fast transcode can't race
+  // ahead of the state it needs to find when it completes.
+  it('submits the transcode job only after the DynamoDB patch when replacing the file', async () => {
+    const newObjectKey = `${OBJECT_KEY_PREFIX}some-other-fresh-id.mp4`;
+    const callOrder: string[] = [];
+    contentItemPatchSet.mockReturnValue({
+      go: vi.fn().mockImplementation(async () => {
+        callOrder.push('patch');
+        return { data: contentItem };
+      }),
+    });
+    submitTranscodeJob.mockImplementation(async () => {
+      callOrder.push('submitTranscodeJob');
+    });
+
+    await callAs().updateContentItemVideo({
+      ...input,
+      objectKey: newObjectKey,
+    });
+
+    expect(submitTranscodeJob).toHaveBeenCalledWith({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: LESSON_ID,
+      contentItemId: CONTENT_ITEM_ID,
+      objectKey: newObjectKey,
+    });
+    expect(callOrder).toEqual(['patch', 'submitTranscodeJob']);
   });
 
   it('does not attempt an S3 delete when the objectKey is unchanged', async () => {

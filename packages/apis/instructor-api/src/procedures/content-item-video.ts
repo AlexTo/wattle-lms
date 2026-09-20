@@ -9,6 +9,7 @@ import { TRPCError } from '@trpc/server';
 import { v7 as uuidv7 } from 'uuid';
 import { courseProcedure } from '../init.js';
 import { getSignedCloudFrontUrl } from '../lib/cloudfront-client.js';
+import { submitTranscodeJob } from '../lib/mediaconvert-client.js';
 import {
   bestEffortDeleteContentItemVideos,
   getS3Client,
@@ -181,6 +182,18 @@ export const createContentItemVideo = courseProcedure
       })
       .go();
 
+    // Submitted only once the record exists, not from the S3 upload event
+    // that landed objectKey there -- otherwise a short transcode can
+    // complete before this record exists to receive the completion
+    // callback's patch, and that completion is never retried.
+    await submitTranscodeJob({
+      courseId,
+      moduleId,
+      lessonId,
+      contentItemId,
+      objectKey,
+    });
+
     return asContentItemOutput<ICreateContentItemVideoOutput>(contentItem);
   });
 
@@ -260,15 +273,24 @@ export const updateContentItemVideo = courseProcedure
       })
       .go({ response: 'all_new' });
 
-    // Best-effort: replacing the video leaves the old S3 object orphaned.
-    // The DynamoDB record now points at the new object regardless of
-    // whether this cleanup succeeds.
-    if (
-      objectKey !== undefined &&
-      objectKey !== existing.s3Key &&
-      existing.s3Key
-    ) {
-      await bestEffortDeleteContentItemVideos(ctx.logger, [existing]);
+    if (objectKey !== undefined) {
+      // Submitted only once the record's patch above has landed, not from
+      // the S3 upload event that put objectKey there -- see the same note
+      // in createContentItemVideo.
+      await submitTranscodeJob({
+        courseId,
+        moduleId,
+        lessonId,
+        contentItemId,
+        objectKey,
+      });
+
+      // Best-effort: replacing the video leaves the old S3 object orphaned.
+      // The DynamoDB record now points at the new object regardless of
+      // whether this cleanup succeeds.
+      if (objectKey !== existing.s3Key && existing.s3Key) {
+        await bestEffortDeleteContentItemVideos(ctx.logger, [existing]);
+      }
     }
 
     return asContentItemOutput<IUpdateContentItemVideoOutput>(contentItem);
