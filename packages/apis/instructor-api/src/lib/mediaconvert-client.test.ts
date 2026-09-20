@@ -3,7 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { submitTranscodeJob } from './mediaconvert-client.js';
+import {
+  bestEffortCancelTranscodeJob,
+  submitTranscodeJob,
+} from './mediaconvert-client.js';
 
 const {
   mediaConvertSend,
@@ -22,7 +25,10 @@ vi.mock('@aws-sdk/client-mediaconvert', () => ({
     return { send: mediaConvertSend };
   }),
   CreateJobCommand: vi.fn(function (input) {
-    return input;
+    return { __command: 'CreateJob', ...input };
+  }),
+  CancelJobCommand: vi.fn(function (input) {
+    return { __command: 'CancelJob', ...input };
   }),
 }));
 
@@ -142,5 +148,38 @@ describe('submitTranscodeJob', () => {
         objectKey: OBJECT_KEY,
       }),
     ).rejects.toThrow('MediaConvert CreateJob response is missing Job.Id');
+  });
+});
+
+describe('bestEffortCancelTranscodeJob', () => {
+  it('cancels the given job', async () => {
+    mediaConvertSend.mockResolvedValue({});
+
+    await bestEffortCancelTranscodeJob(undefined, 'job-1');
+
+    expect(mediaConvertSend).toHaveBeenCalledWith(
+      expect.objectContaining({ __command: 'CancelJob', Id: 'job-1' }),
+    );
+  });
+
+  it('swallows a cancel failure and logs it', async () => {
+    mediaConvertSend.mockRejectedValue(new Error('job already completed'));
+    const logger = { error: vi.fn() };
+
+    await expect(
+      bestEffortCancelTranscodeJob(logger as any, 'job-1'),
+    ).resolves.toBeUndefined();
+    expect(logger.error).toHaveBeenCalledWith(
+      'Failed to cancel superseded transcode job',
+      expect.objectContaining({ jobId: 'job-1' }),
+    );
+  });
+
+  it('tolerates a missing logger when cancellation fails', async () => {
+    mediaConvertSend.mockRejectedValue(new Error('job already completed'));
+
+    await expect(
+      bestEffortCancelTranscodeJob(undefined, 'job-1'),
+    ).resolves.toBeUndefined();
   });
 });

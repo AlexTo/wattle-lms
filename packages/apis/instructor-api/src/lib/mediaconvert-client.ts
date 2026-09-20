@@ -2,7 +2,9 @@
  * Copyright Wattle LMS Contributors. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
+import type { Logger } from '@aws-lambda-powertools/logger';
 import {
+  CancelJobCommand,
   CreateJobCommand,
   MediaConvertClient,
 } from '@aws-sdk/client-mediaconvert';
@@ -103,4 +105,27 @@ export const submitTranscodeJob = async ({
   }
 
   return Job.Id;
+};
+
+/**
+ * Cancels a MediaConvert job that a replacement upload has superseded,
+ * best-effort -- the job may already be too far along to cancel, or already
+ * finished, and updateContentItemVideo must still succeed regardless.
+ * transcodeComplete's mediaConvertJobId check is what actually guards
+ * DynamoDB against a job this fails to stop; this just narrows how long
+ * such a job keeps reading the raw upload or writing to the shared S3
+ * destination both jobs share.
+ */
+export const bestEffortCancelTranscodeJob = async (
+  logger: Logger | undefined,
+  jobId: string,
+): Promise<void> => {
+  try {
+    await getMediaConvertClient().send(new CancelJobCommand({ Id: jobId }));
+  } catch (error) {
+    logger?.error('Failed to cancel superseded transcode job', {
+      error,
+      jobId,
+    });
+  }
 };

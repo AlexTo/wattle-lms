@@ -9,7 +9,10 @@ import { TRPCError } from '@trpc/server';
 import { v7 as uuidv7 } from 'uuid';
 import { courseProcedure } from '../init.js';
 import { getSignedCloudFrontUrl } from '../lib/cloudfront-client.js';
-import { submitTranscodeJob } from '../lib/mediaconvert-client.js';
+import {
+  bestEffortCancelTranscodeJob,
+  submitTranscodeJob,
+} from '../lib/mediaconvert-client.js';
 import {
   bestEffortDeleteContentItemVideos,
   getS3Client,
@@ -278,6 +281,21 @@ export const updateContentItemVideo = courseProcedure
         code: 'BAD_REQUEST',
         message: 'objectKey does not point to an uploaded file',
       });
+    }
+
+    // A replacement while the previous upload is still transcoding would
+    // otherwise leave that job running against the raw object the cleanup
+    // below is about to delete, and racing the new job to write the same
+    // S3 destination (#123) -- cancel it first so it stops doing either.
+    if (
+      objectKey !== undefined &&
+      existing.status === 'pending' &&
+      existing.mediaConvertJobId
+    ) {
+      await bestEffortCancelTranscodeJob(
+        ctx.logger,
+        existing.mediaConvertJobId,
+      );
     }
 
     const { data: contentItem } = await coreTable.entities.contentItem

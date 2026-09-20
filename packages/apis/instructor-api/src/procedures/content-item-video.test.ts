@@ -26,6 +26,7 @@ const {
   bestEffortDeleteContentItemVideos,
   getSignedCloudFrontUrl,
   submitTranscodeJob,
+  bestEffortCancelTranscodeJob,
   videoUploadExists,
 } = vi.hoisted(() => ({
   courseInstructorGet: vi.fn(),
@@ -41,6 +42,7 @@ const {
   bestEffortDeleteContentItemVideos: vi.fn(),
   getSignedCloudFrontUrl: vi.fn(),
   submitTranscodeJob: vi.fn(),
+  bestEffortCancelTranscodeJob: vi.fn(),
   videoUploadExists: vi.fn(),
 }));
 
@@ -104,6 +106,7 @@ vi.mock('../lib/cloudfront-client.js', () => ({
 // these tests can assert create/updateContentItemVideo call it correctly.
 vi.mock('../lib/mediaconvert-client.js', () => ({
   submitTranscodeJob,
+  bestEffortCancelTranscodeJob,
 }));
 
 const router = t.router({
@@ -209,6 +212,7 @@ beforeEach(() => {
     'https://example.cloudfront.net/signed-url',
   );
   submitTranscodeJob.mockResolvedValue('job-1');
+  bestEffortCancelTranscodeJob.mockResolvedValue(undefined);
   videoUploadExists.mockResolvedValue(true);
 });
 
@@ -659,6 +663,60 @@ describe('updateContentItemVideo', () => {
     expect(contentItemPatchSet).toHaveBeenCalledWith({
       mediaConvertJobId: 'job-1',
     });
+  });
+
+  it('does not cancel anything when replacing an already-ready video', async () => {
+    const newObjectKey = `${OBJECT_KEY_PREFIX}some-other-fresh-id.mp4`;
+
+    await callAs().updateContentItemVideo({
+      ...input,
+      objectKey: newObjectKey,
+    });
+
+    expect(bestEffortCancelTranscodeJob).not.toHaveBeenCalled();
+  });
+
+  it('cancels the superseded job when replacing a video that is still transcoding', async () => {
+    const newObjectKey = `${OBJECT_KEY_PREFIX}some-other-fresh-id.mp4`;
+    contentItemGet.mockReturnValue({
+      go: vi.fn().mockResolvedValue({
+        data: {
+          ...contentItem,
+          status: 'pending',
+          mediaConvertJobId: 'old-job-1',
+        },
+      }),
+    });
+
+    await callAs().updateContentItemVideo({
+      ...input,
+      objectKey: newObjectKey,
+    });
+
+    expect(bestEffortCancelTranscodeJob).toHaveBeenCalledWith(
+      expect.anything(),
+      'old-job-1',
+    );
+  });
+
+  it('does not attempt to cancel a still-transcoding record with no job id yet', async () => {
+    const newObjectKey = `${OBJECT_KEY_PREFIX}some-other-fresh-id.mp4`;
+    contentItemGet.mockReturnValue({
+      go: vi.fn().mockResolvedValue({
+        data: {
+          ...contentItem,
+          status: 'pending',
+          mediaConvertJobId: undefined,
+        },
+      }),
+    });
+
+    await callAs().updateContentItemVideo({
+      ...input,
+      objectKey: newObjectKey,
+    });
+
+    expect(bestEffortCancelTranscodeJob).not.toHaveBeenCalled();
   });
 
   it('does not attempt an S3 delete when the objectKey is unchanged', async () => {

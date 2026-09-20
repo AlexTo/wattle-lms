@@ -415,6 +415,25 @@ export class ApplicationStack extends Stack {
         }),
       );
     }
+
+    // Only a replacement upload cancels a still-running job (see #123), so
+    // only updateVideo needs this -- and unlike CreateJob, a job to cancel
+    // already exists, so this can be scoped to the resource type instead of
+    // needing a suppression.
+    instructorApiIntegrations[
+      'contentItem.updateVideo'
+    ].handler.addToRolePolicy(
+      new PolicyStatement({
+        actions: ['mediaconvert:CancelJob'],
+        resources: [
+          Stack.of(this).formatArn({
+            service: 'mediaconvert',
+            resource: 'jobs',
+            resourceName: '*',
+          }),
+        ],
+      }),
+    );
   }
 
   private createTranscodeCompleteLambda(
