@@ -41,6 +41,7 @@ const getCoreTable = () => {
 };
 
 const MediaConvertJobStateChangeDetailSchema = z.object({
+  jobId: z.string(),
   status: z.string(),
   userMetadata: z.object({
     courseId: z.string(),
@@ -57,6 +58,7 @@ export const transcodeComplete = async (
   logger.info('Received event', event);
 
   const detail = MediaConvertJobStateChangeDetailSchema.parse(event.detail);
+  const { jobId } = detail;
   const { courseId, moduleId, lessonId, contentItemId, rawObjectKey } =
     detail.userMetadata;
 
@@ -68,11 +70,14 @@ export const transcodeComplete = async (
       await coreTable.entities.contentItem
         .patch({ courseId, moduleId, lessonId, contentItemId })
         .set({ status: 'ready', s3Key: manifestKey })
+        .where((attr, op) => op.eq(attr.mediaConvertJobId, jobId))
         .go();
     } catch (error) {
-      // The instructor may have deleted the content item while transcoding
-      // was in flight -- nothing left to patch, and the DynamoDB record
-      // stays the source of truth for whether it exists.
+      // Either the instructor deleted the content item while transcoding
+      // was in flight (nothing left to patch), or a later replacement
+      // upload has already superseded this job (mediaConvertJobId no
+      // longer matches) -- in both cases the DynamoDB record stays the
+      // source of truth and this event must not overwrite it.
       logger.error('Failed to mark content item ready after transcode', {
         error,
         courseId,
@@ -102,8 +107,10 @@ export const transcodeComplete = async (
       await coreTable.entities.contentItem
         .patch({ courseId, moduleId, lessonId, contentItemId })
         .set({ status: 'failed' })
+        .where((attr, op) => op.eq(attr.mediaConvertJobId, jobId))
         .go();
     } catch (error) {
+      // Same two possible causes as the COMPLETE branch above.
       logger.error('Failed to mark content item failed after transcode', {
         error,
         courseId,

@@ -40,7 +40,10 @@ const resolveVideoTranscodePipelineConfig =
  * Submits a MediaConvert job transcoding a just-uploaded video into HLS.
  * Called from createContentItemVideo/updateContentItemVideo only after the
  * DynamoDB record they write has been created/updated, so the completion
- * callback that later patches that record can never fire first.
+ * callback that later patches that record can never fire first. Returns the
+ * new job's id so the caller can stamp it onto that same record --
+ * transcode-complete.ts uses it to ignore a stale completion event from a
+ * job a later replacement has since superseded.
  */
 export const submitTranscodeJob = async ({
   courseId,
@@ -54,7 +57,7 @@ export const submitTranscodeJob = async ({
   lessonId: string;
   contentItemId: string;
   objectKey: string;
-}): Promise<void> => {
+}): Promise<string> => {
   const [{ roleArn, jobTemplateArn }, uploadBucketName, mediaBucketName] =
     await Promise.all([
       resolveVideoTranscodePipelineConfig(),
@@ -68,7 +71,7 @@ export const submitTranscodeJob = async ({
   // renditions as master_1080p.m3u8 etc. alongside it.
   const destination = `s3://${mediaBucketName}/courses/${courseId}/modules/${moduleId}/lessons/${lessonId}/content-items/${contentItemId}/master`;
 
-  await getMediaConvertClient().send(
+  const { Job } = await getMediaConvertClient().send(
     new CreateJobCommand({
       Role: roleArn,
       JobTemplate: jobTemplateArn,
@@ -94,4 +97,10 @@ export const submitTranscodeJob = async ({
       },
     }),
   );
+
+  if (!Job?.Id) {
+    throw new Error('MediaConvert CreateJob response is missing Job.Id');
+  }
+
+  return Job.Id;
 };

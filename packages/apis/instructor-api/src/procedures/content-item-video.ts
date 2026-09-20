@@ -193,13 +193,20 @@ export const createContentItemVideo = courseProcedure
     // Submitted only after the record exists, so the completion callback
     // (which patches this exact record once transcoding finishes) can
     // never race ahead of it.
-    await submitTranscodeJob({
+    const mediaConvertJobId = await submitTranscodeJob({
       courseId,
       moduleId,
       lessonId,
       contentItemId,
       objectKey,
     });
+
+    // Lets transcode-complete.ts recognize a stale completion event from a
+    // job a later replacement has since superseded.
+    await coreTable.entities.contentItem
+      .patch({ courseId, moduleId, lessonId, contentItemId })
+      .set({ mediaConvertJobId })
+      .go();
 
     return asContentItemOutput<ICreateContentItemVideoOutput>(contentItem);
   });
@@ -290,13 +297,20 @@ export const updateContentItemVideo = courseProcedure
     if (objectKey !== undefined) {
       // Submitted only after the patch above has landed -- see the same
       // note in createContentItemVideo.
-      await submitTranscodeJob({
+      const mediaConvertJobId = await submitTranscodeJob({
         courseId,
         moduleId,
         lessonId,
         contentItemId,
         objectKey,
       });
+
+      // Lets transcode-complete.ts recognize a stale completion event from
+      // a job a later replacement has since superseded.
+      await coreTable.entities.contentItem
+        .patch({ courseId, moduleId, lessonId, contentItemId })
+        .set({ mediaConvertJobId })
+        .go();
 
       // Best-effort: replacing the video leaves the old S3 object orphaned.
       // The DynamoDB record now points at the new object regardless of

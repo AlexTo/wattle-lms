@@ -208,7 +208,7 @@ beforeEach(() => {
   getSignedCloudFrontUrl.mockResolvedValue(
     'https://example.cloudfront.net/signed-url',
   );
-  submitTranscodeJob.mockResolvedValue(undefined);
+  submitTranscodeJob.mockResolvedValue('job-1');
   videoUploadExists.mockResolvedValue(true);
 });
 
@@ -415,6 +415,13 @@ describe('createContentItemVideo', () => {
     });
     submitTranscodeJob.mockImplementation(async () => {
       callOrder.push('submitTranscodeJob');
+      return 'job-1';
+    });
+    contentItemPatchSet.mockReturnValue({
+      go: vi.fn().mockImplementation(async () => {
+        callOrder.push('patchJobId');
+        return { data: contentItem };
+      }),
     });
 
     await callAs().createContentItemVideo(validInput);
@@ -426,7 +433,21 @@ describe('createContentItemVideo', () => {
       contentItemId: CONTENT_ITEM_ID,
       objectKey: validInput.objectKey,
     });
-    expect(callOrder).toEqual(['create', 'submitTranscodeJob']);
+    expect(callOrder).toEqual(['create', 'submitTranscodeJob', 'patchJobId']);
+  });
+
+  it('stamps the submitted job id onto the record so a later replacement can be told apart', async () => {
+    await callAs().createContentItemVideo(validInput);
+
+    expect(contentItemPatch).toHaveBeenCalledWith({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: LESSON_ID,
+      contentItemId: CONTENT_ITEM_ID,
+    });
+    expect(contentItemPatchSet).toHaveBeenCalledWith({
+      mediaConvertJobId: 'job-1',
+    });
   });
 
   it('appends after the highest existing order', async () => {
@@ -594,14 +615,22 @@ describe('updateContentItemVideo', () => {
   it('submits the transcode job only after the DynamoDB patch when replacing the file', async () => {
     const newObjectKey = `${OBJECT_KEY_PREFIX}some-other-fresh-id.mp4`;
     const callOrder: string[] = [];
-    contentItemPatchSet.mockReturnValue({
-      go: vi.fn().mockImplementation(async () => {
-        callOrder.push('patch');
-        return { data: contentItem };
-      }),
-    });
+    contentItemPatchSet
+      .mockReturnValueOnce({
+        go: vi.fn().mockImplementation(async () => {
+          callOrder.push('patch');
+          return { data: contentItem };
+        }),
+      })
+      .mockReturnValueOnce({
+        go: vi.fn().mockImplementation(async () => {
+          callOrder.push('patchJobId');
+          return { data: contentItem };
+        }),
+      });
     submitTranscodeJob.mockImplementation(async () => {
       callOrder.push('submitTranscodeJob');
+      return 'job-1';
     });
 
     await callAs().updateContentItemVideo({
@@ -616,7 +645,20 @@ describe('updateContentItemVideo', () => {
       contentItemId: CONTENT_ITEM_ID,
       objectKey: newObjectKey,
     });
-    expect(callOrder).toEqual(['patch', 'submitTranscodeJob']);
+    expect(callOrder).toEqual(['patch', 'submitTranscodeJob', 'patchJobId']);
+  });
+
+  it('stamps the submitted job id onto the record when replacing the file', async () => {
+    const newObjectKey = `${OBJECT_KEY_PREFIX}some-other-fresh-id.mp4`;
+
+    await callAs().updateContentItemVideo({
+      ...input,
+      objectKey: newObjectKey,
+    });
+
+    expect(contentItemPatchSet).toHaveBeenCalledWith({
+      mediaConvertJobId: 'job-1',
+    });
   });
 
   it('does not attempt an S3 delete when the objectKey is unchanged', async () => {

@@ -67,6 +67,13 @@ export const createContentItemEntity = async () =>
         durationSeconds: {
           type: 'number',
         },
+        // Set right after submitTranscodeJob's CreateJobCommand returns, so
+        // transcode-complete.ts can reject a stale completion event from a
+        // job that's since been superseded by a replacement upload (see
+        // issue #123) -- never exposed in any API output schema.
+        mediaConvertJobId: {
+          type: 'string',
+        },
         // Tiptap's JSON document, stored as a string. Only present for
         // type: 'text'.
         body: {

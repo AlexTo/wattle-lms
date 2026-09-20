@@ -59,7 +59,7 @@ beforeEach(() => {
 
 describe('submitTranscodeJob', () => {
   it('submits a job referencing the resolved role, template, and bucket locations', async () => {
-    await submitTranscodeJob({
+    const jobId = await submitTranscodeJob({
       courseId: COURSE_ID,
       moduleId: MODULE_ID,
       lessonId: LESSON_ID,
@@ -67,6 +67,7 @@ describe('submitTranscodeJob', () => {
       objectKey: OBJECT_KEY,
     });
 
+    expect(jobId).toBe('job-1');
     expect(resolveAppConfigValue).toHaveBeenCalledWith(
       'mediaConvert',
       'VideoTranscodePipeline',
@@ -127,5 +128,19 @@ describe('submitTranscodeJob', () => {
         objectKey: OBJECT_KEY,
       }),
     ).rejects.toThrow('MediaConvert is unavailable');
+  });
+
+  it('throws when the CreateJob response is missing Job.Id', async () => {
+    mediaConvertSend.mockResolvedValue({ Job: {} });
+
+    await expect(
+      submitTranscodeJob({
+        courseId: COURSE_ID,
+        moduleId: MODULE_ID,
+        lessonId: LESSON_ID,
+        contentItemId: CONTENT_ITEM_ID,
+        objectKey: OBJECT_KEY,
+      }),
+    ).rejects.toThrow('MediaConvert CreateJob response is missing Job.Id');
   });
 });
