@@ -20,6 +20,7 @@ const {
   contentItemGet,
   contentItemPatch,
   contentItemPatchSet,
+  contentItemDelete,
   s3Send,
   getSignedUrl,
   resolveLessonMediaUploadBucketName,
@@ -36,6 +37,7 @@ const {
   contentItemGet: vi.fn(),
   contentItemPatch: vi.fn(),
   contentItemPatchSet: vi.fn(),
+  contentItemDelete: vi.fn(),
   s3Send: vi.fn(),
   getSignedUrl: vi.fn(),
   resolveLessonMediaUploadBucketName: vi.fn(),
@@ -62,6 +64,7 @@ vi.mock('@wattle/core-table', () => ({
         create: contentItemCreate,
         get: contentItemGet,
         patch: contentItemPatch,
+        delete: contentItemDelete,
       },
     },
   })),
@@ -202,6 +205,9 @@ beforeEach(() => {
   });
   contentItemPatch.mockReturnValue({ set: contentItemPatchSet });
   contentItemPatchSet.mockReturnValue({
+    go: vi.fn().mockResolvedValue({ data: contentItem }),
+  });
+  contentItemDelete.mockReturnValue({
     go: vi.fn().mockResolvedValue({ data: contentItem }),
   });
   s3Send.mockResolvedValue({});
@@ -454,6 +460,52 @@ describe('createContentItemVideo', () => {
     });
   });
 
+  // Invariant: a failed submission must never leave a permanently broken
+  // 'pending' record with no job behind it -- the record didn't exist
+  // before this call, so rolling back means deleting it, letting a retry
+  // (even with the exact same input) start clean.
+  it('deletes the newly created record when transcode submission fails', async () => {
+    submitTranscodeJob.mockRejectedValue(
+      new Error('MediaConvert is unavailable'),
+    );
+
+    await expect(callAs().createContentItemVideo(validInput)).rejects.toThrow(
+      'MediaConvert is unavailable',
+    );
+
+    expect(contentItemDelete).toHaveBeenCalledWith({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: LESSON_ID,
+      contentItemId: CONTENT_ITEM_ID,
+    });
+  });
+
+  it('still surfaces the original submission error even if the rollback delete itself fails', async () => {
+    submitTranscodeJob.mockRejectedValue(
+      new Error('MediaConvert is unavailable'),
+    );
+    contentItemDelete.mockReturnValue({
+      go: vi.fn().mockRejectedValue(new Error('DynamoDB is unavailable')),
+    });
+
+    await expect(callAs().createContentItemVideo(validInput)).rejects.toThrow(
+      'MediaConvert is unavailable',
+    );
+  });
+
+  it('does not stamp a job id when submission fails', async () => {
+    submitTranscodeJob.mockRejectedValue(
+      new Error('MediaConvert is unavailable'),
+    );
+
+    await expect(callAs().createContentItemVideo(validInput)).rejects.toThrow();
+
+    expect(contentItemPatchSet).not.toHaveBeenCalledWith(
+      expect.objectContaining({ mediaConvertJobId: expect.anything() }),
+    );
+  });
+
   it('appends after the highest existing order', async () => {
     contentItemQueryPrimary.mockReturnValue({
       go: vi.fn().mockResolvedValue({
@@ -664,6 +716,42 @@ describe('updateContentItemVideo', () => {
     expect(contentItemPatchSet).toHaveBeenCalledWith({
       mediaConvertJobId: 'job-1',
     });
+  });
+
+  // Invariant: a failed submission during a replace has already canceled
+  // whatever job the previous video had (if any), so there's no working
+  // state left to restore to. Marking it failed -- the same terminal state
+  // a genuine MediaConvert ERROR would produce -- gives the instructor an
+  // accurate signal instead of an indefinite "processing" spinner.
+  it('marks the content item failed when transcode submission fails during a replace', async () => {
+    const newObjectKey = `${OBJECT_KEY_PREFIX}some-other-fresh-id.mp4`;
+    submitTranscodeJob.mockRejectedValue(
+      new Error('MediaConvert is unavailable'),
+    );
+
+    await expect(
+      callAs().updateContentItemVideo({ ...input, objectKey: newObjectKey }),
+    ).rejects.toThrow('MediaConvert is unavailable');
+
+    expect(contentItemPatchSet).toHaveBeenCalledWith({ status: 'failed' });
+  });
+
+  it('still surfaces the original submission error even if marking it failed also fails', async () => {
+    const newObjectKey = `${OBJECT_KEY_PREFIX}some-other-fresh-id.mp4`;
+    submitTranscodeJob.mockRejectedValue(
+      new Error('MediaConvert is unavailable'),
+    );
+    contentItemPatchSet
+      .mockReturnValueOnce({
+        go: vi.fn().mockResolvedValue({ data: contentItem }),
+      })
+      .mockReturnValueOnce({
+        go: vi.fn().mockRejectedValue(new Error('DynamoDB is unavailable')),
+      });
+
+    await expect(
+      callAs().updateContentItemVideo({ ...input, objectKey: newObjectKey }),
+    ).rejects.toThrow('MediaConvert is unavailable');
   });
 
   // bestEffortCancelTranscodeJobs itself decides which items are actually

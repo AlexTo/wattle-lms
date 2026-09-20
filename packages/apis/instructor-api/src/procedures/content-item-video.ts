@@ -193,23 +193,40 @@ export const createContentItemVideo = courseProcedure
       })
       .go();
 
-    // Submitted only after the record exists, so the completion callback
-    // (which patches this exact record once transcoding finishes) can
-    // never race ahead of it.
-    const mediaConvertJobId = await submitTranscodeJob({
-      courseId,
-      moduleId,
-      lessonId,
-      contentItemId,
-      objectKey,
-    });
+    try {
+      // Submitted only after the record exists, so the completion callback
+      // (which patches this exact record once transcoding finishes) can
+      // never race ahead of it.
+      const mediaConvertJobId = await submitTranscodeJob({
+        courseId,
+        moduleId,
+        lessonId,
+        contentItemId,
+        objectKey,
+      });
 
-    // Lets transcode-complete.ts recognize a stale completion event from a
-    // job a later replacement has since superseded.
-    await coreTable.entities.contentItem
-      .patch({ courseId, moduleId, lessonId, contentItemId })
-      .set({ mediaConvertJobId })
-      .go();
+      // Lets transcode-complete.ts recognize a stale completion event from
+      // a job a later replacement has since superseded.
+      await coreTable.entities.contentItem
+        .patch({ courseId, moduleId, lessonId, contentItemId })
+        .set({ mediaConvertJobId })
+        .go();
+    } catch (error) {
+      // Job submission failed after the record was already created --
+      // delete it so a retry (even with the exact same input) starts clean
+      // instead of leaving a permanently broken 'pending' record with no
+      // job behind it, or piling a duplicate alongside it.
+      await coreTable.entities.contentItem
+        .delete({ courseId, moduleId, lessonId, contentItemId })
+        .go()
+        .catch((deleteError: unknown) => {
+          ctx.logger?.error(
+            'Failed to roll back content item after failed transcode submission',
+            { error: deleteError, courseId, moduleId, lessonId, contentItemId },
+          );
+        });
+      throw error;
+    }
 
     return asContentItemOutput<ICreateContentItemVideoOutput>(contentItem);
   });
@@ -306,28 +323,54 @@ export const updateContentItemVideo = courseProcedure
       .go({ response: 'all_new' });
 
     if (objectKey !== undefined) {
-      // Submitted only after the patch above has landed -- see the same
-      // note in createContentItemVideo.
-      const mediaConvertJobId = await submitTranscodeJob({
-        courseId,
-        moduleId,
-        lessonId,
-        contentItemId,
-        objectKey,
-      });
-
-      // Lets transcode-complete.ts recognize a stale completion event from
-      // a job a later replacement has since superseded.
-      await coreTable.entities.contentItem
-        .patch({ courseId, moduleId, lessonId, contentItemId })
-        .set({ mediaConvertJobId })
-        .go();
-
-      // Best-effort: replacing the video leaves the old S3 object orphaned.
-      // The DynamoDB record now points at the new object regardless of
-      // whether this cleanup succeeds.
+      // Best-effort: the patch above already orphaned the old S3 object,
+      // regardless of whether the new transcode job below ever
+      // successfully starts, so this doesn't wait on that outcome.
       if (objectKey !== existing.s3Key && existing.s3Key) {
         await bestEffortDeleteContentItemVideos(ctx.logger, [existing]);
+      }
+
+      try {
+        // Submitted only after the patch above has landed -- see the same
+        // note in createContentItemVideo.
+        const mediaConvertJobId = await submitTranscodeJob({
+          courseId,
+          moduleId,
+          lessonId,
+          contentItemId,
+          objectKey,
+        });
+
+        // Lets transcode-complete.ts recognize a stale completion event
+        // from a job a later replacement has since superseded.
+        await coreTable.entities.contentItem
+          .patch({ courseId, moduleId, lessonId, contentItemId })
+          .set({ mediaConvertJobId })
+          .go();
+      } catch (error) {
+        // Job submission failed after the record was already patched to
+        // point at the new upload -- any job for the previous video has
+        // already been canceled above too, so there's no working state
+        // left to restore. Mark it failed, the same terminal state a
+        // genuine MediaConvert ERROR would produce, so the instructor gets
+        // an accurate signal instead of an indefinite "processing" spinner.
+        await coreTable.entities.contentItem
+          .patch({ courseId, moduleId, lessonId, contentItemId })
+          .set({ status: 'failed' })
+          .go()
+          .catch((patchError: unknown) => {
+            ctx.logger?.error(
+              'Failed to mark content item failed after transcode submission error',
+              {
+                error: patchError,
+                courseId,
+                moduleId,
+                lessonId,
+                contentItemId,
+              },
+            );
+          });
+        throw error;
       }
     }
 
