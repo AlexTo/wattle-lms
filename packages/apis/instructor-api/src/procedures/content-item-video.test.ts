@@ -20,6 +20,7 @@ const {
   contentItemGet,
   contentItemPatch,
   contentItemPatchSet,
+  contentItemPatchWhere,
   contentItemDelete,
   s3Send,
   getSignedUrl,
@@ -37,6 +38,7 @@ const {
   contentItemGet: vi.fn(),
   contentItemPatch: vi.fn(),
   contentItemPatchSet: vi.fn(),
+  contentItemPatchWhere: vi.fn(),
   contentItemDelete: vi.fn(),
   s3Send: vi.fn(),
   getSignedUrl: vi.fn(),
@@ -206,6 +208,10 @@ beforeEach(() => {
   });
   contentItemPatch.mockReturnValue({ set: contentItemPatchSet });
   contentItemPatchSet.mockReturnValue({
+    go: vi.fn().mockResolvedValue({ data: contentItem }),
+    where: contentItemPatchWhere,
+  });
+  contentItemPatchWhere.mockReturnValue({
     go: vi.fn().mockResolvedValue({ data: contentItem }),
   });
   contentItemDelete.mockReturnValue({
@@ -777,9 +783,11 @@ describe('updateContentItemVideo', () => {
     const callOrder: string[] = [];
     contentItemPatchSet
       .mockReturnValueOnce({
-        go: vi.fn().mockImplementation(async () => {
-          callOrder.push('patch');
-          return { data: contentItem };
+        where: () => ({
+          go: vi.fn().mockImplementation(async () => {
+            callOrder.push('patch');
+            return { data: contentItem };
+          }),
         }),
       })
       .mockReturnValueOnce({
@@ -848,7 +856,9 @@ describe('updateContentItemVideo', () => {
     );
     contentItemPatchSet
       .mockReturnValueOnce({
-        go: vi.fn().mockResolvedValue({ data: contentItem }),
+        where: () => ({
+          go: vi.fn().mockResolvedValue({ data: contentItem }),
+        }),
       })
       .mockReturnValueOnce({
         go: vi.fn().mockRejectedValue(new Error('DynamoDB is unavailable')),
@@ -875,6 +885,52 @@ describe('updateContentItemVideo', () => {
       expect.anything(),
       [contentItem],
     );
+  });
+
+  // Invariant: two updateContentItemVideo replace calls for the same
+  // content item racing each other would otherwise both submit a job
+  // writing to the same S3 destination (#123). Conditioning the patch on
+  // status/s3Key still matching what was read means whichever call lands
+  // second sees its own DynamoDB write fail, rather than silently
+  // proceeding to race the first call's job.
+  it('throws CONFLICT when another request has already changed status/s3Key (concurrent replace)', async () => {
+    const newObjectKey = `${OBJECT_KEY_PREFIX}some-other-fresh-id.mp4`;
+    contentItemPatchWhere.mockReturnValue({
+      go: vi.fn().mockRejectedValue(new Error('ConditionalCheckFailed')),
+    });
+
+    await expect(
+      callAs().updateContentItemVideo({ ...input, objectKey: newObjectKey }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    expect(submitTranscodeJob).not.toHaveBeenCalled();
+  });
+
+  it('conditions the patch on the status and s3Key read at the start of the call', async () => {
+    const newObjectKey = `${OBJECT_KEY_PREFIX}some-other-fresh-id.mp4`;
+
+    await callAs().updateContentItemVideo({
+      ...input,
+      objectKey: newObjectKey,
+    });
+
+    const [whereCallback] = contentItemPatchWhere.mock.calls[0]!;
+    const eq = vi.fn((attr: string, value: string) => `${attr} = ${value}`);
+    const result = whereCallback({ status: 'status', s3Key: 's3Key' }, { eq });
+
+    expect(eq).toHaveBeenCalledWith('status', contentItem.status);
+    expect(eq).toHaveBeenCalledWith('s3Key', contentItem.s3Key);
+    expect(result).toBe(
+      `status = ${contentItem.status} AND s3Key = ${contentItem.s3Key}`,
+    );
+  });
+
+  it('does not condition a metadata-only edit on status/s3Key (no CONFLICT risk from a concurrent replace)', async () => {
+    await callAs().updateContentItemVideo({
+      ...input,
+      title: 'Updated title',
+    });
+
+    expect(contentItemPatchWhere).not.toHaveBeenCalled();
   });
 
   it('does not attempt an S3 delete when the objectKey is unchanged', async () => {

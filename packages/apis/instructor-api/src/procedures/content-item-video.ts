@@ -335,19 +335,53 @@ export const updateContentItemVideo = courseProcedure
       await bestEffortCancelTranscodeJobs(ctx.logger, [existing]);
     }
 
-    const { data: contentItem } = await coreTable.entities.contentItem
-      .patch({ courseId, moduleId, lessonId, contentItemId })
-      .set({
-        ...(title !== undefined && { title }),
-        ...(description !== undefined && { description }),
-        // Replacing the file invalidates whatever transcode already ran
-        // against the old one -- the new object needs to go through it
-        // again before it's playable.
-        ...(objectKey !== undefined && { s3Key: objectKey, status: 'pending' }),
-        ...(mimeType !== undefined && { mimeType }),
-        ...(durationSeconds !== undefined && { durationSeconds }),
-      })
-      .go({ response: 'all_new' });
+    let contentItem;
+    if (objectKey !== undefined) {
+      try {
+        const result = await coreTable.entities.contentItem
+          .patch({ courseId, moduleId, lessonId, contentItemId })
+          .set({
+            ...(title !== undefined && { title }),
+            ...(description !== undefined && { description }),
+            // Replacing the file invalidates whatever transcode already
+            // ran against the old one -- the new object needs to go
+            // through it again before it's playable.
+            s3Key: objectKey,
+            status: 'pending',
+            ...(mimeType !== undefined && { mimeType }),
+            ...(durationSeconds !== undefined && { durationSeconds }),
+          })
+          // Guards against a second updateContentItemVideo replace racing
+          // this one: if status/s3Key have changed since the .get() above,
+          // another replace already landed first, and proceeding here
+          // would submit a second job writing to the same S3 destination
+          // as that one (#123). A concurrent metadata-only edit never
+          // touches these two fields, so it can never trip this check --
+          // only two concurrent replacements can.
+          .where(
+            (attr, op) =>
+              `${op.eq(attr.status, existing.status)} AND ${op.eq(attr.s3Key, existing.s3Key!)}`,
+          )
+          .go({ response: 'all_new' });
+        contentItem = result.data;
+      } catch (error) {
+        throw new TRPCError({
+          code: 'CONFLICT',
+          message: 'Content item was modified by another request; please retry',
+        });
+      }
+    } else {
+      const result = await coreTable.entities.contentItem
+        .patch({ courseId, moduleId, lessonId, contentItemId })
+        .set({
+          ...(title !== undefined && { title }),
+          ...(description !== undefined && { description }),
+          ...(mimeType !== undefined && { mimeType }),
+          ...(durationSeconds !== undefined && { durationSeconds }),
+        })
+        .go({ response: 'all_new' });
+      contentItem = result.data;
+    }
 
     if (objectKey !== undefined) {
       // Best-effort: the patch above already orphaned the old S3 object,
