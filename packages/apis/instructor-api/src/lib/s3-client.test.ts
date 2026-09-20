@@ -5,7 +5,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   bestEffortDeleteContentItemVideos,
-  videoUploadExists,
+  getVideoUploadETag,
 } from './s3-client.js';
 
 const { send, getAppConfig } = vi.hoisted(() => ({
@@ -308,7 +308,7 @@ describe('bestEffortDeleteContentItemVideos', () => {
   });
 });
 
-describe('videoUploadExists', () => {
+describe('getVideoUploadETag', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.RUNTIME_CONFIG_APP_ID = 'app-1';
@@ -322,10 +322,10 @@ describe('videoUploadExists', () => {
     });
   });
 
-  it('returns true when the object exists', async () => {
-    send.mockResolvedValue({});
+  it('returns the ETag when the object exists', async () => {
+    send.mockResolvedValue({ ETag: '"etag-1"' });
 
-    await expect(videoUploadExists('some-key.mp4')).resolves.toBe(true);
+    await expect(getVideoUploadETag('some-key.mp4')).resolves.toBe('"etag-1"');
     expect(send).toHaveBeenCalledWith(
       expect.objectContaining({
         __command: 'HeadObject',
@@ -335,18 +335,20 @@ describe('videoUploadExists', () => {
     );
   });
 
-  it('returns false when the object does not exist', async () => {
+  it('returns undefined when the object does not exist', async () => {
     const notFound = new Error('not found');
     notFound.name = 'NotFound';
     send.mockRejectedValue(notFound);
 
-    await expect(videoUploadExists('missing-key.mp4')).resolves.toBe(false);
+    await expect(
+      getVideoUploadETag('missing-key.mp4'),
+    ).resolves.toBeUndefined();
   });
 
   it('rethrows any other error', async () => {
     send.mockRejectedValue(new Error('S3 is unavailable'));
 
-    await expect(videoUploadExists('some-key.mp4')).rejects.toThrow(
+    await expect(getVideoUploadETag('some-key.mp4')).rejects.toThrow(
       'S3 is unavailable',
     );
   });

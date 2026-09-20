@@ -47,6 +47,7 @@ const MODULE_ID = 'module-1';
 const LESSON_ID = 'lesson-1';
 const CONTENT_ITEM_ID = 'content-item-1';
 const OBJECT_KEY = `courses/${COURSE_ID}/modules/${MODULE_ID}/lessons/${LESSON_ID}/content-items/${CONTENT_ITEM_ID}.mp4`;
+const OBJECT_ETAG = '"etag-1"';
 const UPLOAD_BUCKET_NAME = 'lesson-media-upload-bucket';
 const MEDIA_BUCKET_NAME = 'lesson-media-bucket';
 const ROLE_ARN = 'arn:aws:iam::123456789012:role/MediaConvert';
@@ -72,6 +73,7 @@ describe('submitTranscodeJob', () => {
       lessonId: LESSON_ID,
       contentItemId: CONTENT_ITEM_ID,
       objectKey: OBJECT_KEY,
+      objectETag: OBJECT_ETAG,
     });
 
     expect(jobId).toBe('job-1');
@@ -104,6 +106,64 @@ describe('submitTranscodeJob', () => {
     );
   });
 
+  // A retry of the same tRPC mutation (e.g. after a client-side timeout,
+  // even though the original call actually succeeded) submits the exact
+  // same contentItemId + objectETag -- CreateJob must see the same
+  // ClientRequestToken both times so MediaConvert dedupes it, rather than
+  // starting a redundant job.
+  it('derives a stable ClientRequestToken from contentItemId and objectETag', async () => {
+    await submitTranscodeJob({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: LESSON_ID,
+      contentItemId: CONTENT_ITEM_ID,
+      objectKey: OBJECT_KEY,
+      objectETag: OBJECT_ETAG,
+    });
+    const [firstCall] = mediaConvertSend.mock.calls[0]!;
+
+    mediaConvertSend.mockClear();
+    await submitTranscodeJob({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: LESSON_ID,
+      contentItemId: CONTENT_ITEM_ID,
+      objectKey: OBJECT_KEY,
+      objectETag: OBJECT_ETAG,
+    });
+    const [secondCall] = mediaConvertSend.mock.calls[0]!;
+
+    expect(firstCall.ClientRequestToken).toBeTruthy();
+    expect(firstCall.ClientRequestToken).toBe(secondCall.ClientRequestToken);
+  });
+
+  it('derives a different ClientRequestToken for a different objectETag', async () => {
+    await submitTranscodeJob({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: LESSON_ID,
+      contentItemId: CONTENT_ITEM_ID,
+      objectKey: OBJECT_KEY,
+      objectETag: OBJECT_ETAG,
+    });
+    const [firstCall] = mediaConvertSend.mock.calls[0]!;
+
+    mediaConvertSend.mockClear();
+    await submitTranscodeJob({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: LESSON_ID,
+      contentItemId: CONTENT_ITEM_ID,
+      objectKey: OBJECT_KEY,
+      objectETag: '"a-different-etag"',
+    });
+    const [secondCall] = mediaConvertSend.mock.calls[0]!;
+
+    expect(firstCall.ClientRequestToken).not.toBe(
+      secondCall.ClientRequestToken,
+    );
+  });
+
   it('propagates a failure to resolve the runtime config', async () => {
     resolveAppConfigValue.mockRejectedValue(
       new Error('RUNTIME_CONFIG_APP_ID environment variable is not set'),
@@ -116,6 +176,7 @@ describe('submitTranscodeJob', () => {
         lessonId: LESSON_ID,
         contentItemId: CONTENT_ITEM_ID,
         objectKey: OBJECT_KEY,
+        objectETag: OBJECT_ETAG,
       }),
     ).rejects.toThrow();
     expect(mediaConvertSend).not.toHaveBeenCalled();
@@ -133,6 +194,7 @@ describe('submitTranscodeJob', () => {
         lessonId: LESSON_ID,
         contentItemId: CONTENT_ITEM_ID,
         objectKey: OBJECT_KEY,
+        objectETag: OBJECT_ETAG,
       }),
     ).rejects.toThrow('MediaConvert is unavailable');
   });
@@ -147,6 +209,7 @@ describe('submitTranscodeJob', () => {
         lessonId: LESSON_ID,
         contentItemId: CONTENT_ITEM_ID,
         objectKey: OBJECT_KEY,
+        objectETag: OBJECT_ETAG,
       }),
     ).rejects.toThrow('MediaConvert CreateJob response is missing Job.Id');
   });

@@ -2,6 +2,7 @@
  * Copyright Wattle LMS Contributors. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
+import { createHash } from 'node:crypto';
 import type { Logger } from '@aws-lambda-powertools/logger';
 import {
   CancelJobCommand,
@@ -46,6 +47,17 @@ const resolveVideoTranscodePipelineConfig =
  * new job's id so the caller can stamp it onto that same record --
  * transcode-complete.ts uses it to ignore a stale completion event from a
  * job a later replacement has since superseded.
+ *
+ * `objectETag` (the raw upload's S3 ETag, a content fingerprint) becomes
+ * MediaConvert's `ClientRequestToken`: if a caller retries the same tRPC
+ * mutation (e.g. after a client-side timeout, even though the original
+ * call actually succeeded), CreateJob recognizes the token it already
+ * handled within the last minute and returns the existing job instead of
+ * starting a redundant one that immediately gets canceled and resubmitted.
+ * `objectKey` alone can't serve as that token -- it's deterministic from
+ * `contentItemId` + extension, so a genuinely different replacement upload
+ * with the same extension would collide on it; the ETag changes whenever
+ * the object's content actually does.
  */
 export const submitTranscodeJob = async ({
   courseId,
@@ -53,12 +65,14 @@ export const submitTranscodeJob = async ({
   lessonId,
   contentItemId,
   objectKey,
+  objectETag,
 }: {
   courseId: string;
   moduleId: string;
   lessonId: string;
   contentItemId: string;
   objectKey: string;
+  objectETag: string;
 }): Promise<string> => {
   const [{ roleArn, jobTemplateArn }, uploadBucketName, mediaBucketName] =
     await Promise.all([
@@ -73,8 +87,16 @@ export const submitTranscodeJob = async ({
   // renditions as master_1080p.m3u8 etc. alongside it.
   const destination = `s3://${mediaBucketName}/courses/${courseId}/modules/${moduleId}/lessons/${lessonId}/content-items/${contentItemId}/master`;
 
+  // ClientRequestToken caps out at 64 ASCII characters; hashing keeps this
+  // well within that regardless of contentItemId/ETag length.
+  const clientRequestToken = createHash('sha256')
+    .update(`${contentItemId}:${objectETag}`)
+    .digest('hex')
+    .slice(0, 32);
+
   const { Job } = await getMediaConvertClient().send(
     new CreateJobCommand({
+      ClientRequestToken: clientRequestToken,
       Role: roleArn,
       JobTemplate: jobTemplateArn,
       // rawObjectKey lets the completion callback delete the raw upload

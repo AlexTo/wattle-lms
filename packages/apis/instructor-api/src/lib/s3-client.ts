@@ -39,25 +39,29 @@ export const resolveLessonMediaUploadBucketName = (): Promise<string> =>
   resolveBucketName('LessonMediaUploadBucket');
 
 /**
- * Checks whether a raw video upload actually exists in
- * LessonMediaUploadBucket. createContentItemVideo/updateContentItemVideo
- * take an instructor-supplied objectKey with no other proof the client's
- * presigned PUT ever completed, so this guards against submitting a
- * transcode job -- and writing a DynamoDB record -- for an object that was
- * never uploaded.
+ * Returns a raw video upload's ETag if it actually exists in
+ * LessonMediaUploadBucket, or undefined otherwise.
+ * createContentItemVideo/updateContentItemVideo take an instructor-supplied
+ * objectKey with no other proof the client's presigned PUT ever completed,
+ * so this guards against submitting a transcode job -- and writing a
+ * DynamoDB record -- for an object that was never uploaded. The ETag itself
+ * is a content fingerprint (mediaconvert-client.ts folds it into the
+ * MediaConvert job's idempotency token, since objectKey alone can't tell a
+ * retried submission apart from a genuinely different file later
+ * overwriting the same key).
  */
-export const videoUploadExists = async (
+export const getVideoUploadETag = async (
   objectKey: string,
-): Promise<boolean> => {
+): Promise<string | undefined> => {
   const bucket = await resolveLessonMediaUploadBucketName();
   try {
-    await getS3Client().send(
+    const { ETag } = await getS3Client().send(
       new HeadObjectCommand({ Bucket: bucket, Key: objectKey }),
     );
-    return true;
+    return ETag;
   } catch (error) {
     if (error instanceof Error && error.name === 'NotFound') {
-      return false;
+      return undefined;
     }
     throw error;
   }

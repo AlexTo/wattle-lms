@@ -28,7 +28,7 @@ const {
   getSignedCloudFrontUrl,
   submitTranscodeJob,
   bestEffortCancelTranscodeJobs,
-  videoUploadExists,
+  getVideoUploadETag,
 } = vi.hoisted(() => ({
   courseInstructorGet: vi.fn(),
   lessonGet: vi.fn(),
@@ -45,7 +45,7 @@ const {
   getSignedCloudFrontUrl: vi.fn(),
   submitTranscodeJob: vi.fn(),
   bestEffortCancelTranscodeJobs: vi.fn(),
-  videoUploadExists: vi.fn(),
+  getVideoUploadETag: vi.fn(),
 }));
 
 vi.mock('@wattle/core-table', () => ({
@@ -94,7 +94,7 @@ vi.mock('../lib/s3-client.js', () => ({
   getS3Client: () => ({ send: s3Send }),
   resolveLessonMediaUploadBucketName,
   bestEffortDeleteContentItemVideos,
-  videoUploadExists,
+  getVideoUploadETag,
 }));
 
 // getSignedCloudFrontUrl's own config-resolution/signing behavior is
@@ -126,6 +126,7 @@ const MODULE_ID = 'module-1';
 const LESSON_ID = 'lesson-1';
 const CONTENT_ITEM_ID = 'content-item-1';
 const BUCKET_NAME = 'lesson-media-bucket';
+const OBJECT_ETAG = '"etag-1"';
 
 const buildEvent = (groups: string[]): APIGatewayProxyEvent =>
   ({
@@ -219,7 +220,7 @@ beforeEach(() => {
   );
   submitTranscodeJob.mockResolvedValue('job-1');
   bestEffortCancelTranscodeJobs.mockResolvedValue(undefined);
-  videoUploadExists.mockResolvedValue(true);
+  getVideoUploadETag.mockResolvedValue(OBJECT_ETAG);
 });
 
 describe('createContentItemVideoUploadUrl', () => {
@@ -396,7 +397,7 @@ describe('createContentItemVideo', () => {
   });
 
   it('throws BAD_REQUEST when the objectKey does not point to an uploaded file', async () => {
-    videoUploadExists.mockResolvedValue(false);
+    getVideoUploadETag.mockResolvedValue(undefined);
 
     await expect(
       callAs().createContentItemVideo(validInput),
@@ -442,6 +443,7 @@ describe('createContentItemVideo', () => {
       lessonId: LESSON_ID,
       contentItemId: CONTENT_ITEM_ID,
       objectKey: validInput.objectKey,
+      objectETag: OBJECT_ETAG,
     });
     expect(callOrder).toEqual(['create', 'submitTranscodeJob', 'patchJobId']);
   });
@@ -457,6 +459,7 @@ describe('createContentItemVideo', () => {
     });
     expect(contentItemPatchSet).toHaveBeenCalledWith({
       mediaConvertJobId: 'job-1',
+      rawObjectETag: OBJECT_ETAG,
     });
   });
 
@@ -628,7 +631,7 @@ describe('updateContentItemVideo', () => {
   });
 
   it('throws BAD_REQUEST when a replacement objectKey does not point to an uploaded file', async () => {
-    videoUploadExists.mockResolvedValue(false);
+    getVideoUploadETag.mockResolvedValue(undefined);
 
     await expect(
       callAs().updateContentItemVideo({
@@ -637,6 +640,106 @@ describe('updateContentItemVideo', () => {
       }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     expect(contentItemPatch).not.toHaveBeenCalled();
+  });
+
+  // A retry of this exact mutation (e.g. after a client-side timeout, even
+  // though the original call actually succeeded) must not cancel and
+  // resubmit a job that's already correctly running.
+  describe('when the replacement looks like a retry of an in-flight submission', () => {
+    const pendingObjectKey = `${OBJECT_KEY_PREFIX}some-other-fresh-id.mp4`;
+    const inFlightItem = {
+      ...contentItem,
+      status: 'pending' as const,
+      s3Key: pendingObjectKey,
+      mediaConvertJobId: 'job-1',
+      rawObjectETag: OBJECT_ETAG,
+    };
+
+    it('reports the current state back unchanged, touching nothing', async () => {
+      contentItemGet.mockReturnValue({
+        go: vi.fn().mockResolvedValue({ data: inFlightItem }),
+      });
+
+      const result = await callAs().updateContentItemVideo({
+        ...input,
+        objectKey: pendingObjectKey,
+      });
+
+      // mediaConvertJobId/rawObjectETag are internal-only and stripped by
+      // the tRPC output schema, same as any other response.
+      const {
+        mediaConvertJobId: _job,
+        rawObjectETag: _etag,
+        ...expected
+      } = inFlightItem;
+      expect(result).toEqual(expected);
+      expect(bestEffortCancelTranscodeJobs).not.toHaveBeenCalled();
+      expect(contentItemPatch).not.toHaveBeenCalled();
+      expect(submitTranscodeJob).not.toHaveBeenCalled();
+      expect(bestEffortDeleteContentItemVideos).not.toHaveBeenCalled();
+    });
+
+    it('does not short-circuit when the ETag differs (a genuine new replacement)', async () => {
+      contentItemGet.mockReturnValue({
+        go: vi.fn().mockResolvedValue({
+          data: { ...inFlightItem, rawObjectETag: '"a-different-etag"' },
+        }),
+      });
+
+      await callAs().updateContentItemVideo({
+        ...input,
+        objectKey: pendingObjectKey,
+      });
+
+      expect(bestEffortCancelTranscodeJobs).toHaveBeenCalled();
+      expect(submitTranscodeJob).toHaveBeenCalled();
+    });
+
+    it('does not short-circuit when the objectKey differs', async () => {
+      contentItemGet.mockReturnValue({
+        go: vi.fn().mockResolvedValue({ data: inFlightItem }),
+      });
+
+      await callAs().updateContentItemVideo({
+        ...input,
+        objectKey: `${OBJECT_KEY_PREFIX}yet-another-id.mp4`,
+      });
+
+      expect(bestEffortCancelTranscodeJobs).toHaveBeenCalled();
+      expect(submitTranscodeJob).toHaveBeenCalled();
+    });
+
+    it('does not short-circuit when no job has been stamped yet', async () => {
+      contentItemGet.mockReturnValue({
+        go: vi.fn().mockResolvedValue({
+          data: { ...inFlightItem, mediaConvertJobId: undefined },
+        }),
+      });
+
+      await callAs().updateContentItemVideo({
+        ...input,
+        objectKey: pendingObjectKey,
+      });
+
+      expect(bestEffortCancelTranscodeJobs).toHaveBeenCalled();
+      expect(submitTranscodeJob).toHaveBeenCalled();
+    });
+
+    it('does not short-circuit an already-ready item even if s3Key happened to match', async () => {
+      contentItemGet.mockReturnValue({
+        go: vi.fn().mockResolvedValue({
+          data: { ...inFlightItem, status: 'ready' as const },
+        }),
+      });
+
+      await callAs().updateContentItemVideo({
+        ...input,
+        objectKey: pendingObjectKey,
+      });
+
+      expect(bestEffortCancelTranscodeJobs).toHaveBeenCalled();
+      expect(submitTranscodeJob).toHaveBeenCalled();
+    });
   });
 
   // Invariant: replacing a video's underlying file must not leave the old
@@ -701,6 +804,7 @@ describe('updateContentItemVideo', () => {
       lessonId: LESSON_ID,
       contentItemId: CONTENT_ITEM_ID,
       objectKey: newObjectKey,
+      objectETag: OBJECT_ETAG,
     });
     expect(callOrder).toEqual(['patch', 'submitTranscodeJob', 'patchJobId']);
   });
@@ -715,6 +819,7 @@ describe('updateContentItemVideo', () => {
 
     expect(contentItemPatchSet).toHaveBeenCalledWith({
       mediaConvertJobId: 'job-1',
+      rawObjectETag: OBJECT_ETAG,
     });
   });
 

@@ -16,8 +16,8 @@ import {
 import {
   bestEffortDeleteContentItemVideos,
   getS3Client,
+  getVideoUploadETag,
   resolveLessonMediaUploadBucketName,
-  videoUploadExists,
 } from '../lib/s3-client.js';
 import {
   CreateContentItemVideoInputSchema,
@@ -159,7 +159,8 @@ export const createContentItemVideo = courseProcedure
       });
     }
 
-    if (!(await videoUploadExists(objectKey))) {
+    const objectETag = await getVideoUploadETag(objectKey);
+    if (!objectETag) {
       throw new TRPCError({
         code: 'BAD_REQUEST',
         message: 'objectKey does not point to an uploaded file',
@@ -203,13 +204,16 @@ export const createContentItemVideo = courseProcedure
         lessonId,
         contentItemId,
         objectKey,
+        objectETag,
       });
 
       // Lets transcode-complete.ts recognize a stale completion event from
-      // a job a later replacement has since superseded.
+      // a job a later replacement has since superseded. rawObjectETag lets
+      // a future updateContentItemVideo call tell a genuine replacement
+      // apart from a retry of this exact submission.
       await coreTable.entities.contentItem
         .patch({ courseId, moduleId, lessonId, contentItemId })
-        .set({ mediaConvertJobId })
+        .set({ mediaConvertJobId, rawObjectETag: objectETag })
         .go();
     } catch (error) {
       // Job submission failed after the record was already created --
@@ -293,11 +297,34 @@ export const updateContentItemVideo = courseProcedure
       });
     }
 
-    if (objectKey !== undefined && !(await videoUploadExists(objectKey))) {
-      throw new TRPCError({
-        code: 'BAD_REQUEST',
-        message: 'objectKey does not point to an uploaded file',
-      });
+    let objectETag: string | undefined;
+    if (objectKey !== undefined) {
+      objectETag = await getVideoUploadETag(objectKey);
+      if (!objectETag) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'objectKey does not point to an uploaded file',
+        });
+      }
+
+      // A caller retrying this exact mutation (e.g. after a client-side
+      // timeout, even though the original call actually succeeded) would
+      // otherwise cancel the job that submission started and resubmit a
+      // redundant one -- interrupting work that was already proceeding
+      // correctly. objectKey alone can't detect this (it's deterministic
+      // from contentItemId + extension, so it stays the same across a
+      // genuine replacement too), but objectKey *and* the raw upload's
+      // content both matching what's already mid-transcode means nothing
+      // has actually changed since that submission -- report its current
+      // state back unchanged instead of touching it.
+      if (
+        existing.status === 'pending' &&
+        existing.s3Key === objectKey &&
+        existing.mediaConvertJobId !== undefined &&
+        existing.rawObjectETag === objectETag
+      ) {
+        return asContentItemOutput<IUpdateContentItemVideoOutput>(existing);
+      }
     }
 
     // A replacement while the previous upload is still transcoding would
@@ -339,13 +366,16 @@ export const updateContentItemVideo = courseProcedure
           lessonId,
           contentItemId,
           objectKey,
+          objectETag: objectETag!,
         });
 
         // Lets transcode-complete.ts recognize a stale completion event
         // from a job a later replacement has since superseded.
+        // rawObjectETag lets a later retry of this exact submission be
+        // told apart from a genuine subsequent replacement.
         await coreTable.entities.contentItem
           .patch({ courseId, moduleId, lessonId, contentItemId })
-          .set({ mediaConvertJobId })
+          .set({ mediaConvertJobId, rawObjectETag: objectETag })
           .go();
       } catch (error) {
         // Job submission failed after the record was already patched to

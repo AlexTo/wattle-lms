@@ -74,6 +74,15 @@ export const createContentItemEntity = async () =>
         mediaConvertJobId: {
           type: 'string',
         },
+        // The raw upload's S3 ETag at submission time, set alongside
+        // mediaConvertJobId. Lets updateContentItemVideo tell a genuine
+        // replacement apart from a caller retrying the exact same mutation
+        // (e.g. after a client-side timeout) while a job is still pending
+        // -- objectKey alone can't do that, since it's deterministic from
+        // contentItemId + extension.
+        rawObjectETag: {
+          type: 'string',
+        },
         // Tiptap's JSON document, stored as a string. Only present for
         // type: 'text'.
         body: {
