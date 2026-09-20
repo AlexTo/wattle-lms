@@ -5,6 +5,7 @@
 import type { Logger } from '@aws-lambda-powertools/logger';
 import {
   DeleteObjectsCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -36,6 +37,31 @@ export const resolveLessonMediaBucketName = (): Promise<string> =>
 // deletes the raw one (see lib/mediaconvert-client.ts).
 export const resolveLessonMediaUploadBucketName = (): Promise<string> =>
   resolveBucketName('LessonMediaUploadBucket');
+
+/**
+ * Checks whether a raw video upload actually exists in
+ * LessonMediaUploadBucket. createContentItemVideo/updateContentItemVideo
+ * take an instructor-supplied objectKey with no other proof the client's
+ * presigned PUT ever completed, so this guards against submitting a
+ * transcode job -- and writing a DynamoDB record -- for an object that was
+ * never uploaded.
+ */
+export const videoUploadExists = async (
+  objectKey: string,
+): Promise<boolean> => {
+  const bucket = await resolveLessonMediaUploadBucketName();
+  try {
+    await getS3Client().send(
+      new HeadObjectCommand({ Bucket: bucket, Key: objectKey }),
+    );
+    return true;
+  } catch (error) {
+    if (error instanceof Error && error.name === 'NotFound') {
+      return false;
+    }
+    throw error;
+  }
+};
 
 export type IDeletableVideoContentItem = {
   status: string;

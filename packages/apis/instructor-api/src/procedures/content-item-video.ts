@@ -14,6 +14,7 @@ import {
   bestEffortDeleteContentItemVideos,
   getS3Client,
   resolveLessonMediaUploadBucketName,
+  videoUploadExists,
 } from '../lib/s3-client.js';
 import {
   CreateContentItemVideoInputSchema,
@@ -155,6 +156,13 @@ export const createContentItemVideo = courseProcedure
       });
     }
 
+    if (!(await videoUploadExists(objectKey))) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'objectKey does not point to an uploaded file',
+      });
+    }
+
     // New content items append to the end of the lesson. `order` isn't part
     // of any key (content item counts per lesson are small enough to sort
     // client-side), so this is a plain query-and-increment rather than an
@@ -182,10 +190,9 @@ export const createContentItemVideo = courseProcedure
       })
       .go();
 
-    // Submitted only once the record exists, not from the S3 upload event
-    // that landed objectKey there -- otherwise a short transcode can
-    // complete before this record exists to receive the completion
-    // callback's patch, and that completion is never retried.
+    // Submitted only after the record exists, so the completion callback
+    // (which patches this exact record once transcoding finishes) can
+    // never race ahead of it.
     await submitTranscodeJob({
       courseId,
       moduleId,
@@ -259,6 +266,13 @@ export const updateContentItemVideo = courseProcedure
       });
     }
 
+    if (objectKey !== undefined && !(await videoUploadExists(objectKey))) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'objectKey does not point to an uploaded file',
+      });
+    }
+
     const { data: contentItem } = await coreTable.entities.contentItem
       .patch({ courseId, moduleId, lessonId, contentItemId })
       .set({
@@ -274,9 +288,8 @@ export const updateContentItemVideo = courseProcedure
       .go({ response: 'all_new' });
 
     if (objectKey !== undefined) {
-      // Submitted only once the record's patch above has landed, not from
-      // the S3 upload event that put objectKey there -- see the same note
-      // in createContentItemVideo.
+      // Submitted only after the patch above has landed -- see the same
+      // note in createContentItemVideo.
       await submitTranscodeJob({
         courseId,
         moduleId,

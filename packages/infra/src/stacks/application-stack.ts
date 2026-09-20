@@ -340,6 +340,14 @@ export class ApplicationStack extends Stack {
     lessonMediaUploadBucket.grantPut(
       instructorApiIntegrations['contentItem.createVideoUploadUrl'].handler,
     );
+    // createContentItemVideo/updateContentItemVideo check the upload
+    // actually exists before recording/submitting a transcode job for it.
+    lessonMediaUploadBucket.grantRead(
+      instructorApiIntegrations['contentItem.createVideo'].handler,
+    );
+    lessonMediaUploadBucket.grantRead(
+      instructorApiIntegrations['contentItem.updateVideo'].handler,
+    );
     // Which bucket a delete/replace targets now depends on the content
     // item's status, so these handlers need delete on both buckets.
     lessonMediaUploadBucket.grantDelete(
@@ -369,10 +377,8 @@ export class ApplicationStack extends Stack {
   }
 
   // createContentItemVideo/updateContentItemVideo submit the MediaConvert
-  // job themselves once they've written the DynamoDB record (not an S3
-  // upload event, which could otherwise let a fast transcode complete
-  // before the record it needs to patch exists) -- see
-  // packages/apis/instructor-api/src/lib/mediaconvert-client.ts. Both
+  // job themselves (see
+  // packages/apis/instructor-api/src/lib/mediaconvert-client.ts). Both
   // handlers already get RUNTIME_CONFIG_APP_ID/AppConfig read access from
   // InstructorApi.defaultIntegrations, so only the MediaConvert-specific
   // permissions are needed here.

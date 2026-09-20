@@ -26,6 +26,7 @@ const {
   bestEffortDeleteContentItemVideos,
   getSignedCloudFrontUrl,
   submitTranscodeJob,
+  videoUploadExists,
 } = vi.hoisted(() => ({
   courseInstructorGet: vi.fn(),
   lessonGet: vi.fn(),
@@ -40,6 +41,7 @@ const {
   bestEffortDeleteContentItemVideos: vi.fn(),
   getSignedCloudFrontUrl: vi.fn(),
   submitTranscodeJob: vi.fn(),
+  videoUploadExists: vi.fn(),
 }));
 
 vi.mock('@wattle/core-table', () => ({
@@ -87,6 +89,7 @@ vi.mock('../lib/s3-client.js', () => ({
   getS3Client: () => ({ send: s3Send }),
   resolveLessonMediaUploadBucketName,
   bestEffortDeleteContentItemVideos,
+  videoUploadExists,
 }));
 
 // getSignedCloudFrontUrl's own config-resolution/signing behavior is
@@ -206,6 +209,7 @@ beforeEach(() => {
     'https://example.cloudfront.net/signed-url',
   );
   submitTranscodeJob.mockResolvedValue(undefined);
+  videoUploadExists.mockResolvedValue(true);
 });
 
 describe('createContentItemVideoUploadUrl', () => {
@@ -381,6 +385,15 @@ describe('createContentItemVideo', () => {
     expect(contentItemCreate).not.toHaveBeenCalled();
   });
 
+  it('throws BAD_REQUEST when the objectKey does not point to an uploaded file', async () => {
+    videoUploadExists.mockResolvedValue(false);
+
+    await expect(
+      callAs().createContentItemVideo(validInput),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(contentItemCreate).not.toHaveBeenCalled();
+  });
+
   it('starts at order 1 and sets status pending for the first content item in a lesson', async () => {
     await callAs().createContentItemVideo(validInput);
 
@@ -390,8 +403,8 @@ describe('createContentItemVideo', () => {
   });
 
   // Invariant: the transcode job must only be submitted once the record
-  // exists, so a fast transcode can never race the DynamoDB write it needs
-  // to patch. Submitting from an S3 upload event instead would break this.
+  // exists, so its completion callback can never race the DynamoDB write
+  // it needs to patch.
   it('submits the transcode job only after the content item record is created', async () => {
     const callOrder: string[] = [];
     contentItemCreate.mockReturnValue({
@@ -531,6 +544,18 @@ describe('updateContentItemVideo', () => {
       callAs().updateContentItemVideo({
         ...input,
         objectKey: `courses/${COURSE_ID}/modules/${MODULE_ID}/lessons/other-lesson/content-items/some-id.mp4`,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(contentItemPatch).not.toHaveBeenCalled();
+  });
+
+  it('throws BAD_REQUEST when a replacement objectKey does not point to an uploaded file', async () => {
+    videoUploadExists.mockResolvedValue(false);
+
+    await expect(
+      callAs().updateContentItemVideo({
+        ...input,
+        objectKey: `${OBJECT_KEY_PREFIX}some-other-fresh-id.mp4`,
       }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     expect(contentItemPatch).not.toHaveBeenCalled();

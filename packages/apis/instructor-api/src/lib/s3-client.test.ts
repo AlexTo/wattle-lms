@@ -3,7 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { bestEffortDeleteContentItemVideos } from './s3-client.js';
+import {
+  bestEffortDeleteContentItemVideos,
+  videoUploadExists,
+} from './s3-client.js';
 
 const { send, getAppConfig } = vi.hoisted(() => ({
   send: vi.fn(),
@@ -22,6 +25,9 @@ vi.mock('@aws-sdk/client-s3', () => ({
   }),
   DeleteObjectsCommand: vi.fn(function (input) {
     return { __command: 'DeleteObjects', ...input };
+  }),
+  HeadObjectCommand: vi.fn(function (input) {
+    return { __command: 'HeadObject', ...input };
   }),
 }));
 
@@ -193,5 +199,49 @@ describe('bestEffortDeleteContentItemVideos', () => {
         pendingItem('content-item-2'),
       ]),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe('videoUploadExists', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.RUNTIME_CONFIG_APP_ID = 'app-1';
+    getAppConfig.mockImplementation((namespace: string) => {
+      if (namespace === 's3') {
+        return Promise.resolve({
+          LessonMediaUploadBucket: { bucketName: UPLOAD_BUCKET_NAME },
+        });
+      }
+      return Promise.resolve({});
+    });
+  });
+
+  it('returns true when the object exists', async () => {
+    send.mockResolvedValue({});
+
+    await expect(videoUploadExists('some-key.mp4')).resolves.toBe(true);
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        __command: 'HeadObject',
+        Bucket: UPLOAD_BUCKET_NAME,
+        Key: 'some-key.mp4',
+      }),
+    );
+  });
+
+  it('returns false when the object does not exist', async () => {
+    const notFound = new Error('not found');
+    notFound.name = 'NotFound';
+    send.mockRejectedValue(notFound);
+
+    await expect(videoUploadExists('missing-key.mp4')).resolves.toBe(false);
+  });
+
+  it('rethrows any other error', async () => {
+    send.mockRejectedValue(new Error('S3 is unavailable'));
+
+    await expect(videoUploadExists('some-key.mp4')).rejects.toThrow(
+      'S3 is unavailable',
+    );
   });
 });

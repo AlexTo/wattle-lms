@@ -38,10 +38,9 @@ const resolveVideoTranscodePipelineConfig =
 
 /**
  * Submits a MediaConvert job transcoding a just-uploaded video into HLS.
- * Called directly from createContentItemVideo/updateContentItemVideo, once
- * the DynamoDB record they write has already been created/updated -- not
- * from an S3 upload event, so there's no window where the transcode can
- * complete before the record it needs to patch exists.
+ * Called from createContentItemVideo/updateContentItemVideo only after the
+ * DynamoDB record they write has been created/updated, so the completion
+ * callback that later patches that record can never fire first.
  */
 export const submitTranscodeJob = async ({
   courseId,
