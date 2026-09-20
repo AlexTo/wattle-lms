@@ -7,12 +7,17 @@ import {
   CoreApi,
   CoreTable,
   EventsPostConfirmation,
+  EventsTranscodeComplete,
+  EventsTranscodeVideo,
   InstructorApi,
   InstructorPortal,
   LessonMediaBucket,
+  LessonMediaUploadBucket,
+  RuntimeConfig,
   StudentPortal,
   suppressRules,
   UserIdentity,
+  VideoTranscodePipeline,
 } from '@wattle/common-constructs';
 import type {
   AdminPortalComponentConfig,
@@ -24,12 +29,19 @@ import type {
   LessonMediaComponentConfig,
   StudentPortalComponentConfig,
 } from '@wattle/common-infra-config';
-import { CfnResource, Stack, StackProps } from 'aws-cdk-lib';
+import { CfnResource, RemovalPolicy, Stack, StackProps } from 'aws-cdk-lib';
 import { Mfa, UserPoolOperation } from 'aws-cdk-lib/aws-cognito';
 import { TableEncryption } from 'aws-cdk-lib/aws-dynamodb';
+import { Rule } from 'aws-cdk-lib/aws-events';
+import { LambdaFunction } from 'aws-cdk-lib/aws-events-targets';
 import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
-import { BucketEncryption } from 'aws-cdk-lib/aws-s3';
+import { BucketEncryption, EventType } from 'aws-cdk-lib/aws-s3';
+import { LambdaDestination } from 'aws-cdk-lib/aws-s3-notifications';
 import { Construct } from 'constructs';
+
+type InstructorApiIntegrations = ReturnType<
+  ReturnType<typeof InstructorApi.defaultIntegrations>['build']
+>;
 
 export interface ApplicationStackProps extends StackProps {
   /** Settings for the Cognito user pool / identity construct. @default all enabled */
@@ -68,24 +80,49 @@ export class ApplicationStack extends Stack {
   ) {
     super(scope, id, props);
 
-    const coreTableKmsEnabled = coreTableConfig?.enableKmsEncryption ?? true;
-    const coreApiKmsEnabled = coreApiConfig?.enableKmsEncryption ?? true;
-    const instructorApiWafEnabled = instructorApiConfig?.enableWaf ?? true;
-    const instructorApiKmsEnabled =
-      instructorApiConfig?.enableKmsEncryption ?? true;
-    const studentPortalWafEnabled = studentPortalConfig?.enableWaf ?? true;
-    const studentPortalKmsEnabled =
-      studentPortalConfig?.enableKmsEncryption ?? true;
-    const instructorPortalWafEnabled =
-      instructorPortalConfig?.enableWaf ?? true;
-    const instructorPortalKmsEnabled =
-      instructorPortalConfig?.enableKmsEncryption ?? true;
-    const adminPortalWafEnabled = adminPortalConfig?.enableWaf ?? true;
-    const adminPortalKmsEnabled =
-      adminPortalConfig?.enableKmsEncryption ?? true;
-    const lessonMediaKmsEnabled =
-      lessonMediaConfig?.enableKmsEncryption ?? true;
+    const identity = this.createIdentity(identityConfig);
+    const coreTable = this.createCoreTable(coreTableConfig);
+    const coreApi = this.createCoreApi(coreApiConfig, identity, coreTable);
+    const { instructorApi, integrations: instructorApiIntegrations } =
+      this.createInstructorApi(instructorApiConfig, identity, coreTable);
 
+    const lessonMediaBucket = this.createLessonMediaBucket(
+      lessonMediaConfig,
+      instructorApiIntegrations,
+    );
+    const lessonMediaUploadBucket = this.createLessonMediaUploadBucket(
+      lessonMediaConfig,
+      instructorApiIntegrations,
+    );
+
+    const videoTranscodePipeline = this.createVideoTranscodePipeline(
+      lessonMediaUploadBucket,
+      lessonMediaBucket,
+    );
+    this.createTranscodeVideoLambda(
+      videoTranscodePipeline,
+      lessonMediaUploadBucket,
+    );
+    this.createTranscodeCompleteLambda(lessonMediaUploadBucket, coreTable);
+
+    const studentPortal = this.createStudentPortal(studentPortalConfig);
+    const instructorPortal = this.createInstructorPortal(
+      instructorPortalConfig,
+    );
+    const adminPortal = this.createAdminPortal(adminPortalConfig);
+
+    this.restrictCors({
+      coreApi,
+      instructorApi,
+      lessonMediaBucket,
+      lessonMediaUploadBucket,
+      studentPortal,
+      instructorPortal,
+      adminPortal,
+    });
+  }
+
+  private createIdentity(identityConfig?: IdentityComponentConfig) {
     const identity = new UserIdentity(this, 'Identity', {
       enableWaf: identityConfig?.enableWaf ?? true,
       mfa: (identityConfig?.enableMfa ?? true) ? Mfa.REQUIRED : Mfa.OFF,
@@ -117,6 +154,11 @@ export class ApplicationStack extends Stack {
       postConfirmation,
     );
 
+    return identity;
+  }
+
+  private createCoreTable(coreTableConfig?: CoreTableComponentConfig) {
+    const coreTableKmsEnabled = coreTableConfig?.enableKmsEncryption ?? true;
     const coreTable = new CoreTable(this, 'CoreTable', {
       encryption: coreTableKmsEnabled
         ? TableEncryption.CUSTOMER_MANAGED
@@ -131,7 +173,15 @@ export class ApplicationStack extends Stack {
         'KMS CMK encryption disabled for this stage',
       );
     }
+    return coreTable;
+  }
 
+  private createCoreApi(
+    coreApiConfig: CoreApiComponentConfig | undefined,
+    identity: UserIdentity,
+    coreTable: CoreTable,
+  ) {
+    const coreApiKmsEnabled = coreApiConfig?.enableKmsEncryption ?? true;
     const integrations = CoreApi.defaultIntegrations(this).build();
 
     const coreApi = new CoreApi(this, 'CoreApi', {
@@ -157,11 +207,21 @@ export class ApplicationStack extends Stack {
       coreTable.grantReadWriteData(handler),
     );
 
-    const instructorApiIntegrations =
-      InstructorApi.defaultIntegrations(this).build();
+    return coreApi;
+  }
+
+  private createInstructorApi(
+    instructorApiConfig: InstructorApiComponentConfig | undefined,
+    identity: UserIdentity,
+    coreTable: CoreTable,
+  ) {
+    const instructorApiWafEnabled = instructorApiConfig?.enableWaf ?? true;
+    const instructorApiKmsEnabled =
+      instructorApiConfig?.enableKmsEncryption ?? true;
+    const integrations = InstructorApi.defaultIntegrations(this).build();
 
     const instructorApi = new InstructorApi(this, 'InstructorApi', {
-      integrations: instructorApiIntegrations,
+      integrations,
       identity,
       enableWaf: instructorApiWafEnabled,
       enableKmsEncryption: instructorApiKmsEnabled,
@@ -179,10 +239,19 @@ export class ApplicationStack extends Stack {
       );
     }
 
-    Object.values(instructorApiIntegrations).forEach(({ handler }) =>
+    Object.values(integrations).forEach(({ handler }) =>
       coreTable.grantReadWriteData(handler),
     );
 
+    return { instructorApi, integrations };
+  }
+
+  private createLessonMediaBucket(
+    lessonMediaConfig: LessonMediaComponentConfig | undefined,
+    instructorApiIntegrations: InstructorApiIntegrations,
+  ) {
+    const lessonMediaKmsEnabled =
+      lessonMediaConfig?.enableKmsEncryption ?? true;
     const lessonMediaWafEnabled = lessonMediaConfig?.enableWaf ?? true;
     const lessonMediaBucket = new LessonMediaBucket(this, 'LessonMediaBucket', {
       enableWaf: lessonMediaWafEnabled,
@@ -230,6 +299,164 @@ export class ApplicationStack extends Stack {
       instructorApiIntegrations['module.delete'].handler,
     );
 
+    return lessonMediaBucket;
+  }
+
+  private createLessonMediaUploadBucket(
+    lessonMediaConfig: LessonMediaComponentConfig | undefined,
+    instructorApiIntegrations: InstructorApiIntegrations,
+  ) {
+    const lessonMediaKmsEnabled =
+      lessonMediaConfig?.enableKmsEncryption ?? true;
+
+    // Raw, untranscoded uploads land here instead -- see decision log in
+    // #110. Once transcoding completes, TranscodeComplete deletes the raw
+    // object and lessonMediaBucket takes over serving the result.
+    const lessonMediaUploadBucket = new LessonMediaUploadBucket(
+      this,
+      'LessonMediaUploadBucket',
+      {
+        enableKmsEncryption: lessonMediaKmsEnabled,
+        enableKeyRotation: lessonMediaConfig?.enableKeyRotation ?? true,
+        removalPolicy: lessonMediaConfig?.retainOnDelete
+          ? RemovalPolicy.RETAIN
+          : RemovalPolicy.DESTROY,
+      },
+    );
+    if (!lessonMediaKmsEnabled) {
+      suppressRules(
+        lessonMediaUploadBucket.bucket,
+        ['CKV_AWS_145'],
+        'KMS CMK encryption disabled for this stage',
+      );
+    }
+    // Raw uploads are deleted as soon as transcoding succeeds or fails;
+    // versioning would only retain copies of something already discarded.
+    suppressRules(
+      lessonMediaUploadBucket.bucket,
+      ['CKV_AWS_21'],
+      'Ephemeral raw upload with no retention need for old versions',
+    );
+    // createContentItemVideoUploadUrl now targets this bucket instead of
+    // lessonMediaBucket -- the raw upload never sits behind CloudFront.
+    lessonMediaUploadBucket.grantPut(
+      instructorApiIntegrations['contentItem.createVideoUploadUrl'].handler,
+    );
+    // Which bucket a delete/replace targets now depends on the content
+    // item's status, so these handlers need delete on both buckets.
+    lessonMediaUploadBucket.grantDelete(
+      instructorApiIntegrations['contentItem.delete'].handler,
+    );
+    lessonMediaUploadBucket.grantDelete(
+      instructorApiIntegrations['contentItem.updateVideo'].handler,
+    );
+    lessonMediaUploadBucket.grantDelete(
+      instructorApiIntegrations['lesson.delete'].handler,
+    );
+    lessonMediaUploadBucket.grantDelete(
+      instructorApiIntegrations['module.delete'].handler,
+    );
+
+    return lessonMediaUploadBucket;
+  }
+
+  private createVideoTranscodePipeline(
+    lessonMediaUploadBucket: LessonMediaUploadBucket,
+    lessonMediaBucket: LessonMediaBucket,
+  ) {
+    return new VideoTranscodePipeline(this, 'VideoTranscodePipeline', {
+      uploadBucket: lessonMediaUploadBucket,
+      mediaBucket: lessonMediaBucket,
+    });
+  }
+
+  private createTranscodeVideoLambda(
+    videoTranscodePipeline: VideoTranscodePipeline,
+    lessonMediaUploadBucket: LessonMediaUploadBucket,
+  ) {
+    // S3 ObjectCreated on the upload bucket -> submit a MediaConvert job.
+    const transcodeVideo = new EventsTranscodeVideo(this, 'TranscodeVideo');
+    // Bucket names / role / job template ARNs are resolved at runtime via
+    // RuntimeConfig/AppConfig (packages/events/src/lib/runtime-config.ts)
+    // rather than plain env vars, so a future local-dev version of this
+    // Lambda can resolve them the same way the tRPC APIs already do.
+    const runtimeConfig = RuntimeConfig.ensure(this);
+    transcodeVideo.addEnvironment(
+      'RUNTIME_CONFIG_APP_ID',
+      runtimeConfig.appConfigApplicationId,
+    );
+    runtimeConfig.grantReadAppConfig(transcodeVideo);
+    // MediaConvert's CreateJob isn't meaningfully resource-scoped for a
+    // submitter role (the job doesn't exist yet), so this is the widest
+    // permission in this stack that's still limited to one action.
+    transcodeVideo.addToRolePolicy(
+      new PolicyStatement({
+        actions: ['mediaconvert:CreateJob'],
+        resources: ['*'],
+      }),
+    );
+    suppressRules(
+      transcodeVideo,
+      ['CKV_AWS_111'],
+      'CreateJob has no meaningful resource to scope to before the job exists; narrowed to just this one action instead',
+      (c) =>
+        CfnResource.isCfnResource(c) &&
+        c.cfnResourceType === 'AWS::IAM::Policy',
+    );
+    transcodeVideo.addToRolePolicy(
+      new PolicyStatement({
+        actions: ['iam:PassRole'],
+        resources: [videoTranscodePipeline.role.roleArn],
+      }),
+    );
+    lessonMediaUploadBucket.bucket.addEventNotification(
+      EventType.OBJECT_CREATED,
+      new LambdaDestination(transcodeVideo),
+    );
+
+    return transcodeVideo;
+  }
+
+  private createTranscodeCompleteLambda(
+    lessonMediaUploadBucket: LessonMediaUploadBucket,
+    coreTable: CoreTable,
+  ) {
+    // MediaConvert job COMPLETE/ERROR via EventBridge -> flip contentItem
+    // status and, on success, repoint s3Key and clean up the raw upload.
+    const transcodeComplete = new EventsTranscodeComplete(
+      this,
+      'TranscodeComplete',
+    );
+    // The upload bucket's name is resolved at runtime via RuntimeConfig/
+    // AppConfig (see createTranscodeVideoLambda), granted below alongside
+    // the DynamoDB table name lookup @wattle/core-table already needs.
+    const runtimeConfig = RuntimeConfig.ensure(this);
+    transcodeComplete.addEnvironment(
+      'RUNTIME_CONFIG_APP_ID',
+      runtimeConfig.appConfigApplicationId,
+    );
+    runtimeConfig.grantReadAppConfig(transcodeComplete);
+    coreTable.grantReadWriteData(transcodeComplete);
+    lessonMediaUploadBucket.grantDelete(transcodeComplete);
+    new Rule(this, 'TranscodeCompleteRule', {
+      eventPattern: {
+        source: ['aws.mediaconvert'],
+        detailType: ['MediaConvert Job State Change'],
+        detail: { status: ['COMPLETE', 'ERROR'] },
+      },
+      targets: [new LambdaFunction(transcodeComplete)],
+    });
+
+    return transcodeComplete;
+  }
+
+  private createStudentPortal(
+    studentPortalConfig?: StudentPortalComponentConfig,
+  ) {
+    const studentPortalWafEnabled = studentPortalConfig?.enableWaf ?? true;
+    const studentPortalKmsEnabled =
+      studentPortalConfig?.enableKmsEncryption ?? true;
+
     const studentPortal = new StudentPortal(this, 'StudentPortal', {
       enableWaf: studentPortalWafEnabled,
       enableKeyRotation: studentPortalConfig?.enableKeyRotation ?? true,
@@ -255,6 +482,17 @@ export class ApplicationStack extends Stack {
           c.node.path.includes('/StudentPortal/AccessLogs'),
       );
     }
+
+    return studentPortal;
+  }
+
+  private createInstructorPortal(
+    instructorPortalConfig?: InstructorPortalComponentConfig,
+  ) {
+    const instructorPortalWafEnabled =
+      instructorPortalConfig?.enableWaf ?? true;
+    const instructorPortalKmsEnabled =
+      instructorPortalConfig?.enableKmsEncryption ?? true;
 
     const instructorPortal = new InstructorPortal(this, 'InstructorPortal', {
       enableWaf: instructorPortalWafEnabled,
@@ -282,6 +520,14 @@ export class ApplicationStack extends Stack {
       );
     }
 
+    return instructorPortal;
+  }
+
+  private createAdminPortal(adminPortalConfig?: AdminPortalComponentConfig) {
+    const adminPortalWafEnabled = adminPortalConfig?.enableWaf ?? true;
+    const adminPortalKmsEnabled =
+      adminPortalConfig?.enableKmsEncryption ?? true;
+
     const adminPortal = new AdminPortal(this, 'AdminPortal', {
       enableWaf: adminPortalWafEnabled,
       enableKeyRotation: adminPortalConfig?.enableKeyRotation ?? true,
@@ -308,6 +554,28 @@ export class ApplicationStack extends Stack {
       );
     }
 
+    return adminPortal;
+  }
+
+  private restrictCors({
+    coreApi,
+    instructorApi,
+    lessonMediaBucket,
+    lessonMediaUploadBucket,
+    studentPortal,
+    instructorPortal,
+    adminPortal,
+  }: {
+    coreApi: ReturnType<ApplicationStack['createCoreApi']>;
+    instructorApi: ReturnType<
+      ApplicationStack['createInstructorApi']
+    >['instructorApi'];
+    lessonMediaBucket: LessonMediaBucket;
+    lessonMediaUploadBucket: LessonMediaUploadBucket;
+    studentPortal: StudentPortal;
+    instructorPortal: InstructorPortal;
+    adminPortal: AdminPortal;
+  }) {
     coreApi.restrictCorsTo(
       studentPortal,
       instructorPortal,
@@ -327,6 +595,12 @@ export class ApplicationStack extends Stack {
     );
 
     lessonMediaBucket.restrictCorsTo(
+      instructorPortal,
+      'http://localhost:4200',
+      'http://localhost:4300',
+    );
+
+    lessonMediaUploadBucket.restrictCorsTo(
       instructorPortal,
       'http://localhost:4200',
       'http://localhost:4300',
