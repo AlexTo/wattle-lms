@@ -161,6 +161,20 @@ describe('transcodeComplete', () => {
     expect(s3Send).not.toHaveBeenCalled();
   });
 
+  it('includes a condition matching the record to the job that just errored', async () => {
+    await transcodeComplete(buildEvent('ERROR') as any);
+
+    const [whereCallback] = contentItemPatchWhere.mock.calls[0]!;
+    const eq = vi.fn((attr: string, value: string) => `${attr} = ${value}`);
+    const result = whereCallback(
+      { mediaConvertJobId: 'mediaConvertJobId' },
+      { eq },
+    );
+
+    expect(eq).toHaveBeenCalledWith('mediaConvertJobId', JOB_ID);
+    expect(result).toBe(`mediaConvertJobId = ${JOB_ID}`);
+  });
+
   it('swallows a patch failure so a deleted content item does not crash the handler', async () => {
     contentItemPatchWhere.mockReturnValue({
       go: vi.fn().mockRejectedValue(new Error('item does not exist')),
