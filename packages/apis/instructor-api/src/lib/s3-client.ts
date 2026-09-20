@@ -72,6 +72,70 @@ export type IDeletableVideoContentItem = {
   contentItemId: string;
 };
 
+// S3 hard caps: ListObjectsV2 returns at most 1,000 keys per page, and
+// DeleteObjects accepts at most 1,000 keys per call (a bigger request is
+// rejected outright, not partially applied).
+const S3_PAGE_SIZE = 1000;
+
+const listAllObjectKeys = async (
+  logger: Logger | undefined,
+  bucket: string,
+  prefix: string,
+): Promise<string[]> => {
+  const keys: string[] = [];
+  let continuationToken: string | undefined;
+  do {
+    try {
+      const { Contents, IsTruncated, NextContinuationToken } =
+        await getS3Client().send(
+          new ListObjectsV2Command({
+            Bucket: bucket,
+            Prefix: prefix,
+            ContinuationToken: continuationToken,
+          }),
+        );
+      for (const object of Contents ?? []) {
+        if (object.Key !== undefined) {
+          keys.push(object.Key);
+        }
+      }
+      continuationToken = IsTruncated ? NextContinuationToken : undefined;
+    } catch (error) {
+      logger?.error('Failed to list lesson media objects from S3', {
+        error,
+        bucket,
+        prefix,
+      });
+      break;
+    }
+  } while (continuationToken !== undefined);
+  return keys;
+};
+
+const deleteObjectsInBatches = async (
+  logger: Logger | undefined,
+  bucket: string,
+  keys: readonly string[],
+): Promise<void> => {
+  for (let i = 0; i < keys.length; i += S3_PAGE_SIZE) {
+    const batch = keys.slice(i, i + S3_PAGE_SIZE);
+    try {
+      await getS3Client().send(
+        new DeleteObjectsCommand({
+          Bucket: bucket,
+          Delete: { Objects: batch.map((Key) => ({ Key })) },
+        }),
+      );
+    } catch (error) {
+      logger?.error('Failed to delete lesson media objects from S3', {
+        error,
+        bucket,
+        keys: batch,
+      });
+    }
+  }
+};
+
 /**
  * Best-effort deletes one or more video content items' underlying S3
  * object(s) -- a single item for a direct delete/replace, or several at
@@ -99,61 +163,21 @@ export const bestEffortDeleteContentItemVideos = async (
 
   if (readyItems.length > 0) {
     const bucket = await resolveLessonMediaBucketName();
-    const keysToDelete: string[] = [];
-    await Promise.all(
-      readyItems.map(async (item) => {
-        const prefix = `courses/${item.courseId}/modules/${item.moduleId}/lessons/${item.lessonId}/content-items/${item.contentItemId}/`;
-        try {
-          const { Contents } = await getS3Client().send(
-            new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix }),
-          );
-          for (const object of Contents ?? []) {
-            if (object.Key !== undefined) {
-              keysToDelete.push(object.Key);
-            }
-          }
-        } catch (error) {
-          logger?.error('Failed to list lesson media objects from S3', {
-            error,
-            bucket,
-            prefix,
-          });
-        }
-      }),
-    );
+    const keysToDelete = (
+      await Promise.all(
+        readyItems.map((item) => {
+          const prefix = `courses/${item.courseId}/modules/${item.moduleId}/lessons/${item.lessonId}/content-items/${item.contentItemId}/`;
+          return listAllObjectKeys(logger, bucket, prefix);
+        }),
+      )
+    ).flat();
     if (keysToDelete.length > 0) {
-      try {
-        await getS3Client().send(
-          new DeleteObjectsCommand({
-            Bucket: bucket,
-            Delete: { Objects: keysToDelete.map((Key) => ({ Key })) },
-          }),
-        );
-      } catch (error) {
-        logger?.error('Failed to delete lesson media objects from S3', {
-          error,
-          bucket,
-          keys: keysToDelete,
-        });
-      }
+      await deleteObjectsInBatches(logger, bucket, keysToDelete);
     }
   }
 
   if (rawKeys.length > 0) {
     const bucket = await resolveLessonMediaUploadBucketName();
-    try {
-      await getS3Client().send(
-        new DeleteObjectsCommand({
-          Bucket: bucket,
-          Delete: { Objects: rawKeys.map((Key) => ({ Key })) },
-        }),
-      );
-    } catch (error) {
-      logger?.error('Failed to delete lesson media objects from S3', {
-        error,
-        bucket,
-        keys: rawKeys,
-      });
-    }
+    await deleteObjectsInBatches(logger, bucket, rawKeys);
   }
 };

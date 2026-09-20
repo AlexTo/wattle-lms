@@ -116,6 +116,112 @@ describe('bestEffortDeleteContentItemVideos', () => {
     });
   });
 
+  // S3's ListObjectsV2 caps a single page at 1,000 keys; a lesson video's
+  // HLS output (4 renditions x 6s segments) can exceed that on its own, so
+  // this must keep paging until IsTruncated is false or it silently misses
+  // everything past the first page.
+  it('paginates ListObjectsV2 until IsTruncated is false', async () => {
+    const prefix = `courses/${COURSE_ID}/modules/${MODULE_ID}/lessons/${LESSON_ID}/content-items/content-item-1/`;
+    send.mockImplementation((command: any) => {
+      if (command.__command === 'ListObjectsV2') {
+        if (!command.ContinuationToken) {
+          return Promise.resolve({
+            Contents: [{ Key: `${prefix}page1.ts` }],
+            IsTruncated: true,
+            NextContinuationToken: 'token-1',
+          });
+        }
+        if (command.ContinuationToken === 'token-1') {
+          return Promise.resolve({
+            Contents: [{ Key: `${prefix}page2.ts` }],
+            IsTruncated: false,
+          });
+        }
+      }
+      return Promise.resolve({});
+    });
+
+    await bestEffortDeleteContentItemVideos(undefined, [
+      readyItem('content-item-1'),
+    ]);
+
+    const listCalls = send.mock.calls.filter(
+      ([command]: any[]) => command.__command === 'ListObjectsV2',
+    );
+    expect(listCalls).toHaveLength(2);
+
+    const deleteCall = send.mock.calls.find(
+      ([command]: any[]) => command.__command === 'DeleteObjects',
+    );
+    expect(deleteCall![0].Delete.Objects).toEqual([
+      { Key: `${prefix}page1.ts` },
+      { Key: `${prefix}page2.ts` },
+    ]);
+  });
+
+  it('deletes whatever was listed before a pagination failure, rather than nothing', async () => {
+    const prefix = `courses/${COURSE_ID}/modules/${MODULE_ID}/lessons/${LESSON_ID}/content-items/content-item-1/`;
+    send.mockImplementation((command: any) => {
+      if (command.__command === 'ListObjectsV2') {
+        if (!command.ContinuationToken) {
+          return Promise.resolve({
+            Contents: [{ Key: `${prefix}page1.ts` }],
+            IsTruncated: true,
+            NextContinuationToken: 'token-1',
+          });
+        }
+        return Promise.reject(new Error('S3 is unavailable'));
+      }
+      return Promise.resolve({});
+    });
+    const logger = { error: vi.fn() };
+
+    await bestEffortDeleteContentItemVideos(logger as any, [
+      readyItem('content-item-1'),
+    ]);
+
+    const deleteCall = send.mock.calls.find(
+      ([command]: any[]) => command.__command === 'DeleteObjects',
+    );
+    expect(deleteCall![0].Delete.Objects).toEqual([
+      { Key: `${prefix}page1.ts` },
+    ]);
+    expect(logger.error).toHaveBeenCalledWith(
+      'Failed to list lesson media objects from S3',
+      expect.objectContaining({ prefix }),
+    );
+  });
+
+  // S3's DeleteObjects caps a single call at 1,000 keys and rejects the
+  // whole request outright if given more, rather than partially applying it.
+  it('chunks a delete into multiple calls when there are more than 1,000 keys', async () => {
+    const prefix = `courses/${COURSE_ID}/modules/${MODULE_ID}/lessons/${LESSON_ID}/content-items/content-item-1/`;
+    const manyKeys = Array.from(
+      { length: 1500 },
+      (_, i) => `${prefix}segment-${i}.ts`,
+    );
+    send.mockImplementation((command: any) => {
+      if (command.__command === 'ListObjectsV2') {
+        return Promise.resolve({
+          Contents: manyKeys.map((Key) => ({ Key })),
+          IsTruncated: false,
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    await bestEffortDeleteContentItemVideos(undefined, [
+      readyItem('content-item-1'),
+    ]);
+
+    const deleteCalls = send.mock.calls.filter(
+      ([command]: any[]) => command.__command === 'DeleteObjects',
+    );
+    expect(deleteCalls).toHaveLength(2);
+    expect(deleteCalls[0]![0].Delete.Objects).toHaveLength(1000);
+    expect(deleteCalls[1]![0].Delete.Objects).toHaveLength(500);
+  });
+
   it('deletes the single raw object from the upload bucket for a non-ready item', async () => {
     const item = pendingItem('content-item-2');
 
