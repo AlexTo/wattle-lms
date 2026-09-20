@@ -2,7 +2,7 @@
  * Copyright Wattle LMS Contributors. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
-import { Lazy, RemovalPolicy } from 'aws-cdk-lib';
+import { Duration, Lazy, RemovalPolicy } from 'aws-cdk-lib';
 import { Distribution } from 'aws-cdk-lib/aws-cloudfront';
 import { Grant, IGrantable } from 'aws-cdk-lib/aws-iam';
 import { IKey, Key } from 'aws-cdk-lib/aws-kms';
@@ -89,6 +89,12 @@ export class UploadBucket extends Construct {
       blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
       removalPolicy,
       autoDeleteObjects: removalPolicy === RemovalPolicy.DESTROY,
+      // Backstop for uploads a caller never follows up on (e.g. an
+      // instructor closes the dialog after the presigned PUT succeeds but
+      // before submitting the record that would trigger downstream
+      // consumption) -- otherwise such an object has nothing that will ever
+      // delete it.
+      lifecycleRules: [{ expiration: Duration.days(2) }],
       cors: [
         {
           allowedMethods: [HttpMethods.PUT],
