@@ -21,7 +21,7 @@ const {
   contentItemDelete,
   transactionWrite,
   transactionGo,
-  bestEffortDeleteS3Objects,
+  bestEffortDeleteContentItemVideos,
 } = vi.hoisted(() => ({
   courseInstructorGet: vi.fn(),
   moduleQueryPrimary: vi.fn(),
@@ -36,7 +36,7 @@ const {
   contentItemDelete: vi.fn(),
   transactionWrite: vi.fn(),
   transactionGo: vi.fn(),
-  bestEffortDeleteS3Objects: vi.fn(),
+  bestEffortDeleteContentItemVideos: vi.fn(),
 }));
 
 vi.mock('@wattle/core-table', () => ({
@@ -73,7 +73,7 @@ vi.mock('@wattle/core-table', () => ({
   })),
 }));
 
-vi.mock('../lib/s3-client.js', () => ({ bestEffortDeleteS3Objects }));
+vi.mock('../lib/s3-client.js', () => ({ bestEffortDeleteContentItemVideos }));
 
 const router = t.router({ createModule, updateModule, deleteModule });
 const caller = t.createCallerFactory(router);
@@ -154,7 +154,7 @@ beforeEach(() => {
   contentItemDelete.mockImplementation((attrs) => ({
     commit: () => ({ item: null, attrs }),
   }));
-  bestEffortDeleteS3Objects.mockResolvedValue(undefined);
+  bestEffortDeleteContentItemVideos.mockResolvedValue(undefined);
   transactionWrite.mockImplementation((fn) => {
     fn({
       module: { delete: moduleDelete },
@@ -507,17 +507,17 @@ describe('deleteModule', () => {
       lessonId: contentItem2.lessonId,
       contentItemId: contentItem2.contentItemId,
     });
-    expect(bestEffortDeleteS3Objects).toHaveBeenCalledWith(expect.anything(), [
-      contentItem.s3Key,
-      contentItem2.s3Key,
-    ]);
+    expect(bestEffortDeleteContentItemVideos).toHaveBeenCalledWith(
+      expect.anything(),
+      [contentItem, contentItem2],
+    );
   });
 
   it('does not attempt to delete any content items when the module has none', async () => {
     await callAs().deleteModule({ courseId: COURSE_ID, moduleId: MODULE_ID });
 
     expect(contentItemDelete).not.toHaveBeenCalled();
-    expect(bestEffortDeleteS3Objects).toHaveBeenCalledWith(
+    expect(bestEffortDeleteContentItemVideos).toHaveBeenCalledWith(
       expect.anything(),
       [],
     );

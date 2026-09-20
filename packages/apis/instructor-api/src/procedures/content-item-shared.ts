@@ -4,7 +4,7 @@
  */
 import { TRPCError } from '@trpc/server';
 import { courseProcedure } from '../init.js';
-import { bestEffortDeleteS3Objects } from '../lib/s3-client.js';
+import { bestEffortDeleteContentItemVideos } from '../lib/s3-client.js';
 import {
   DeleteContentItemInputSchema,
   DeleteContentItemOutputSchema,
@@ -60,7 +60,7 @@ export const deleteContentItem = courseProcedure
     }
 
     if (existing.type === 'video' && existing.s3Key) {
-      await bestEffortDeleteS3Objects(ctx.logger, [existing.s3Key]);
+      await bestEffortDeleteContentItemVideos(ctx.logger, [existing]);
     }
 
     return asContentItemOutput<IDeleteContentItemOutput>(contentItem);

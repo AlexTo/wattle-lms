@@ -4,7 +4,11 @@
  */
 import type { Logger } from '@aws-lambda-powertools/logger';
 import { getAppConfig } from '@aws-lambda-powertools/parameters/appconfig';
-import { DeleteObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectsCommand,
+  ListObjectsV2Command,
+  S3Client,
+} from '@aws-sdk/client-s3';
 
 let _client: S3Client | undefined;
 
@@ -15,16 +19,17 @@ export const getS3Client = (): S3Client => {
   return _client;
 };
 
-const runtimeConfigKey = 'LessonMediaBucket';
-
 type S3Config = {
   bucketName: string;
 };
 
-let _bucketName: string | undefined;
-
-export const resolveLessonMediaBucketName = async (): Promise<string> => {
-  if (_bucketName === undefined) {
+const resolveBucketName = (() => {
+  const cache = new Map<string, string>();
+  return async (runtimeConfigKey: string): Promise<string> => {
+    const cached = cache.get(runtimeConfigKey);
+    if (cached !== undefined) {
+      return cached;
+    }
     const appId = process.env.RUNTIME_CONFIG_APP_ID;
     if (!appId) {
       throw new Error('RUNTIME_CONFIG_APP_ID environment variable is not set');
@@ -40,37 +45,112 @@ export const resolveLessonMediaBucketName = async (): Promise<string> => {
     if (!bucketName) {
       throw new Error('Could not resolve bucket name from runtime config');
     }
-    _bucketName = bucketName;
-  }
-  return _bucketName!;
+    cache.set(runtimeConfigKey, bucketName);
+    return bucketName;
+  };
+})();
+
+export const resolveLessonMediaBucketName = (): Promise<string> =>
+  resolveBucketName('LessonMediaBucket');
+
+// The raw, untranscoded upload -- never served directly, see decision log
+// in #110. createContentItemVideoUploadUrl targets this bucket instead of
+// LessonMediaBucket; TranscodeComplete (packages/events) moves the finished
+// object over and deletes the raw one once transcoding succeeds.
+export const resolveLessonMediaUploadBucketName = (): Promise<string> =>
+  resolveBucketName('LessonMediaUploadBucket');
+
+export type IDeletableVideoContentItem = {
+  status: string;
+  s3Key?: string;
+  courseId: string;
+  moduleId: string;
+  lessonId: string;
+  contentItemId: string;
 };
 
 /**
- * Deletes lesson media objects from S3, one request per key, swallowing
- * (and logging) any individual failure. The DynamoDB record is always the
- * source of truth for whether a piece of content exists, so a failure to
- * clean up its underlying S3 object must never fail the caller's mutation.
+ * Best-effort deletes one or more video content items' underlying S3
+ * object(s) -- a single item for a direct delete/replace, or several at
+ * once for a lesson/module cascade delete. Failures are logged, never
+ * thrown: the DynamoDB record is always the source of truth for whether a
+ * piece of content exists, so a failure to clean up here must never fail
+ * the caller's mutation.
+ *
+ * Which bucket holds an item's object(s) depends on its `status`: a
+ * `'ready'` item's `s3Key` is its HLS manifest in LessonMediaBucket,
+ * alongside segment files that aren't individually tracked, so the whole
+ * `.../content-items/<contentItemId>/` prefix is deleted; any other status
+ * means `s3Key` is still the single raw upload in LessonMediaUploadBucket.
  */
-export const bestEffortDeleteS3Objects = async (
+export const bestEffortDeleteContentItemVideos = async (
   logger: Logger | undefined,
-  s3Keys: string[],
+  contentItems: readonly IDeletableVideoContentItem[],
 ): Promise<void> => {
-  if (s3Keys.length === 0) {
-    return;
-  }
-  const bucket = await resolveLessonMediaBucketName();
-  await Promise.all(
-    s3Keys.map(async (key) => {
+  const readyItems = contentItems.filter(
+    (item) => item.status === 'ready' && item.s3Key,
+  );
+  const rawKeys = contentItems
+    .filter((item) => item.status !== 'ready' && item.s3Key)
+    .map((item) => item.s3Key!);
+
+  if (readyItems.length > 0) {
+    const bucket = await resolveLessonMediaBucketName();
+    const keysToDelete: string[] = [];
+    await Promise.all(
+      readyItems.map(async (item) => {
+        const prefix = `courses/${item.courseId}/modules/${item.moduleId}/lessons/${item.lessonId}/content-items/${item.contentItemId}/`;
+        try {
+          const { Contents } = await getS3Client().send(
+            new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix }),
+          );
+          for (const object of Contents ?? []) {
+            if (object.Key !== undefined) {
+              keysToDelete.push(object.Key);
+            }
+          }
+        } catch (error) {
+          logger?.error('Failed to list lesson media objects from S3', {
+            error,
+            bucket,
+            prefix,
+          });
+        }
+      }),
+    );
+    if (keysToDelete.length > 0) {
       try {
         await getS3Client().send(
-          new DeleteObjectCommand({ Bucket: bucket, Key: key }),
+          new DeleteObjectsCommand({
+            Bucket: bucket,
+            Delete: { Objects: keysToDelete.map((Key) => ({ Key })) },
+          }),
         );
       } catch (error) {
-        logger?.error('Failed to delete lesson media object from S3', {
+        logger?.error('Failed to delete lesson media objects from S3', {
           error,
-          s3Key: key,
+          bucket,
+          keys: keysToDelete,
         });
       }
-    }),
-  );
+    }
+  }
+
+  if (rawKeys.length > 0) {
+    const bucket = await resolveLessonMediaUploadBucketName();
+    try {
+      await getS3Client().send(
+        new DeleteObjectsCommand({
+          Bucket: bucket,
+          Delete: { Objects: rawKeys.map((Key) => ({ Key })) },
+        }),
+      );
+    } catch (error) {
+      logger?.error('Failed to delete lesson media objects from S3', {
+        error,
+        bucket,
+        keys: rawKeys,
+      });
+    }
+  }
 };

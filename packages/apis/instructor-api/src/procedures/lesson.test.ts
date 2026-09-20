@@ -20,7 +20,7 @@ const {
   contentItemDelete,
   transactionWrite,
   transactionGo,
-  bestEffortDeleteS3Objects,
+  bestEffortDeleteContentItemVideos,
 } = vi.hoisted(() => ({
   courseInstructorGet: vi.fn(),
   moduleGet: vi.fn(),
@@ -34,7 +34,7 @@ const {
   contentItemDelete: vi.fn(),
   transactionWrite: vi.fn(),
   transactionGo: vi.fn(),
-  bestEffortDeleteS3Objects: vi.fn(),
+  bestEffortDeleteContentItemVideos: vi.fn(),
 }));
 
 vi.mock('@wattle/core-table', () => ({
@@ -68,7 +68,7 @@ vi.mock('@wattle/core-table', () => ({
   })),
 }));
 
-vi.mock('../lib/s3-client.js', () => ({ bestEffortDeleteS3Objects }));
+vi.mock('../lib/s3-client.js', () => ({ bestEffortDeleteContentItemVideos }));
 
 const router = t.router({ createLesson, updateLesson, deleteLesson });
 const caller = t.createCallerFactory(router);
@@ -153,7 +153,7 @@ beforeEach(() => {
   contentItemDelete.mockImplementation((attrs) => ({
     commit: () => ({ item: null, attrs }),
   }));
-  bestEffortDeleteS3Objects.mockResolvedValue(undefined);
+  bestEffortDeleteContentItemVideos.mockResolvedValue(undefined);
   transactionWrite.mockImplementation((fn) => {
     fn({
       lesson: { delete: lessonDelete },
@@ -508,10 +508,10 @@ describe('deleteLesson', () => {
       lessonId: lesson.lessonId,
       contentItemId: contentItem2.contentItemId,
     });
-    expect(bestEffortDeleteS3Objects).toHaveBeenCalledWith(expect.anything(), [
-      contentItem.s3Key,
-      contentItem2.s3Key,
-    ]);
+    expect(bestEffortDeleteContentItemVideos).toHaveBeenCalledWith(
+      expect.anything(),
+      [contentItem, contentItem2],
+    );
   });
 
   it('does not attempt to delete any content items when the lesson has none', async () => {
@@ -522,7 +522,7 @@ describe('deleteLesson', () => {
     });
 
     expect(contentItemDelete).not.toHaveBeenCalled();
-    expect(bestEffortDeleteS3Objects).toHaveBeenCalledWith(
+    expect(bestEffortDeleteContentItemVideos).toHaveBeenCalledWith(
       expect.anything(),
       [],
     );

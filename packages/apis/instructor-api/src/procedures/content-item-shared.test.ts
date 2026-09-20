@@ -11,12 +11,12 @@ const {
   courseInstructorGet,
   contentItemGet,
   contentItemDelete,
-  bestEffortDeleteS3Objects,
+  bestEffortDeleteContentItemVideos,
 } = vi.hoisted(() => ({
   courseInstructorGet: vi.fn(),
   contentItemGet: vi.fn(),
   contentItemDelete: vi.fn(),
-  bestEffortDeleteS3Objects: vi.fn(),
+  bestEffortDeleteContentItemVideos: vi.fn(),
 }));
 
 vi.mock('@wattle/core-table', () => ({
@@ -33,11 +33,11 @@ vi.mock('@wattle/core-table', () => ({
   })),
 }));
 
-// bestEffortDeleteS3Objects's own per-key error-swallowing behavior is
-// covered directly in lib/s3-client.test.ts; here it's just a mock so these
-// tests can assert content-item-shared.ts calls it with the right keys.
+// bestEffortDeleteContentItemVideos's own error-swallowing/bucket-selection
+// behavior is covered directly in lib/s3-client.test.ts; here it's just a
+// mock so these tests can assert content-item-shared.ts calls it correctly.
 vi.mock('../lib/s3-client.js', () => ({
-  bestEffortDeleteS3Objects,
+  bestEffortDeleteContentItemVideos,
 }));
 
 const router = t.router({ deleteContentItem });
@@ -102,7 +102,7 @@ beforeEach(() => {
   contentItemDelete.mockReturnValue({
     go: vi.fn().mockResolvedValue({ data: videoContentItem }),
   });
-  bestEffortDeleteS3Objects.mockResolvedValue(undefined);
+  bestEffortDeleteContentItemVideos.mockResolvedValue(undefined);
 });
 
 describe('deleteContentItem', () => {
@@ -135,9 +135,10 @@ describe('deleteContentItem', () => {
     const result = await callAs().deleteContentItem(input);
 
     expect(contentItemDelete).toHaveBeenCalledWith(input);
-    expect(bestEffortDeleteS3Objects).toHaveBeenCalledWith(expect.anything(), [
-      videoContentItem.s3Key,
-    ]);
+    expect(bestEffortDeleteContentItemVideos).toHaveBeenCalledWith(
+      expect.anything(),
+      [videoContentItem],
+    );
     expect(result).toEqual(videoContentItem);
   });
 
@@ -151,7 +152,7 @@ describe('deleteContentItem', () => {
 
     const result = await callAs().deleteContentItem(input);
 
-    expect(bestEffortDeleteS3Objects).not.toHaveBeenCalled();
+    expect(bestEffortDeleteContentItemVideos).not.toHaveBeenCalled();
     expect(result).toEqual(textContentItem);
   });
 });
