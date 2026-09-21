@@ -380,16 +380,27 @@ export const updateContentItemVideo = courseProcedure
             ...(durationSeconds !== undefined && { durationSeconds }),
           })
           // Guards against a second updateContentItemVideo replace racing
-          // this one: if status/s3Key have changed since the .get() above,
-          // another replace already landed first, and proceeding here
-          // would submit a second job writing to the same S3 destination
-          // as that one (#123). A concurrent metadata-only edit never
-          // touches these two fields, so it can never trip this check --
-          // only two concurrent replacements can.
-          .where(
-            (attr, op) =>
-              `${op.eq(attr.status, existing.status)} AND ${op.eq(attr.s3Key, existing.s3Key!)}`,
-          )
+          // this one: if status/s3Key/submissionNonce have changed since
+          // the .get() above, another replace already landed first, and
+          // proceeding here would submit a second job writing to the same
+          // S3 destination as that one (#123). A concurrent metadata-only
+          // edit never touches these fields, so it can never trip this
+          // check -- only two concurrent replacements can. submissionNonce
+          // is included alongside status/s3Key because objectKey is
+          // deterministic from contentItemId + extension: two concurrent
+          // same-extension replacements of an already-pending item can
+          // read identical status/s3Key values on both sides of the race,
+          // so those two alone wouldn't always catch it; submissionNonce is
+          // freshly randomized per call and can never coincidentally match.
+          // Older records from before submissionNonce existed have nothing
+          // to compare, so the check falls back to status/s3Key only for
+          // them, same as it always has.
+          .where((attr, op) => {
+            const condition = `${op.eq(attr.status, existing.status)} AND ${op.eq(attr.s3Key, existing.s3Key!)}`;
+            return existing.submissionNonce
+              ? `${condition} AND ${op.eq(attr.submissionNonce, existing.submissionNonce)}`
+              : condition;
+          })
           .go({ response: 'all_new' });
         contentItem = result.data;
       } catch (error) {

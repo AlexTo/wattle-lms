@@ -1044,6 +1044,43 @@ describe('updateContentItemVideo', () => {
     );
   });
 
+  // Invariant: objectKey is deterministic from contentItemId + extension,
+  // so two concurrent same-extension replacements of an already-pending
+  // item can read identical status/s3Key values on both sides of the race
+  // -- status/s3Key alone wouldn't always catch that second race. Also
+  // including submissionNonce (freshly randomized per call) closes it.
+  it('also conditions the patch on submissionNonce when the existing record has one', async () => {
+    const pendingObjectKey = `${OBJECT_KEY_PREFIX}some-other-fresh-id.mp4`;
+    const pendingItem = {
+      ...contentItem,
+      status: 'pending' as const,
+      s3Key: pendingObjectKey,
+      mediaConvertJobId: 'job-1',
+      rawObjectETag: 'a-different-etag',
+      submissionNonce: 'nonce-1',
+    };
+    contentItemGet.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: pendingItem }),
+    });
+
+    await callAs().updateContentItemVideo({
+      ...input,
+      objectKey: pendingObjectKey,
+    });
+
+    const [whereCallback] = contentItemPatchWhere.mock.calls[0]!;
+    const eq = vi.fn((attr: string, value: string) => `${attr} = ${value}`);
+    const result = whereCallback(
+      { status: 'status', s3Key: 's3Key', submissionNonce: 'submissionNonce' },
+      { eq },
+    );
+
+    expect(eq).toHaveBeenCalledWith('submissionNonce', 'nonce-1');
+    expect(result).toBe(
+      `status = ${pendingItem.status} AND s3Key = ${pendingItem.s3Key} AND submissionNonce = nonce-1`,
+    );
+  });
+
   it('does not condition a metadata-only edit on status/s3Key (no CONFLICT risk from a concurrent replace)', async () => {
     await callAs().updateContentItemVideo({
       ...input,
