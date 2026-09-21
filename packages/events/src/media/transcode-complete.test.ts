@@ -51,7 +51,11 @@ const UPLOAD_BUCKET_NAME = 'lesson-media-upload-bucket';
 const JOB_ID = 'job-1';
 const SUBMISSION_NONCE = 'nonce-1';
 
-const buildEvent = (status: string, jobId: string = JOB_ID) => ({
+const buildEvent = (
+  status: string,
+  jobId: string = JOB_ID,
+  submissionNonce: string = SUBMISSION_NONCE,
+) => ({
   version: '0',
   id: 'event-1',
   source: 'aws.mediaconvert',
@@ -69,7 +73,7 @@ const buildEvent = (status: string, jobId: string = JOB_ID) => ({
       lessonId: LESSON_ID,
       contentItemId: CONTENT_ITEM_ID,
       rawObjectKey: RAW_OBJECT_KEY,
-      submissionNonce: SUBMISSION_NONCE,
+      submissionNonce,
     },
   },
 });
@@ -144,18 +148,18 @@ describe('transcodeComplete', () => {
     expect(s3Send).not.toHaveBeenCalled();
   });
 
-  it('includes a condition matching the record to the job that just completed', async () => {
+  it('includes a condition matching the record to the submission that just completed', async () => {
     await transcodeComplete(buildEvent('COMPLETE') as any);
 
     const [whereCallback] = contentItemPatchWhere.mock.calls[0]!;
     const eq = vi.fn((attr: string, value: string) => `${attr} = ${value}`);
     const result = whereCallback(
-      { mediaConvertJobId: 'mediaConvertJobId' },
+      { submissionNonce: 'submissionNonce' },
       { eq },
     );
 
-    expect(eq).toHaveBeenCalledWith('mediaConvertJobId', JOB_ID);
-    expect(result).toBe(`mediaConvertJobId = ${JOB_ID}`);
+    expect(eq).toHaveBeenCalledWith('submissionNonce', SUBMISSION_NONCE);
+    expect(result).toBe(`submissionNonce = ${SUBMISSION_NONCE}`);
   });
 
   it('does not mark the content item ready when a later replacement has superseded this job', async () => {
@@ -165,7 +169,12 @@ describe('transcodeComplete', () => {
         .mockRejectedValue(new Error('The conditional request failed')),
     });
 
-    await transcodeComplete(buildEvent('COMPLETE', 'superseded-job') as any);
+    // A replacement stamps a fresh submissionNonce onto the record before
+    // this (superseded) job's own completion event could ever arrive --
+    // this is what the condition actually keys off now, not jobId.
+    await transcodeComplete(
+      buildEvent('COMPLETE', JOB_ID, 'superseded-nonce') as any,
+    );
 
     expect(s3Send).not.toHaveBeenCalled();
   });
@@ -185,18 +194,18 @@ describe('transcodeComplete', () => {
     expect(s3Send).not.toHaveBeenCalled();
   });
 
-  it('includes a condition matching the record to the job that just errored', async () => {
+  it('includes a condition matching the record to the submission that just errored', async () => {
     await transcodeComplete(buildEvent('ERROR') as any);
 
     const [whereCallback] = contentItemPatchWhere.mock.calls[0]!;
     const eq = vi.fn((attr: string, value: string) => `${attr} = ${value}`);
     const result = whereCallback(
-      { mediaConvertJobId: 'mediaConvertJobId' },
+      { submissionNonce: 'submissionNonce' },
       { eq },
     );
 
-    expect(eq).toHaveBeenCalledWith('mediaConvertJobId', JOB_ID);
-    expect(result).toBe(`mediaConvertJobId = ${JOB_ID}`);
+    expect(eq).toHaveBeenCalledWith('submissionNonce', SUBMISSION_NONCE);
+    expect(result).toBe(`submissionNonce = ${SUBMISSION_NONCE}`);
   });
 
   it('swallows a patch failure so a deleted content item does not crash the handler', async () => {

@@ -79,16 +79,31 @@ export const transcodeComplete = async (
       await coreTable.entities.contentItem
         .patch({ courseId, moduleId, lessonId, contentItemId })
         .set({ status: 'ready', s3Key: manifestKey })
-        .where((attr, op) => op.eq(attr.mediaConvertJobId, jobId))
+        // Conditioned on submissionNonce, not mediaConvertJobId: the record
+        // gets its nonce durably before submitTranscodeJob is ever called
+        // (createContentItemVideo/updateContentItemVideo persist it first),
+        // but only gets mediaConvertJobId *after* that call returns -- a
+        // job that reaches a terminal state in that gap would otherwise
+        // find mediaConvertJobId still unset and have this event dropped,
+        // leaving the item pending forever. Nonce also closes a second gap
+        // a jobId check can't: a replace's first patch updates
+        // s3Key/status/submissionNonce together but leaves the *previous*
+        // job's mediaConvertJobId in place until its own submission
+        // completes, so a stale completion event from that superseded job
+        // would otherwise still match on jobId and overwrite the new
+        // replacement's in-progress record with the old job's result.
+        .where((attr, op) => op.eq(attr.submissionNonce, submissionNonce))
         .go();
     } catch (error) {
       // Either the instructor deleted the content item while transcoding
       // was in flight (nothing left to patch), or a later replacement
-      // upload has already superseded this job (mediaConvertJobId no
-      // longer matches) -- in both cases the DynamoDB record stays the
-      // source of truth and this event must not overwrite it.
+      // upload has already superseded this job (submissionNonce no longer
+      // matches) -- in both cases the DynamoDB record stays the source of
+      // truth and this event must not overwrite it.
       logger.error('Failed to mark content item ready after transcode', {
         error,
+        jobId,
+        submissionNonce,
         courseId,
         moduleId,
         lessonId,
@@ -116,12 +131,14 @@ export const transcodeComplete = async (
       await coreTable.entities.contentItem
         .patch({ courseId, moduleId, lessonId, contentItemId })
         .set({ status: 'failed' })
-        .where((attr, op) => op.eq(attr.mediaConvertJobId, jobId))
+        .where((attr, op) => op.eq(attr.submissionNonce, submissionNonce))
         .go();
     } catch (error) {
       // Same two possible causes as the COMPLETE branch above.
       logger.error('Failed to mark content item failed after transcode', {
         error,
+        jobId,
+        submissionNonce,
         courseId,
         moduleId,
         lessonId,
