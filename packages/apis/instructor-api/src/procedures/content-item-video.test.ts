@@ -827,6 +827,112 @@ describe('updateContentItemVideo', () => {
       expect(bestEffortDeleteContentItemVideos).not.toHaveBeenCalled();
     });
 
+    // Matching the upload only proves the transcode itself doesn't need
+    // touching -- it says nothing about title/description/etc also being
+    // unchanged (e.g. a retry after a lost response, with an edit made in
+    // between). Those must still land.
+    it('still applies supplied title/description edits, without touching the transcode', async () => {
+      contentItemGet.mockReturnValue({
+        go: vi.fn().mockResolvedValue({ data: inFlightItem }),
+      });
+      const updatedItem = {
+        ...inFlightItem,
+        title: 'New title',
+        description: 'New description',
+      };
+      contentItemPatchWhere.mockReturnValue({
+        go: vi.fn().mockResolvedValue({ data: updatedItem }),
+      });
+
+      const result = await callAs().updateContentItemVideo({
+        ...input,
+        objectKey: pendingObjectKey,
+        title: 'New title',
+        description: 'New description',
+      });
+
+      expect(contentItemPatch).toHaveBeenCalledWith({
+        courseId: COURSE_ID,
+        moduleId: MODULE_ID,
+        lessonId: LESSON_ID,
+        contentItemId: CONTENT_ITEM_ID,
+      });
+      expect(contentItemPatchSet).toHaveBeenCalledWith({
+        title: 'New title',
+        description: 'New description',
+      });
+      expect(result.title).toBe('New title');
+      expect(result.description).toBe('New description');
+      expect(bestEffortCancelTranscodeJobs).not.toHaveBeenCalled();
+      expect(submitTranscodeJob).not.toHaveBeenCalled();
+      expect(bestEffortDeleteContentItemVideos).not.toHaveBeenCalled();
+    });
+
+    it('conditions the metadata-only patch on this record still owning the submission', async () => {
+      contentItemGet.mockReturnValue({
+        go: vi.fn().mockResolvedValue({ data: inFlightItem }),
+      });
+
+      await callAs().updateContentItemVideo({
+        ...input,
+        objectKey: pendingObjectKey,
+        title: 'New title',
+      });
+
+      const [whereCallback] = contentItemPatchWhere.mock.calls[0]!;
+      const eq = vi.fn((attr: string, value: string) => `${attr} = ${value}`);
+      const result = whereCallback(
+        { submissionNonce: 'submissionNonce' },
+        { eq },
+      );
+
+      expect(eq).toHaveBeenCalledWith(
+        'submissionNonce',
+        inFlightItem.submissionNonce,
+      );
+      expect(result).toBe(`submissionNonce = ${inFlightItem.submissionNonce}`);
+    });
+
+    it('drops the metadata edit, falling back to the current record, when it loses ownership of the submission', async () => {
+      contentItemGet.mockReturnValue({
+        go: vi.fn().mockResolvedValue({ data: inFlightItem }),
+      });
+      contentItemPatchWhere.mockReturnValue({
+        go: vi.fn().mockRejectedValue(conditionalCheckFailedError()),
+      });
+
+      const result = await callAs().updateContentItemVideo({
+        ...input,
+        objectKey: pendingObjectKey,
+        title: 'New title',
+      });
+
+      const {
+        mediaConvertJobId: _job,
+        rawObjectETag: _etag,
+        submissionNonce: _nonce,
+        ...expected
+      } = inFlightItem;
+      expect(result).toEqual(expected);
+    });
+
+    it('rethrows a transient failure applying the metadata edit instead of swallowing it', async () => {
+      contentItemGet.mockReturnValue({
+        go: vi.fn().mockResolvedValue({ data: inFlightItem }),
+      });
+      contentItemPatchWhere.mockReturnValue({
+        go: vi.fn().mockRejectedValue(new Error('DynamoDB is unavailable')),
+      });
+
+      await expect(
+        callAs().updateContentItemVideo({
+          ...input,
+          objectKey: pendingObjectKey,
+          title: 'New title',
+        }),
+      ).rejects.toThrow('DynamoDB is unavailable');
+    });
+
     it('does not short-circuit when the ETag differs (a genuine new replacement)', async () => {
       contentItemGet.mockReturnValue({
         go: vi.fn().mockResolvedValue({

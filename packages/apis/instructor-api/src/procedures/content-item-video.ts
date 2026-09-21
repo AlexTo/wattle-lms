@@ -404,15 +404,51 @@ export const updateContentItemVideo = courseProcedure
       // from contentItemId + extension, so it stays the same across a
       // genuine replacement too), but objectKey *and* the raw upload's
       // content both matching what's already mid-transcode means nothing
-      // has actually changed since that submission -- report its current
-      // state back unchanged instead of touching it.
+      // about the *video* has changed since that submission, so the
+      // transcode itself is left alone. That says nothing about the rest
+      // of the mutation, though -- title/description/etc can still differ
+      // from what's on the record (e.g. the caller edited them after the
+      // first, still-in-flight attempt), and those still need to land.
       if (
         existing.status === 'pending' &&
         existing.s3Key === objectKey &&
         existing.mediaConvertJobId !== undefined &&
         existing.rawObjectETag === objectETag
       ) {
-        return asContentItemOutput<IUpdateContentItemVideoOutput>(existing);
+        const metadataUpdates = {
+          ...(title !== undefined && { title }),
+          ...(description !== undefined && { description }),
+          ...(mimeType !== undefined && { mimeType }),
+          ...(durationSeconds !== undefined && { durationSeconds }),
+        };
+        if (Object.keys(metadataUpdates).length === 0) {
+          return asContentItemOutput<IUpdateContentItemVideoOutput>(existing);
+        }
+        try {
+          const { data: updated } = await coreTable.entities.contentItem
+            .patch({ courseId, moduleId, lessonId, contentItemId })
+            .set(metadataUpdates)
+            // Same ownership check as every other write in this file --
+            // proves the record is still genuinely this exact submission's
+            // before applying an edit that has nothing to do with the
+            // transcode dedup above.
+            .where((attr, op) =>
+              op.eq(attr.submissionNonce, existing.submissionNonce!),
+            )
+            .go({ response: 'all_new' });
+          return asContentItemOutput<IUpdateContentItemVideoOutput>(updated);
+        } catch (error) {
+          if (!isConditionalCheckFailed(error)) {
+            throw error;
+          }
+          // Lost ownership: something else (a genuine replacement, or the
+          // transcode itself completing) has already superseded this
+          // record since it was read above. There's nothing stable left
+          // to apply this edit to -- silently dropping it here is no
+          // different from the caller's request having lost an ordinary
+          // race against a concurrent edit.
+          return asContentItemOutput<IUpdateContentItemVideoOutput>(existing);
+        }
       }
 
       // A crashed retry (submitTranscodeJob succeeded, but the process
