@@ -96,7 +96,13 @@ describe('submitTranscodeJob', () => {
     );
     const [command] = mediaConvertSend.mock.calls[0]!;
     expect(command.Settings.Inputs).toEqual([
-      { FileInput: `s3://${UPLOAD_BUCKET_NAME}/${OBJECT_KEY}` },
+      {
+        FileInput: `s3://${UPLOAD_BUCKET_NAME}/${OBJECT_KEY}`,
+        AudioSelectors: {
+          'Audio Selector 1': { DefaultSelection: 'DEFAULT' },
+        },
+        TimecodeSource: 'ZEROBASED',
+      },
     ]);
     expect(
       command.Settings.OutputGroups[0].OutputGroupSettings.HlsGroupSettings

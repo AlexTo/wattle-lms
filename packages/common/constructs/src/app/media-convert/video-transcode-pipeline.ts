@@ -37,7 +37,11 @@ export interface VideoTranscodePipelineProps {
 //
 // `Destination` is a placeholder -- each CreateJob call overrides it with
 // the specific content item's output prefix, merged on top of this
-// template's encode settings.
+// template's encode settings. A job template's SettingsJson has no `Inputs`
+// property at all -- MediaConvert's CreateJobTemplate API rejects one
+// outright ("isn't supported: FileInput") -- the input is only ever
+// specified per job, which submitTranscodeJob (mediaconvert-client.ts)
+// already does via CreateJob's own Settings.Inputs.
 const buildSettingsJson = () => ({
   OutputGroups: [
     {
@@ -60,16 +64,6 @@ const buildSettingsJson = () => ({
         buildRendition('480p', 854, 480, 1_100_000, 7),
         buildRendition('360p', 640, 360, 700_000, 7),
       ],
-    },
-  ],
-  Inputs: [
-    {
-      AudioSelectors: {
-        'Audio Selector 1': { DefaultSelection: 'DEFAULT' },
-      },
-      TimecodeSource: 'ZEROBASED',
-      // Placeholder -- overridden per job with the uploaded object's location.
-      FileInput: 's3://placeholder/placeholder',
     },
   ],
 });

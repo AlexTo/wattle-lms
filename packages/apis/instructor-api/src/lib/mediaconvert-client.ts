@@ -109,7 +109,20 @@ export const submitTranscodeJob = async ({
         rawObjectKey: objectKey,
       },
       Settings: {
-        Inputs: [{ FileInput: `s3://${uploadBucketName}/${objectKey}` }],
+        // AudioSelectors/TimecodeSource are per-input, not settable on the
+        // job template (MediaConvert's CreateJobTemplate API rejects an
+        // Inputs property outright) -- 'Audio Selector 1' is what every
+        // rendition's AudioDescriptions.AudioSourceName in the template
+        // refers to, so it must be defined here on the job's own input.
+        Inputs: [
+          {
+            FileInput: `s3://${uploadBucketName}/${objectKey}`,
+            AudioSelectors: {
+              'Audio Selector 1': { DefaultSelection: 'DEFAULT' },
+            },
+            TimecodeSource: 'ZEROBASED',
+          },
+        ],
         OutputGroups: [
           {
             OutputGroupSettings: {
