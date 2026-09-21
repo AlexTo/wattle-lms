@@ -19,6 +19,7 @@ const {
   lessonDelete,
   contentItemQueryPrimary,
   contentItemDelete,
+  contentItemDeleteWhere,
   transactionWrite,
   transactionGo,
   bestEffortDeleteContentItemVideos,
@@ -35,6 +36,7 @@ const {
   lessonDelete: vi.fn(),
   contentItemQueryPrimary: vi.fn(),
   contentItemDelete: vi.fn(),
+  contentItemDeleteWhere: vi.fn(),
   transactionWrite: vi.fn(),
   transactionGo: vi.fn(),
   bestEffortDeleteContentItemVideos: vi.fn(),
@@ -160,7 +162,11 @@ beforeEach(() => {
   contentItemQueryPrimary.mockReturnValue({
     go: vi.fn().mockResolvedValue({ data: [] }),
   });
+  contentItemDeleteWhere.mockImplementation(() => ({
+    commit: () => ({ item: null }),
+  }));
   contentItemDelete.mockImplementation((attrs) => ({
+    where: contentItemDeleteWhere,
     commit: () => ({ item: null, attrs }),
   }));
   bestEffortDeleteContentItemVideos.mockResolvedValue(undefined);
@@ -403,12 +409,50 @@ describe('deleteModule', () => {
     expect(result).toEqual(module);
   });
 
-  it('throws INTERNAL_SERVER_ERROR when the transaction is canceled', async () => {
-    transactionGo.mockResolvedValue({ canceled: true, data: [] });
+  it('throws INTERNAL_SERVER_ERROR when the transaction is canceled for a reason other than a stale content item', async () => {
+    transactionGo.mockResolvedValue({
+      canceled: true,
+      data: [{ code: 'ThrottlingError' }],
+    });
 
     await expect(
       callAs().deleteModule({ courseId: COURSE_ID, moduleId: MODULE_ID }),
     ).rejects.toMatchObject({ code: 'INTERNAL_SERVER_ERROR' });
+  });
+
+  // A content item that changes between the query above and this
+  // transaction -- most notably a transcode completing and publishing its
+  // HLS output -- must not be deleted using cleanup data that's already
+  // stale by the time the transaction runs.
+  it('throws CONFLICT, not INTERNAL_SERVER_ERROR, when a content item changed since it was queried', async () => {
+    contentItemQueryPrimary.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: [contentItem] }),
+    });
+    transactionGo.mockResolvedValue({
+      canceled: true,
+      data: [{ code: 'None' }, { code: 'ConditionalCheckFailed' }],
+    });
+
+    await expect(
+      callAs().deleteModule({ courseId: COURSE_ID, moduleId: MODULE_ID }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    expect(bestEffortDeleteContentItemVideos).not.toHaveBeenCalled();
+    expect(bestEffortCancelTranscodeJobs).not.toHaveBeenCalled();
+  });
+
+  it('conditions each content item delete on updatedAt still matching what was just queried', async () => {
+    contentItemQueryPrimary.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: [contentItem] }),
+    });
+
+    await callAs().deleteModule({ courseId: COURSE_ID, moduleId: MODULE_ID });
+
+    const [whereCallback] = contentItemDeleteWhere.mock.calls[0]!;
+    const eq = vi.fn((attr: string, value: string) => `${attr} = ${value}`);
+    const result = whereCallback({ updatedAt: 'updatedAt' }, { eq });
+
+    expect(eq).toHaveBeenCalledWith('updatedAt', contentItem.updatedAt);
+    expect(result).toBe(`updatedAt = ${contentItem.updatedAt}`);
   });
 
   // DynamoDB transactions cap at 100 items; a module with too many lessons

@@ -136,24 +136,43 @@ export const deleteModule = courseProcedure
       });
     }
 
-    const { canceled } = await coreTable.transaction
+    // Content item deletes are conditioned on updatedAt (bumped by every
+    // write, video or text -- see the contentItem entity's `watch: '*'`
+    // on that attribute) still matching what was just queried above --
+    // see the equivalent comment in lesson.ts's deleteLesson for why:
+    // a content item changing between the query and this transaction,
+    // most notably a transcode completing and publishing its HLS output,
+    // would otherwise still be deleted while cleanup below acted on a
+    // stale snapshot of it.
+    const { canceled, data: transactionResults } = await coreTable.transaction
       .write((entities) => [
         entities.module.delete({ courseId, moduleId }).commit(),
         ...lessons.map(({ lessonId }) =>
           entities.lesson.delete({ courseId, moduleId, lessonId }).commit(),
         ),
-        ...contentItems.map(({ lessonId, contentItemId }) =>
+        ...contentItems.map((item) =>
           entities.contentItem
-            .delete({ courseId, moduleId, lessonId, contentItemId })
+            .delete({
+              courseId,
+              moduleId,
+              lessonId: item.lessonId,
+              contentItemId: item.contentItemId,
+            })
+            .where((attr, op) => op.eq(attr.updatedAt, item.updatedAt))
             .commit(),
         ),
       ])
       .go();
 
     if (canceled) {
+      const staleContentItem = transactionResults?.some(
+        (result) => result?.code === 'ConditionalCheckFailed',
+      );
       throw new TRPCError({
-        code: 'INTERNAL_SERVER_ERROR',
-        message: 'Failed to delete module',
+        code: staleContentItem ? 'CONFLICT' : 'INTERNAL_SERVER_ERROR',
+        message: staleContentItem
+          ? 'A content item in this module changed while it was being deleted; retry the delete'
+          : 'Failed to delete module',
       });
     }
 

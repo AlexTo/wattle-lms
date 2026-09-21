@@ -145,21 +145,44 @@ export const deleteLesson = courseProcedure
       });
     }
 
-    const { canceled } = await coreTable.transaction
+    // Conditioned on updatedAt (bumped by every write, video or text --
+    // see the contentItem entity's `watch: '*'` on that attribute) still
+    // matching what was just queried above. Without this, a content item
+    // that changes between the query and this transaction -- most
+    // notably a transcode completing and publishing its HLS output --
+    // would still be deleted, but the cleanup below would act on the
+    // stale, already-outdated snapshot instead of what was actually
+    // removed (see the PR discussion for content-item-shared.ts's
+    // deleteContentItem, which had the same class of bug but could be
+    // fixed by reading DeleteItem's own response instead; a transaction
+    // returns no such thing, so this can only reject and ask the caller
+    // to retry).
+    const { canceled, data: transactionResults } = await coreTable.transaction
       .write((entities) => [
         entities.lesson.delete({ courseId, moduleId, lessonId }).commit(),
-        ...contentItems.map(({ contentItemId }) =>
+        ...contentItems.map((item) =>
           entities.contentItem
-            .delete({ courseId, moduleId, lessonId, contentItemId })
+            .delete({
+              courseId,
+              moduleId,
+              lessonId,
+              contentItemId: item.contentItemId,
+            })
+            .where((attr, op) => op.eq(attr.updatedAt, item.updatedAt))
             .commit(),
         ),
       ])
       .go();
 
     if (canceled) {
+      const staleContentItem = transactionResults?.some(
+        (result) => result?.code === 'ConditionalCheckFailed',
+      );
       throw new TRPCError({
-        code: 'INTERNAL_SERVER_ERROR',
-        message: 'Failed to delete lesson',
+        code: staleContentItem ? 'CONFLICT' : 'INTERNAL_SERVER_ERROR',
+        message: staleContentItem
+          ? 'A content item in this lesson changed while it was being deleted; retry the delete'
+          : 'Failed to delete lesson',
       });
     }
 
