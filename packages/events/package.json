@@ -13,6 +13,7 @@
     "@aws-sdk/client-cognito-identity-provider": "catalog:",
     "@aws-sdk/client-dynamodb": "catalog:",
     "@aws-sdk/client-s3": "catalog:",
+    "@aws-sdk/client-scheduler": "catalog:",
     "@middy/core": "catalog:",
     "electrodb": "catalog:",
     "tslib": "^2.3.0",

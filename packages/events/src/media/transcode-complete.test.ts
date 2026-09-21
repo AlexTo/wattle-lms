@@ -11,12 +11,14 @@ const {
   contentItemPatchWhere,
   s3Send,
   resolveLessonMediaUploadBucketName,
+  scheduleTranscodeCleanupOrThrow,
 } = vi.hoisted(() => ({
   contentItemPatch: vi.fn(),
   contentItemPatchSet: vi.fn(),
   contentItemPatchWhere: vi.fn(),
   s3Send: vi.fn(),
   resolveLessonMediaUploadBucketName: vi.fn(),
+  scheduleTranscodeCleanupOrThrow: vi.fn(),
 }));
 
 vi.mock('@wattle/core-table', () => ({
@@ -41,6 +43,24 @@ vi.mock('@aws-sdk/client-s3', () => ({
 vi.mock('../lib/runtime-config.js', () => ({
   resolveLessonMediaUploadBucketName,
 }));
+
+// scheduleTranscodeCleanupOrThrow's own idempotency/propagation behavior is
+// covered directly in lib/transcode-cleanup-scheduler.test.ts; here it's
+// just a mock so these tests can assert transcode-complete.ts calls it
+// correctly.
+vi.mock('../lib/transcode-cleanup-scheduler.js', () => ({
+  scheduleTranscodeCleanupOrThrow,
+}));
+
+// Shaped like ElectroDB's own wrapping of a rejected conditional write --
+// see content-item-video.test.ts (instructor-api) for the same helper;
+// can't share it across the package boundary.
+const conditionalCheckFailedError = (): Error =>
+  Object.assign(new Error('The conditional request failed'), {
+    cause: Object.assign(new Error('The conditional request failed'), {
+      name: 'ConditionalCheckFailedException',
+    }),
+  });
 
 const COURSE_ID = 'course-1';
 const MODULE_ID = 'module-1';
@@ -87,6 +107,7 @@ beforeEach(() => {
     go: vi.fn().mockResolvedValue({}),
   });
   s3Send.mockResolvedValue({});
+  scheduleTranscodeCleanupOrThrow.mockResolvedValue(undefined);
 });
 
 describe('transcodeComplete', () => {
@@ -138,13 +159,29 @@ describe('transcodeComplete', () => {
     );
   });
 
-  it('does not delete the raw upload when the DynamoDB patch fails', async () => {
+  it('does not delete the raw upload when the content item no longer owns this submission', async () => {
     contentItemPatchWhere.mockReturnValue({
-      go: vi.fn().mockRejectedValue(new Error('item does not exist')),
+      go: vi.fn().mockRejectedValue(conditionalCheckFailedError()),
     });
 
     await transcodeComplete(buildEvent('COMPLETE') as any);
 
+    expect(s3Send).not.toHaveBeenCalled();
+  });
+
+  // A transient DynamoDB failure doesn't mean the record isn't still this
+  // exact submission's own -- rethrowing lets EventBridge retry the whole
+  // invocation instead of silently dropping a real completion event.
+  it('rethrows a transient patch failure on COMPLETE instead of swallowing it', async () => {
+    contentItemPatchWhere.mockReturnValue({
+      go: vi.fn().mockRejectedValue(new Error('DynamoDB is unavailable')),
+    });
+
+    await expect(
+      transcodeComplete(buildEvent('COMPLETE') as any),
+    ).rejects.toThrow('DynamoDB is unavailable');
+
+    expect(scheduleTranscodeCleanupOrThrow).not.toHaveBeenCalled();
     expect(s3Send).not.toHaveBeenCalled();
   });
 
@@ -164,9 +201,7 @@ describe('transcodeComplete', () => {
 
   it('does not mark the content item ready when a later replacement has superseded this job', async () => {
     contentItemPatchWhere.mockReturnValue({
-      go: vi
-        .fn()
-        .mockRejectedValue(new Error('The conditional request failed')),
+      go: vi.fn().mockRejectedValue(conditionalCheckFailedError()),
     });
 
     // A replacement stamps a fresh submissionNonce onto the record before
@@ -177,6 +212,41 @@ describe('transcodeComplete', () => {
     );
 
     expect(s3Send).not.toHaveBeenCalled();
+  });
+
+  // The record no longer owning this submission doesn't mean the job's
+  // own S3 output isn't real -- a submission whose mediaConvertJobId was
+  // never stamped (see item 20) can't have had its output scheduled for
+  // cleanup any other way, so this event is the only remaining trigger.
+  it('schedules cleanup of this job own nonce-scoped output when the record no longer owns it, on COMPLETE', async () => {
+    contentItemPatchWhere.mockReturnValue({
+      go: vi.fn().mockRejectedValue(conditionalCheckFailedError()),
+    });
+
+    await transcodeComplete(
+      buildEvent('COMPLETE', JOB_ID, 'superseded-nonce') as any,
+    );
+
+    expect(scheduleTranscodeCleanupOrThrow).toHaveBeenCalledWith({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: LESSON_ID,
+      contentItemId: CONTENT_ITEM_ID,
+      submissionNonce: 'superseded-nonce',
+    });
+  });
+
+  it('propagates a scheduling failure on COMPLETE instead of swallowing it', async () => {
+    contentItemPatchWhere.mockReturnValue({
+      go: vi.fn().mockRejectedValue(conditionalCheckFailedError()),
+    });
+    scheduleTranscodeCleanupOrThrow.mockRejectedValue(
+      new Error('Scheduler is unavailable'),
+    );
+
+    await expect(
+      transcodeComplete(buildEvent('COMPLETE') as any),
+    ).rejects.toThrow('Scheduler is unavailable');
   });
 
   it('swallows a raw upload delete failure so it does not crash the handler', async () => {
@@ -208,14 +278,47 @@ describe('transcodeComplete', () => {
     expect(result).toBe(`submissionNonce = ${SUBMISSION_NONCE}`);
   });
 
-  it('swallows a patch failure so a deleted content item does not crash the handler', async () => {
+  it('schedules cleanup of this job own nonce-scoped output when the record no longer owns it, on ERROR', async () => {
     contentItemPatchWhere.mockReturnValue({
-      go: vi.fn().mockRejectedValue(new Error('item does not exist')),
+      go: vi.fn().mockRejectedValue(conditionalCheckFailedError()),
     });
 
     await expect(
       transcodeComplete(buildEvent('ERROR') as any),
     ).resolves.toBeUndefined();
+
+    expect(scheduleTranscodeCleanupOrThrow).toHaveBeenCalledWith({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: LESSON_ID,
+      contentItemId: CONTENT_ITEM_ID,
+      submissionNonce: SUBMISSION_NONCE,
+    });
+  });
+
+  it('rethrows a transient patch failure on ERROR instead of swallowing it', async () => {
+    contentItemPatchWhere.mockReturnValue({
+      go: vi.fn().mockRejectedValue(new Error('DynamoDB is unavailable')),
+    });
+
+    await expect(transcodeComplete(buildEvent('ERROR') as any)).rejects.toThrow(
+      'DynamoDB is unavailable',
+    );
+
+    expect(scheduleTranscodeCleanupOrThrow).not.toHaveBeenCalled();
+  });
+
+  it('propagates a scheduling failure on ERROR instead of swallowing it', async () => {
+    contentItemPatchWhere.mockReturnValue({
+      go: vi.fn().mockRejectedValue(conditionalCheckFailedError()),
+    });
+    scheduleTranscodeCleanupOrThrow.mockRejectedValue(
+      new Error('Scheduler is unavailable'),
+    );
+
+    await expect(transcodeComplete(buildEvent('ERROR') as any)).rejects.toThrow(
+      'Scheduler is unavailable',
+    );
   });
 
   it('ignores statuses other than COMPLETE or ERROR', async () => {

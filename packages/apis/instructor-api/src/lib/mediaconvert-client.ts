@@ -226,8 +226,13 @@ export type ICancelableVideoContentItem = {
 /**
  * Cancels the still-running transcode job (if any) for each content item
  * that's mid-transcode, best-effort. A `'ready'`/`'failed'` item has no job
- * left to cancel; a `'pending'` item with no `mediaConvertJobId` yet hasn't
- * gotten far enough into submission to have one.
+ * left to cancel. A `'pending'` item with no `mediaConvertJobId` can also
+ * have a real, running job -- a stamp-only submission failure leaves it in
+ * exactly that state (see content-item-video.ts) -- but `CancelJob` needs
+ * an id this attempt was never able to save, so it can't be canceled early
+ * here. Its eventual output isn't left orphaned, though: `transcode-
+ * complete.ts` schedules cleanup itself once that job's own completion
+ * event tells it this record no longer wants the result.
  */
 export const bestEffortCancelTranscodeJobs = async (
   logger: Logger | undefined,

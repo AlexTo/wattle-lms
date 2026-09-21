@@ -17,6 +17,7 @@ import { createCoreTableService } from '@wattle/core-table';
 import type { Context } from 'aws-lambda';
 import { z } from 'zod';
 import { resolveLessonMediaUploadBucketName } from '../lib/runtime-config.js';
+import { scheduleTranscodeCleanupOrThrow } from '../lib/transcode-cleanup-scheduler.js';
 
 export type { Context };
 
@@ -39,6 +40,19 @@ const getCoreTable = () => {
   }
   return coreTablePromise;
 };
+
+// True specifically for a DynamoDB conditional write that lost its race --
+// as opposed to a transient error where the record might still be this
+// exact submission's own. Only the former means this job's own nonce-
+// scoped output is genuinely orphaned (the record was deleted, or a
+// replacement superseded it); treating a transient error the same way
+// would silently drop a real completion event instead of letting
+// EventBridge retry it.
+const isConditionalCheckFailed = (error: unknown): boolean =>
+  error instanceof Error &&
+  'cause' in error &&
+  error.cause instanceof Error &&
+  error.cause.name === 'ConditionalCheckFailedException';
 
 const MediaConvertJobStateChangeDetailSchema = z.object({
   jobId: z.string(),
@@ -86,19 +100,42 @@ export const transcodeComplete = async (
         .where((attr, op) => op.eq(attr.submissionNonce, submissionNonce))
         .go();
     } catch (error) {
+      if (!isConditionalCheckFailed(error)) {
+        // Transient failure -- the record might still be this exact
+        // submission's own. Rethrow so EventBridge retries the whole
+        // invocation instead of silently dropping a real completion.
+        logger.error('Failed to mark content item ready after transcode', {
+          error,
+          jobId,
+          submissionNonce,
+          courseId,
+          moduleId,
+          lessonId,
+          contentItemId,
+        });
+        throw error;
+      }
       // Either the instructor deleted the content item while transcoding
-      // was in flight (nothing left to patch), or a later replacement
-      // upload has already superseded this job (submissionNonce no longer
-      // matches) -- in both cases the DynamoDB record stays the source of
-      // truth and this event must not overwrite it.
-      logger.error('Failed to mark content item ready after transcode', {
-        error,
-        jobId,
-        submissionNonce,
+      // was in flight, or a later replacement upload has already
+      // superseded this job -- in both cases the DynamoDB record stays
+      // the source of truth and this event must not overwrite it. This
+      // job's own nonce-scoped output is now orphaned, though: a
+      // submission whose mediaConvertJobId never got stamped (see item 20
+      // in the PR) can't be canceled/scheduled early by whatever
+      // delete/replace call retired it, since that needs a job ID it
+      // never has. This event -- AWS guarantees every output is written
+      // before it's sent -- is the only remaining place that can clean it
+      // up.
+      logger.info(
+        'Content item no longer owns this submission; scheduling its output for cleanup',
+        { jobId, submissionNonce, courseId, moduleId, lessonId, contentItemId },
+      );
+      await scheduleTranscodeCleanupOrThrow({
         courseId,
         moduleId,
         lessonId,
         contentItemId,
+        submissionNonce,
       });
       return;
     }
@@ -125,15 +162,30 @@ export const transcodeComplete = async (
         .where((attr, op) => op.eq(attr.submissionNonce, submissionNonce))
         .go();
     } catch (error) {
-      // Same two possible causes as the COMPLETE branch above.
-      logger.error('Failed to mark content item failed after transcode', {
-        error,
-        jobId,
-        submissionNonce,
+      if (!isConditionalCheckFailed(error)) {
+        logger.error('Failed to mark content item failed after transcode', {
+          error,
+          jobId,
+          submissionNonce,
+          courseId,
+          moduleId,
+          lessonId,
+          contentItemId,
+        });
+        throw error;
+      }
+      // Same two possible causes as the COMPLETE branch above -- clean up
+      // whatever this job wrote before erroring out, if anything.
+      logger.info(
+        'Content item no longer owns this submission; scheduling its output for cleanup',
+        { jobId, submissionNonce, courseId, moduleId, lessonId, contentItemId },
+      );
+      await scheduleTranscodeCleanupOrThrow({
         courseId,
         moduleId,
         lessonId,
         contentItemId,
+        submissionNonce,
       });
     }
   } else {

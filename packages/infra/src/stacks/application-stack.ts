@@ -35,6 +35,7 @@ import { TableEncryption } from 'aws-cdk-lib/aws-dynamodb';
 import { Rule } from 'aws-cdk-lib/aws-events';
 import { LambdaFunction } from 'aws-cdk-lib/aws-events-targets';
 import { PolicyStatement, Role, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
+import { Function as LambdaFunctionHandler } from 'aws-cdk-lib/aws-lambda';
 import { BucketEncryption } from 'aws-cdk-lib/aws-s3';
 import { ScheduleGroup } from 'aws-cdk-lib/aws-scheduler';
 import { Construct } from 'constructs';
@@ -103,10 +104,15 @@ export class ApplicationStack extends Stack {
       videoTranscodePipeline,
       instructorApiIntegrations,
     );
-    this.createTranscodeCompleteLambda(lessonMediaUploadBucket, coreTable);
-    this.createTranscodeCleanupLambda(
+    const { scheduleGroup, schedulerRole } = this.createTranscodeCleanupLambda(
       lessonMediaBucket,
       instructorApiIntegrations,
+    );
+    this.createTranscodeCompleteLambda(
+      lessonMediaUploadBucket,
+      coreTable,
+      scheduleGroup,
+      schedulerRole,
     );
 
     const studentPortal = this.createStudentPortal(studentPortalConfig);
@@ -475,9 +481,37 @@ export class ApplicationStack extends Stack {
     ];
   }
 
+  // Grants permission to create/update a one-time cleanup schedule in
+  // scheduleGroup, targeting schedulerRole -- shared by every handler that
+  // can end up retiring a submission's nonce-scoped S3 output, whether by
+  // canceling its job early (bestEffortCancelTranscodeJob) or, lacking a
+  // job id to cancel with, reacting to that job's own completion event
+  // once it finishes on its own (transcode-complete.ts).
+  private grantScheduleCleanupWrite(
+    handler: LambdaFunctionHandler,
+    scheduleGroup: ScheduleGroup,
+    schedulerRole: Role,
+  ) {
+    scheduleGroup.grantWriteSchedules(handler);
+    // Creating a schedule with a target role requires the creator to be
+    // allowed to pass that role -- scoped to just this one role, and only
+    // for EventBridge Scheduler to assume, not any service.
+    handler.addToRolePolicy(
+      new PolicyStatement({
+        actions: ['iam:PassRole'],
+        resources: [schedulerRole.roleArn],
+        conditions: {
+          StringEquals: { 'iam:PassedToService': 'scheduler.amazonaws.com' },
+        },
+      }),
+    );
+  }
+
   private createTranscodeCompleteLambda(
     lessonMediaUploadBucket: LessonMediaUploadBucket,
     coreTable: CoreTable,
+    scheduleGroup: ScheduleGroup,
+    schedulerRole: Role,
   ) {
     // MediaConvert job COMPLETE/ERROR via EventBridge -> flip contentItem
     // status and, on success, repoint s3Key and clean up the raw upload.
@@ -496,6 +530,17 @@ export class ApplicationStack extends Stack {
     runtimeConfig.grantReadAppConfig(transcodeComplete);
     coreTable.grantReadWriteData(transcodeComplete);
     lessonMediaUploadBucket.grantDelete(transcodeComplete);
+    // A submission whose mediaConvertJobId was never stamped can't be
+    // canceled/scheduled early by whatever delete/replace call retired it
+    // (see mediaconvert-client.ts's bestEffortCancelTranscodeJobs) --
+    // transcode-complete.ts schedules that cleanup itself once this job's
+    // own completion event arrives, so it needs the same grants every
+    // other scheduler of that cleanup already has.
+    this.grantScheduleCleanupWrite(
+      transcodeComplete,
+      scheduleGroup,
+      schedulerRole,
+    );
     new Rule(this, 'TranscodeCompleteRule', {
       eventPattern: {
         source: ['aws.mediaconvert'],
@@ -548,19 +593,7 @@ export class ApplicationStack extends Stack {
     for (const handler of this.getTranscodeCancelHandlers(
       instructorApiIntegrations,
     )) {
-      scheduleGroup.grantWriteSchedules(handler);
-      // Creating a schedule with a target role requires the creator to be
-      // allowed to pass that role -- scoped to just this one role, and
-      // only for EventBridge Scheduler to assume, not any service.
-      handler.addToRolePolicy(
-        new PolicyStatement({
-          actions: ['iam:PassRole'],
-          resources: [schedulerRole.roleArn],
-          conditions: {
-            StringEquals: { 'iam:PassedToService': 'scheduler.amazonaws.com' },
-          },
-        }),
-      );
+      this.grantScheduleCleanupWrite(handler, scheduleGroup, schedulerRole);
     }
 
     runtimeConfig.set('mediaConvert', 'TranscodeCleanup', {
@@ -569,7 +602,7 @@ export class ApplicationStack extends Stack {
       scheduleGroupName: scheduleGroup.scheduleGroupName,
     });
 
-    return transcodeCleanup;
+    return { transcodeCleanup, scheduleGroup, schedulerRole };
   }
 
   private createStudentPortal(

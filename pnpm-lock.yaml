@@ -726,6 +726,9 @@ importers:
       '@aws-sdk/client-s3':
         specifier: 'catalog:'
         version: 3.1126.0
+      '@aws-sdk/client-scheduler':
+        specifier: 'catalog:'
+        version: 3.1126.0
       '@middy/core':
         specifier: 'catalog:'
         version: 7.9.2

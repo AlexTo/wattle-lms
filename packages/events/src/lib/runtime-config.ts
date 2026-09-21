@@ -45,3 +45,18 @@ export const resolveLessonMediaUploadBucketName = async (): Promise<string> =>
 
 export const resolveLessonMediaBucketName = async (): Promise<string> =>
   (await resolveAppConfigValue<S3Config>('s3', 'LessonMediaBucket')).bucketName;
+
+type TranscodeCleanupConfig = {
+  lambdaArn: string;
+  schedulerRoleArn: string;
+  scheduleGroupName: string;
+};
+
+// Published once by application-stack.ts alongside the transcode-cleanup
+// Lambda itself -- same config instructor-api's own scheduler reads.
+export const resolveTranscodeCleanupConfig =
+  (): Promise<TranscodeCleanupConfig> =>
+    resolveAppConfigValue<TranscodeCleanupConfig>(
+      'mediaConvert',
+      'TranscodeCleanup',
+    );

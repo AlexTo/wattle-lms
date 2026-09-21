@@ -60,13 +60,17 @@ export const deleteContentItem = courseProcedure
       });
     }
 
-    if (existing.type === 'video') {
+    if (contentItem.type === 'video') {
       // A still-transcoding job has nothing left to report to once its
       // content item is gone -- cancel it so it doesn't keep running only
       // to leave an orphaned HLS output with no record pointing at it.
-      await bestEffortCancelTranscodeJobs(ctx.logger, [existing]);
-      if (existing.s3Key) {
-        await bestEffortDeleteContentItemVideos(ctx.logger, [existing]);
+      // Uses the record DeleteItem actually removed (response: 'all_old'),
+      // not the earlier `existing` read -- a concurrent replacement could
+      // have landed between the two, and cleaning up based on stale state
+      // would cancel/delete the wrong job and orphan the real one.
+      await bestEffortCancelTranscodeJobs(ctx.logger, [contentItem]);
+      if (contentItem.s3Key) {
+        await bestEffortDeleteContentItemVideos(ctx.logger, [contentItem]);
       }
     }
 

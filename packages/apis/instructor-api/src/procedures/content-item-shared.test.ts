@@ -179,6 +179,50 @@ describe('deleteContentItem', () => {
     );
   });
 
+  // A concurrent replacement can land between the initial read and the
+  // delete -- DeleteItem's own response: 'all_old' return is the only
+  // thing that reflects exactly what was actually removed.
+  it('cleans up the record DeleteItem actually removed, not the earlier read, when a replacement raced the delete', async () => {
+    const supersededVideo = {
+      ...videoContentItem,
+      s3Key: `courses/${COURSE_ID}/modules/${MODULE_ID}/lessons/${LESSON_ID}/content-items/${CONTENT_ITEM_ID}/old-nonce/master.m3u8`,
+      submissionNonce: 'old-nonce',
+    };
+    const replacementVideo = {
+      ...videoContentItem,
+      s3Key: `courses/${COURSE_ID}/modules/${MODULE_ID}/lessons/${LESSON_ID}/content-items/${CONTENT_ITEM_ID}/new-nonce/master.m3u8`,
+      submissionNonce: 'new-nonce',
+    };
+    contentItemGet.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: supersededVideo }),
+    });
+    contentItemDelete.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: replacementVideo }),
+    });
+
+    const result = await callAs().deleteContentItem(input);
+
+    expect(bestEffortCancelTranscodeJobs).toHaveBeenCalledWith(
+      expect.anything(),
+      [replacementVideo],
+    );
+    expect(bestEffortDeleteContentItemVideos).toHaveBeenCalledWith(
+      expect.anything(),
+      [replacementVideo],
+    );
+    expect(bestEffortCancelTranscodeJobs).not.toHaveBeenCalledWith(
+      expect.anything(),
+      [supersededVideo],
+    );
+    expect(bestEffortDeleteContentItemVideos).not.toHaveBeenCalledWith(
+      expect.anything(),
+      [supersededVideo],
+    );
+    // submissionNonce is internal-only and stripped by the output schema --
+    // s3Key is what distinguishes the replacement from the superseded video.
+    expect(result.s3Key).toEqual(replacementVideo.s3Key);
+  });
+
   it('deletes a text content item without attempting an S3 cleanup or job cancellation', async () => {
     contentItemGet.mockReturnValue({
       go: vi.fn().mockResolvedValue({ data: textContentItem }),
