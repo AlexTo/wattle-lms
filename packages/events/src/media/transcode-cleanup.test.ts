@@ -171,4 +171,32 @@ describe('transcodeCleanup', () => {
       'S3 is unavailable',
     );
   });
+
+  // DeleteObjects can resolve with a 200 and still fail individual keys --
+  // that doesn't reject the promise, so a per-key failure has to be
+  // checked explicitly or it's silently lost, logged as a success, and
+  // never retried.
+  it('throws when DeleteObjects reports per-key errors, instead of logging success', async () => {
+    s3Send
+      .mockResolvedValueOnce({
+        Contents: [
+          { Key: `${PREFIX}master.m3u8` },
+          { Key: `${PREFIX}seg1.ts` },
+        ],
+        IsTruncated: false,
+      })
+      .mockResolvedValueOnce({
+        Errors: [
+          {
+            Key: `${PREFIX}seg1.ts`,
+            Code: 'InternalError',
+            Message: 'We encountered an internal error',
+          },
+        ],
+      });
+
+    await expect(transcodeCleanup(buildEvent())).rejects.toThrow(
+      /seg1\.ts.*InternalError/,
+    );
+  });
 });

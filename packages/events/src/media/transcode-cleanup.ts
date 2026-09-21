@@ -92,12 +92,22 @@ export const transcodeCleanup = async (event: unknown): Promise<void> => {
 
   for (let i = 0; i < keys.length; i += S3_PAGE_SIZE) {
     const batch = keys.slice(i, i + S3_PAGE_SIZE);
-    await s3Client.send(
+    const { Errors } = await s3Client.send(
       new DeleteObjectsCommand({
         Bucket: bucket,
         Delete: { Objects: batch.map((Key) => ({ Key })) },
       }),
     );
+    // DeleteObjects can resolve with a 200 and still fail individual keys
+    // -- a per-key error here doesn't raise as a rejected promise, so it
+    // has to be checked explicitly. Throwing (rather than logging and
+    // continuing) is what makes EventBridge Scheduler retry the whole
+    // invocation, same as any other failure this handler doesn't swallow.
+    if (Errors && Errors.length > 0) {
+      throw new Error(
+        `DeleteObjects failed for ${Errors.length} of ${batch.length} keys: ${Errors.map((error) => `${error.Key} (${error.Code})`).join(', ')}`,
+      );
+    }
   }
 
   logger.info('Deleted orphaned transcode output', {

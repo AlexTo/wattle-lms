@@ -374,6 +374,42 @@ describe('bestEffortDeleteContentItemVideos', () => {
       ]),
     ).resolves.toBeUndefined();
   });
+
+  // DeleteObjects can resolve successfully and still fail individual keys
+  // -- that doesn't reject the promise, so a per-key failure has to be
+  // checked explicitly or it's silently lost and never logged.
+  it('does not throw but logs it when DeleteObjects reports per-key errors', async () => {
+    send.mockImplementation((command: any) => {
+      if (command.__command === 'DeleteObjects') {
+        return Promise.resolve({
+          Errors: [
+            {
+              Key: 'some-key.mp4',
+              Code: 'InternalError',
+              Message: 'We encountered an internal error',
+            },
+          ],
+        });
+      }
+      return Promise.resolve({});
+    });
+    const logger = { error: vi.fn() };
+
+    await expect(
+      bestEffortDeleteContentItemVideos(logger as any, [
+        pendingItem('content-item-2'),
+      ]),
+    ).resolves.toBeUndefined();
+    expect(logger.error).toHaveBeenCalledWith(
+      'Failed to delete some lesson media objects from S3',
+      expect.objectContaining({
+        bucket: UPLOAD_BUCKET_NAME,
+        errors: expect.arrayContaining([
+          expect.objectContaining({ Key: 'some-key.mp4' }),
+        ]),
+      }),
+    );
+  });
 });
 
 describe('getVideoUploadETag', () => {

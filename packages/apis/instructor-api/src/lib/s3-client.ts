@@ -126,12 +126,22 @@ const deleteObjectsInBatches = async (
   for (let i = 0; i < keys.length; i += S3_PAGE_SIZE) {
     const batch = keys.slice(i, i + S3_PAGE_SIZE);
     try {
-      await getS3Client().send(
+      const { Errors } = await getS3Client().send(
         new DeleteObjectsCommand({
           Bucket: bucket,
           Delete: { Objects: batch.map((Key) => ({ Key })) },
         }),
       );
+      // DeleteObjects can resolve successfully and still fail individual
+      // keys -- doesn't throw, so has to be checked explicitly or it's
+      // silently lost. Logged, not thrown: this function is best-effort
+      // by contract (see bestEffortDeleteContentItemVideos's docstring).
+      if (Errors && Errors.length > 0) {
+        logger?.error('Failed to delete some lesson media objects from S3', {
+          bucket,
+          errors: Errors,
+        });
+      }
     } catch (error) {
       logger?.error('Failed to delete lesson media objects from S3', {
         error,
