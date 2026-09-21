@@ -11,12 +11,14 @@ const {
   courseInstructorGet,
   contentItemGet,
   contentItemDelete,
-  bestEffortDeleteS3Objects,
+  bestEffortDeleteContentItemVideos,
+  bestEffortCancelTranscodeJobs,
 } = vi.hoisted(() => ({
   courseInstructorGet: vi.fn(),
   contentItemGet: vi.fn(),
   contentItemDelete: vi.fn(),
-  bestEffortDeleteS3Objects: vi.fn(),
+  bestEffortDeleteContentItemVideos: vi.fn(),
+  bestEffortCancelTranscodeJobs: vi.fn(),
 }));
 
 vi.mock('@wattle/core-table', () => ({
@@ -33,11 +35,18 @@ vi.mock('@wattle/core-table', () => ({
   })),
 }));
 
-// bestEffortDeleteS3Objects's own per-key error-swallowing behavior is
-// covered directly in lib/s3-client.test.ts; here it's just a mock so these
-// tests can assert content-item-shared.ts calls it with the right keys.
+// bestEffortDeleteContentItemVideos's own error-swallowing/bucket-selection
+// behavior is covered directly in lib/s3-client.test.ts; here it's just a
+// mock so these tests can assert content-item-shared.ts calls it correctly.
 vi.mock('../lib/s3-client.js', () => ({
-  bestEffortDeleteS3Objects,
+  bestEffortDeleteContentItemVideos,
+}));
+
+// bestEffortCancelTranscodeJobs's own status/job-id filtering is covered
+// directly in lib/mediaconvert-client.test.ts; here it's just a mock so
+// these tests can assert content-item-shared.ts calls it correctly.
+vi.mock('../lib/mediaconvert-client.js', () => ({
+  bestEffortCancelTranscodeJobs,
 }));
 
 const router = t.router({ deleteContentItem });
@@ -102,7 +111,8 @@ beforeEach(() => {
   contentItemDelete.mockReturnValue({
     go: vi.fn().mockResolvedValue({ data: videoContentItem }),
   });
-  bestEffortDeleteS3Objects.mockResolvedValue(undefined);
+  bestEffortDeleteContentItemVideos.mockResolvedValue(undefined);
+  bestEffortCancelTranscodeJobs.mockResolvedValue(undefined);
 });
 
 describe('deleteContentItem', () => {
@@ -135,13 +145,85 @@ describe('deleteContentItem', () => {
     const result = await callAs().deleteContentItem(input);
 
     expect(contentItemDelete).toHaveBeenCalledWith(input);
-    expect(bestEffortDeleteS3Objects).toHaveBeenCalledWith(expect.anything(), [
-      videoContentItem.s3Key,
-    ]);
+    expect(bestEffortDeleteContentItemVideos).toHaveBeenCalledWith(
+      expect.anything(),
+      [videoContentItem],
+    );
+    expect(bestEffortCancelTranscodeJobs).toHaveBeenCalledWith(
+      expect.anything(),
+      [videoContentItem],
+    );
     expect(result).toEqual(videoContentItem);
   });
 
-  it('deletes a text content item without attempting an S3 cleanup', async () => {
+  // A still-transcoding video's job has nothing left to report to once its
+  // content item is gone -- see the mediaConvertJobId design in #123.
+  it('cancels an in-flight transcode job when deleting a still-pending video', async () => {
+    const pendingVideoContentItem = {
+      ...videoContentItem,
+      status: 'pending' as const,
+      mediaConvertJobId: 'job-1',
+    };
+    contentItemGet.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: pendingVideoContentItem }),
+    });
+    contentItemDelete.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: pendingVideoContentItem }),
+    });
+
+    await callAs().deleteContentItem(input);
+
+    expect(bestEffortCancelTranscodeJobs).toHaveBeenCalledWith(
+      expect.anything(),
+      [pendingVideoContentItem],
+    );
+  });
+
+  // A concurrent replacement can land between the initial read and the
+  // delete -- DeleteItem's own response: 'all_old' return is the only
+  // thing that reflects exactly what was actually removed.
+  it('cleans up the record DeleteItem actually removed, not the earlier read, when a replacement raced the delete', async () => {
+    const supersededVideo = {
+      ...videoContentItem,
+      s3Key: `courses/${COURSE_ID}/modules/${MODULE_ID}/lessons/${LESSON_ID}/content-items/${CONTENT_ITEM_ID}/old-nonce/master.m3u8`,
+      submissionNonce: 'old-nonce',
+    };
+    const replacementVideo = {
+      ...videoContentItem,
+      s3Key: `courses/${COURSE_ID}/modules/${MODULE_ID}/lessons/${LESSON_ID}/content-items/${CONTENT_ITEM_ID}/new-nonce/master.m3u8`,
+      submissionNonce: 'new-nonce',
+    };
+    contentItemGet.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: supersededVideo }),
+    });
+    contentItemDelete.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: replacementVideo }),
+    });
+
+    const result = await callAs().deleteContentItem(input);
+
+    expect(bestEffortCancelTranscodeJobs).toHaveBeenCalledWith(
+      expect.anything(),
+      [replacementVideo],
+    );
+    expect(bestEffortDeleteContentItemVideos).toHaveBeenCalledWith(
+      expect.anything(),
+      [replacementVideo],
+    );
+    expect(bestEffortCancelTranscodeJobs).not.toHaveBeenCalledWith(
+      expect.anything(),
+      [supersededVideo],
+    );
+    expect(bestEffortDeleteContentItemVideos).not.toHaveBeenCalledWith(
+      expect.anything(),
+      [supersededVideo],
+    );
+    // submissionNonce is internal-only and stripped by the output schema --
+    // s3Key is what distinguishes the replacement from the superseded video.
+    expect(result.s3Key).toEqual(replacementVideo.s3Key);
+  });
+
+  it('deletes a text content item without attempting an S3 cleanup or job cancellation', async () => {
     contentItemGet.mockReturnValue({
       go: vi.fn().mockResolvedValue({ data: textContentItem }),
     });
@@ -151,7 +233,8 @@ describe('deleteContentItem', () => {
 
     const result = await callAs().deleteContentItem(input);
 
-    expect(bestEffortDeleteS3Objects).not.toHaveBeenCalled();
+    expect(bestEffortDeleteContentItemVideos).not.toHaveBeenCalled();
+    expect(bestEffortCancelTranscodeJobs).not.toHaveBeenCalled();
     expect(result).toEqual(textContentItem);
   });
 });

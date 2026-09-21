@@ -112,7 +112,9 @@ export type AdminPortalComponentConfig = {
 };
 
 /**
- * Per-stage settings for the lesson media S3 bucket construct.
+ * Per-stage settings for the lesson media S3 buckets: the CloudFront-served
+ * bucket (transcoded output) and the raw-upload bucket. Both share all of
+ * these flags, including `retainOnDelete`.
  */
 export type LessonMediaComponentConfig = {
   /** Protect the CloudFront distribution in front of the bucket with AWS WAF */
@@ -121,6 +123,17 @@ export type LessonMediaComponentConfig = {
   enableKmsEncryption?: boolean;
   /** Enable automatic key rotation on the bucket's KMS key. Only used when `enableKmsEncryption` is true */
   enableKeyRotation?: boolean;
+  /**
+   * Retain both lesson media buckets when the stack is deleted, instead of
+   * destroying them (and auto-deleting their contents) along with the
+   * stack. Mainly meaningful for the CloudFront-served bucket, which holds
+   * the actual served content; the raw-upload bucket's own lifecycle rule
+   * already clears its contents within days regardless of this setting, so
+   * retaining it protects little in practice.
+   *
+   * @default false
+   */
+  retainOnDelete?: boolean;
 };
 
 /**

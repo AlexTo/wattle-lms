@@ -67,6 +67,34 @@ export const createContentItemEntity = async () =>
         durationSeconds: {
           type: 'number',
         },
+        // Set right after submitTranscodeJob's CreateJobCommand returns, so
+        // transcode-complete.ts can reject a stale completion event from a
+        // job that's since been superseded by a replacement upload (see
+        // issue #123) -- never exposed in any API output schema.
+        mediaConvertJobId: {
+          type: 'string',
+        },
+        // The raw upload's S3 ETag at submission time, set alongside
+        // mediaConvertJobId. Lets updateContentItemVideo tell a genuine
+        // replacement apart from a caller retrying the exact same mutation
+        // (e.g. after a client-side timeout) while a job is still pending
+        // -- objectKey alone can't do that, since it's deterministic from
+        // contentItemId + extension.
+        rawObjectETag: {
+          type: 'string',
+        },
+        // A random value minted for a genuinely new video submission
+        // (create, or a replace that isn't resuming one already in
+        // flight), and reused by a retry that finds this exact target
+        // still pending with no job id recorded yet (the record's own
+        // status/s3Key already prove it's the same interrupted attempt).
+        // Feeds submitTranscodeJob's ClientRequestToken instead of the
+        // raw upload's content -- unlike content, it can never coincide
+        // with an unrelated past submission. Never exposed in any API
+        // output schema.
+        submissionNonce: {
+          type: 'string',
+        },
         // Tiptap's JSON document, stored as a string. Only present for
         // type: 'text'.
         body: {

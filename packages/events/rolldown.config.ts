@@ -16,4 +16,26 @@ export default defineConfig([
     platform: 'node',
     external: [/@aws-sdk\/.*/],
   },
+  {
+    tsconfig: 'tsconfig.lib.json',
+    input: 'src/media/transcode-complete.ts',
+    output: {
+      file: '../../dist/packages/events/bundle/lambda/transcode-complete/index.js',
+      format: 'cjs',
+      codeSplitting: false,
+    },
+    platform: 'node',
+    external: [/@aws-sdk\/.*/],
+  },
+  {
+    tsconfig: 'tsconfig.lib.json',
+    input: 'src/media/transcode-cleanup.ts',
+    output: {
+      file: '../../dist/packages/events/bundle/lambda/transcode-cleanup/index.js',
+      format: 'cjs',
+      codeSplitting: false,
+    },
+    platform: 'node',
+    external: [/@aws-sdk\/.*/],
+  },
 ]);

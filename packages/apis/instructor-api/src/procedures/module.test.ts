@@ -19,9 +19,11 @@ const {
   lessonDelete,
   contentItemQueryPrimary,
   contentItemDelete,
+  contentItemDeleteWhere,
   transactionWrite,
   transactionGo,
-  bestEffortDeleteS3Objects,
+  bestEffortDeleteContentItemVideos,
+  bestEffortCancelTranscodeJobs,
 } = vi.hoisted(() => ({
   courseInstructorGet: vi.fn(),
   moduleQueryPrimary: vi.fn(),
@@ -34,9 +36,11 @@ const {
   lessonDelete: vi.fn(),
   contentItemQueryPrimary: vi.fn(),
   contentItemDelete: vi.fn(),
+  contentItemDeleteWhere: vi.fn(),
   transactionWrite: vi.fn(),
   transactionGo: vi.fn(),
-  bestEffortDeleteS3Objects: vi.fn(),
+  bestEffortDeleteContentItemVideos: vi.fn(),
+  bestEffortCancelTranscodeJobs: vi.fn(),
 }));
 
 vi.mock('@wattle/core-table', () => ({
@@ -73,7 +77,14 @@ vi.mock('@wattle/core-table', () => ({
   })),
 }));
 
-vi.mock('../lib/s3-client.js', () => ({ bestEffortDeleteS3Objects }));
+vi.mock('../lib/s3-client.js', () => ({ bestEffortDeleteContentItemVideos }));
+
+// bestEffortCancelTranscodeJobs's own status/job-id filtering is covered
+// directly in lib/mediaconvert-client.test.ts; here it's just a mock so
+// these tests can assert module.ts calls it correctly.
+vi.mock('../lib/mediaconvert-client.js', () => ({
+  bestEffortCancelTranscodeJobs,
+}));
 
 const router = t.router({ createModule, updateModule, deleteModule });
 const caller = t.createCallerFactory(router);
@@ -151,10 +162,15 @@ beforeEach(() => {
   contentItemQueryPrimary.mockReturnValue({
     go: vi.fn().mockResolvedValue({ data: [] }),
   });
+  contentItemDeleteWhere.mockImplementation(() => ({
+    commit: () => ({ item: null }),
+  }));
   contentItemDelete.mockImplementation((attrs) => ({
+    where: contentItemDeleteWhere,
     commit: () => ({ item: null, attrs }),
   }));
-  bestEffortDeleteS3Objects.mockResolvedValue(undefined);
+  bestEffortDeleteContentItemVideos.mockResolvedValue(undefined);
+  bestEffortCancelTranscodeJobs.mockResolvedValue(undefined);
   transactionWrite.mockImplementation((fn) => {
     fn({
       module: { delete: moduleDelete },
@@ -393,12 +409,50 @@ describe('deleteModule', () => {
     expect(result).toEqual(module);
   });
 
-  it('throws INTERNAL_SERVER_ERROR when the transaction is canceled', async () => {
-    transactionGo.mockResolvedValue({ canceled: true, data: [] });
+  it('throws INTERNAL_SERVER_ERROR when the transaction is canceled for a reason other than a stale content item', async () => {
+    transactionGo.mockResolvedValue({
+      canceled: true,
+      data: [{ code: 'ThrottlingError' }],
+    });
 
     await expect(
       callAs().deleteModule({ courseId: COURSE_ID, moduleId: MODULE_ID }),
     ).rejects.toMatchObject({ code: 'INTERNAL_SERVER_ERROR' });
+  });
+
+  // A content item that changes between the query above and this
+  // transaction -- most notably a transcode completing and publishing its
+  // HLS output -- must not be deleted using cleanup data that's already
+  // stale by the time the transaction runs.
+  it('throws CONFLICT, not INTERNAL_SERVER_ERROR, when a content item changed since it was queried', async () => {
+    contentItemQueryPrimary.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: [contentItem] }),
+    });
+    transactionGo.mockResolvedValue({
+      canceled: true,
+      data: [{ code: 'None' }, { code: 'ConditionalCheckFailed' }],
+    });
+
+    await expect(
+      callAs().deleteModule({ courseId: COURSE_ID, moduleId: MODULE_ID }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    expect(bestEffortDeleteContentItemVideos).not.toHaveBeenCalled();
+    expect(bestEffortCancelTranscodeJobs).not.toHaveBeenCalled();
+  });
+
+  it('conditions each content item delete on updatedAt still matching what was just queried', async () => {
+    contentItemQueryPrimary.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: [contentItem] }),
+    });
+
+    await callAs().deleteModule({ courseId: COURSE_ID, moduleId: MODULE_ID });
+
+    const [whereCallback] = contentItemDeleteWhere.mock.calls[0]!;
+    const eq = vi.fn((attr: string, value: string) => `${attr} = ${value}`);
+    const result = whereCallback({ updatedAt: 'updatedAt' }, { eq });
+
+    expect(eq).toHaveBeenCalledWith('updatedAt', contentItem.updatedAt);
+    expect(result).toBe(`updatedAt = ${contentItem.updatedAt}`);
   });
 
   // DynamoDB transactions cap at 100 items; a module with too many lessons
@@ -507,19 +561,48 @@ describe('deleteModule', () => {
       lessonId: contentItem2.lessonId,
       contentItemId: contentItem2.contentItemId,
     });
-    expect(bestEffortDeleteS3Objects).toHaveBeenCalledWith(expect.anything(), [
-      contentItem.s3Key,
-      contentItem2.s3Key,
-    ]);
+    expect(bestEffortDeleteContentItemVideos).toHaveBeenCalledWith(
+      expect.anything(),
+      [contentItem, contentItem2],
+    );
+    expect(bestEffortCancelTranscodeJobs).toHaveBeenCalledWith(
+      expect.anything(),
+      [contentItem, contentItem2],
+    );
   });
 
   it('does not attempt to delete any content items when the module has none', async () => {
     await callAs().deleteModule({ courseId: COURSE_ID, moduleId: MODULE_ID });
 
     expect(contentItemDelete).not.toHaveBeenCalled();
-    expect(bestEffortDeleteS3Objects).toHaveBeenCalledWith(
+    expect(bestEffortDeleteContentItemVideos).toHaveBeenCalledWith(
       expect.anything(),
       [],
+    );
+    expect(bestEffortCancelTranscodeJobs).toHaveBeenCalledWith(
+      expect.anything(),
+      [],
+    );
+  });
+
+  // A still-transcoding video's job has nothing left to report to once its
+  // module (and content item) is gone -- see the mediaConvertJobId design
+  // in #123.
+  it('cancels in-flight transcode jobs for still-pending content items in the cascade', async () => {
+    const pendingContentItem = {
+      ...contentItem,
+      status: 'pending' as const,
+      mediaConvertJobId: 'job-1',
+    };
+    contentItemQueryPrimary.mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: [pendingContentItem] }),
+    });
+
+    await callAs().deleteModule({ courseId: COURSE_ID, moduleId: MODULE_ID });
+
+    expect(bestEffortCancelTranscodeJobs).toHaveBeenCalledWith(
+      expect.anything(),
+      [pendingContentItem],
     );
   });
 });
