@@ -29,6 +29,7 @@ const {
   bestEffortDeleteContentItemVideos,
   getSignedCloudFrontUrl,
   submitTranscodeJob,
+  bestEffortCancelTranscodeJob,
   bestEffortCancelTranscodeJobs,
   getVideoUploadETag,
 } = vi.hoisted(() => ({
@@ -48,6 +49,7 @@ const {
   bestEffortDeleteContentItemVideos: vi.fn(),
   getSignedCloudFrontUrl: vi.fn(),
   submitTranscodeJob: vi.fn(),
+  bestEffortCancelTranscodeJob: vi.fn(),
   bestEffortCancelTranscodeJobs: vi.fn(),
   getVideoUploadETag: vi.fn(),
 }));
@@ -113,6 +115,7 @@ vi.mock('../lib/cloudfront-client.js', () => ({
 // these tests can assert create/updateContentItemVideo call it correctly.
 vi.mock('../lib/mediaconvert-client.js', () => ({
   submitTranscodeJob,
+  bestEffortCancelTranscodeJob,
   bestEffortCancelTranscodeJobs,
 }));
 
@@ -131,6 +134,16 @@ const LESSON_ID = 'lesson-1';
 const CONTENT_ITEM_ID = 'content-item-1';
 const BUCKET_NAME = 'lesson-media-bucket';
 const OBJECT_ETAG = '"etag-1"';
+
+// Matches the shape isConditionalCheckFailed checks for -- an ElectroError
+// wrapping the underlying AWS SDK exception, the same shape observed from
+// a real DynamoDB conditional write rejection.
+const conditionalCheckFailedError = (): Error =>
+  Object.assign(new Error('The conditional request failed'), {
+    cause: Object.assign(new Error('The conditional request failed'), {
+      name: 'ConditionalCheckFailedException',
+    }),
+  });
 
 const buildEvent = (groups: string[]): APIGatewayProxyEvent =>
   ({
@@ -223,6 +236,9 @@ beforeEach(() => {
   });
   contentItemDelete.mockReturnValue({
     go: vi.fn().mockResolvedValue({ data: contentItem }),
+    where: () => ({
+      go: vi.fn().mockResolvedValue({ data: contentItem }),
+    }),
   });
   s3Send.mockResolvedValue({});
   getSignedUrl.mockResolvedValue('https://example.com/signed-url');
@@ -232,6 +248,7 @@ beforeEach(() => {
     'https://example.cloudfront.net/signed-url',
   );
   submitTranscodeJob.mockResolvedValue('job-1');
+  bestEffortCancelTranscodeJob.mockResolvedValue(undefined);
   bestEffortCancelTranscodeJobs.mockResolvedValue(undefined);
   getVideoUploadETag.mockResolvedValue(OBJECT_ETAG);
 });
@@ -442,9 +459,11 @@ describe('createContentItemVideo', () => {
       return 'job-1';
     });
     contentItemPatchSet.mockReturnValue({
-      go: vi.fn().mockImplementation(async () => {
-        callOrder.push('patchJobId');
-        return { data: contentItem };
+      where: () => ({
+        go: vi.fn().mockImplementation(async () => {
+          callOrder.push('patchJobId');
+          return { data: contentItem };
+        }),
       }),
     });
 
@@ -514,7 +533,9 @@ describe('createContentItemVideo', () => {
       new Error('MediaConvert is unavailable'),
     );
     contentItemDelete.mockReturnValue({
-      go: vi.fn().mockRejectedValue(new Error('DynamoDB is unavailable')),
+      where: () => ({
+        go: vi.fn().mockRejectedValue(new Error('DynamoDB is unavailable')),
+      }),
     });
 
     await expect(callAs().createContentItemVideo(validInput)).rejects.toThrow(
@@ -542,13 +563,71 @@ describe('createContentItemVideo', () => {
   // this exact job instead.
   it('does not delete the record when only the job-id stamp fails after a successful submission', async () => {
     contentItemPatchSet.mockReturnValueOnce({
-      go: vi.fn().mockRejectedValue(new Error('DynamoDB is unavailable')),
+      where: () => ({
+        go: vi.fn().mockRejectedValue(new Error('DynamoDB is unavailable')),
+      }),
     });
 
     const result = await callAs().createContentItemVideo(validInput);
 
     expect(result).toMatchObject({ contentItemId: CONTENT_ITEM_ID });
     expect(contentItemDelete).not.toHaveBeenCalled();
+    expect(bestEffortCancelTranscodeJob).not.toHaveBeenCalled();
+  });
+
+  // Invariant: a concurrent updateContentItemVideo call could have already
+  // read this just-created record and replaced it with its own submission
+  // before this stamp lands -- losing the conditional write here means
+  // this attempt's own job has nothing left pointing at it, since the
+  // record has moved on to a different nonce/job entirely. Nothing else
+  // will ever cancel or clean up that orphaned job, so this attempt has to.
+  it('cancels its own job when the stamp loses ownership to a newer replacement', async () => {
+    contentItemPatchSet.mockReturnValueOnce({
+      where: () => ({
+        go: vi.fn().mockRejectedValue(conditionalCheckFailedError()),
+      }),
+    });
+
+    const result = await callAs().createContentItemVideo(validInput);
+
+    expect(result).toMatchObject({ contentItemId: CONTENT_ITEM_ID });
+    expect(contentItemDelete).not.toHaveBeenCalled();
+    expect(bestEffortCancelTranscodeJob).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        jobId: 'job-1',
+        courseId: COURSE_ID,
+        moduleId: MODULE_ID,
+        lessonId: LESSON_ID,
+        contentItemId: CONTENT_ITEM_ID,
+      }),
+    );
+  });
+
+  it('conditions the rollback delete on this attempt owning the record', async () => {
+    submitTranscodeJob.mockRejectedValue(
+      new Error('MediaConvert is unavailable'),
+    );
+    const deleteWhere = vi.fn().mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: contentItem }),
+    });
+    contentItemDelete.mockReturnValue({ where: deleteWhere });
+
+    await expect(callAs().createContentItemVideo(validInput)).rejects.toThrow();
+
+    const [whereCallback] = deleteWhere.mock.calls[0]!;
+    const eq = vi.fn((attr: string, value: string) => `${attr} = ${value}`);
+    const [submitArgs] = submitTranscodeJob.mock.calls[0]!;
+    const result = whereCallback(
+      { submissionNonce: 'submissionNonce' },
+      { eq },
+    );
+
+    expect(eq).toHaveBeenCalledWith(
+      'submissionNonce',
+      submitArgs.submissionNonce,
+    );
+    expect(result).toBe(`submissionNonce = ${submitArgs.submissionNonce}`);
   });
 
   it('appends after the highest existing order', async () => {
@@ -937,9 +1016,11 @@ describe('updateContentItemVideo', () => {
         }),
       })
       .mockReturnValueOnce({
-        go: vi.fn().mockImplementation(async () => {
-          callOrder.push('patchJobId');
-          return { data: contentItem };
+        where: () => ({
+          go: vi.fn().mockImplementation(async () => {
+            callOrder.push('patchJobId');
+            return { data: contentItem };
+          }),
         }),
       });
     submitTranscodeJob.mockImplementation(async () => {
@@ -1012,7 +1093,9 @@ describe('updateContentItemVideo', () => {
         }),
       })
       .mockReturnValueOnce({
-        go: vi.fn().mockRejectedValue(new Error('DynamoDB is unavailable')),
+        where: () => ({
+          go: vi.fn().mockRejectedValue(new Error('DynamoDB is unavailable')),
+        }),
       });
 
     const result = await callAs().updateContentItemVideo({
@@ -1022,6 +1105,83 @@ describe('updateContentItemVideo', () => {
 
     expect(result).toMatchObject({ contentItemId: CONTENT_ITEM_ID });
     expect(contentItemPatchSet).not.toHaveBeenCalledWith({ status: 'failed' });
+    expect(bestEffortCancelTranscodeJob).not.toHaveBeenCalled();
+  });
+
+  // Invariant: same reasoning as createContentItemVideo's analogous test --
+  // a second concurrent replacement could have already moved the record
+  // onto its own nonce/job before this stamp lands, orphaning this
+  // attempt's own job with nothing left to cancel or clean it up otherwise.
+  it('cancels its own job when the stamp loses ownership to a newer replacement', async () => {
+    const newObjectKey = `${OBJECT_KEY_PREFIX}some-other-fresh-id.mp4`;
+    contentItemPatchSet
+      .mockReturnValueOnce({
+        remove: () => ({
+          where: () => ({
+            go: vi.fn().mockResolvedValue({ data: contentItem }),
+          }),
+        }),
+      })
+      .mockReturnValueOnce({
+        where: () => ({
+          go: vi.fn().mockRejectedValue(conditionalCheckFailedError()),
+        }),
+      });
+
+    const result = await callAs().updateContentItemVideo({
+      ...input,
+      objectKey: newObjectKey,
+    });
+
+    expect(result).toMatchObject({ contentItemId: CONTENT_ITEM_ID });
+    expect(contentItemPatchSet).not.toHaveBeenCalledWith({ status: 'failed' });
+    expect(bestEffortCancelTranscodeJob).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        jobId: 'job-1',
+        courseId: COURSE_ID,
+        moduleId: MODULE_ID,
+        lessonId: LESSON_ID,
+        contentItemId: CONTENT_ITEM_ID,
+      }),
+    );
+  });
+
+  it('conditions the mark-failed patch on this attempt owning the record', async () => {
+    const newObjectKey = `${OBJECT_KEY_PREFIX}some-other-fresh-id.mp4`;
+    submitTranscodeJob.mockRejectedValue(
+      new Error('MediaConvert is unavailable'),
+    );
+    const markFailedWhere = vi.fn().mockReturnValue({
+      go: vi.fn().mockResolvedValue({ data: contentItem }),
+    });
+    contentItemPatchSet
+      .mockReturnValueOnce({
+        remove: () => ({
+          where: () => ({
+            go: vi.fn().mockResolvedValue({ data: contentItem }),
+          }),
+        }),
+      })
+      .mockReturnValueOnce({ where: markFailedWhere });
+
+    await expect(
+      callAs().updateContentItemVideo({ ...input, objectKey: newObjectKey }),
+    ).rejects.toThrow('MediaConvert is unavailable');
+
+    const [whereCallback] = markFailedWhere.mock.calls[0]!;
+    const eq = vi.fn((attr: string, value: string) => `${attr} = ${value}`);
+    const [firstPatchArgs] = contentItemPatchSet.mock.calls[0]!;
+    const result = whereCallback(
+      { submissionNonce: 'submissionNonce' },
+      { eq },
+    );
+
+    expect(eq).toHaveBeenCalledWith(
+      'submissionNonce',
+      firstPatchArgs.submissionNonce,
+    );
+    expect(result).toBe(`submissionNonce = ${firstPatchArgs.submissionNonce}`);
   });
 
   it('still surfaces the original submission error even if marking it failed also fails', async () => {
@@ -1038,7 +1198,9 @@ describe('updateContentItemVideo', () => {
         }),
       })
       .mockReturnValueOnce({
-        go: vi.fn().mockRejectedValue(new Error('DynamoDB is unavailable')),
+        where: () => ({
+          go: vi.fn().mockRejectedValue(new Error('DynamoDB is unavailable')),
+        }),
       });
 
     await expect(

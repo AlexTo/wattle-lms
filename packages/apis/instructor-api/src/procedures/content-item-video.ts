@@ -11,6 +11,7 @@ import { v7 as uuidv7 } from 'uuid';
 import { courseProcedure } from '../init.js';
 import { getSignedCloudFrontUrl } from '../lib/cloudfront-client.js';
 import {
+  bestEffortCancelTranscodeJob,
   bestEffortCancelTranscodeJobs,
   submitTranscodeJob,
 } from '../lib/mediaconvert-client.js';
@@ -43,6 +44,18 @@ const ALLOWED_VIDEO_TYPES: Record<string, string> = {
 };
 
 const UPLOAD_URL_EXPIRY_SECONDS = 15 * 60;
+
+// True specifically for a DynamoDB conditional write that lost its race --
+// as opposed to a transient error where the write's target might still be
+// this same submission attempt's to own. Only the former means the job
+// this attempt just created is actually orphaned and needs cleaning up;
+// treating the latter the same way would cancel a job a retry could have
+// otherwise safely reconnected to.
+const isConditionalCheckFailed = (error: unknown): boolean =>
+  error instanceof Error &&
+  'cause' in error &&
+  error.cause instanceof Error &&
+  error.cause.name === 'ConditionalCheckFailedException';
 
 export const createContentItemVideoUploadUrl = courseProcedure
   .input(CreateContentItemVideoUploadUrlInputSchema)
@@ -180,8 +193,11 @@ export const createContentItemVideo = courseProcedure
 
     // Feeds submitTranscodeJob's ClientRequestToken -- see its docstring
     // for why a nonce, not the upload's own content, is what that token is
-    // derived from.
-    const submissionNonce = randomUUID();
+    // derived from. Widened to plain string: ElectroDB's generated
+    // attribute type for submissionNonce is 'string', and randomUUID()'s
+    // own narrower template-literal return type doesn't structurally
+    // match that when passed into op.eq() further down.
+    const submissionNonce: string = randomUUID();
 
     const { data: contentItem } = await coreTable.entities.contentItem
       .create({
@@ -218,9 +234,16 @@ export const createContentItemVideo = courseProcedure
       // Job submission itself failed -- delete the record so a retry
       // (even with the exact same input) starts clean instead of leaving
       // a permanently broken 'pending' record with no job behind it, or
-      // piling a duplicate alongside it.
+      // piling a duplicate alongside it. Conditioned on submissionNonce
+      // still being this exact attempt's: a concurrent updateContentItemVideo
+      // could have already read this just-created record and replaced it
+      // with its own submission before this rollback runs, and deleting
+      // the record out from under that legitimate, newer replacement would
+      // corrupt it for no reason -- this attempt's own failure has nothing
+      // to do with a submission that came after it.
       await coreTable.entities.contentItem
         .delete({ courseId, moduleId, lessonId, contentItemId })
+        .where((attr, op) => op.eq(attr.submissionNonce, submissionNonce))
         .go()
         .catch((deleteError: unknown) => {
           ctx.logger?.error(
@@ -235,31 +258,53 @@ export const createContentItemVideo = courseProcedure
       // Lets transcode-complete.ts recognize a stale completion event from
       // a job a later replacement has since superseded. rawObjectETag lets
       // a future updateContentItemVideo call tell a genuine replacement
-      // apart from a retry of this exact submission.
+      // apart from a retry of this exact submission. Conditioned on
+      // submissionNonce still being this exact attempt's, for the same
+      // reason as the rollback delete above -- a concurrent replacement
+      // may have already superseded this record with its own nonce/job,
+      // and this stamp landing anyway would silently repoint the record
+      // at this attempt's job while leaving that replacement's own
+      // s3Key/status in place.
       await coreTable.entities.contentItem
         .patch({ courseId, moduleId, lessonId, contentItemId })
         .set({ mediaConvertJobId, rawObjectETag: objectETag })
+        .where((attr, op) => op.eq(attr.submissionNonce, submissionNonce))
         .go();
     } catch (error) {
-      // The job itself is real and already running regardless of whether
-      // this stamp lands -- rolling back here (deleting the record, or
-      // marking it failed) would orphan it. submissionNonce is already
-      // durable from the .create() above, so a later retry's crash-gap
-      // check reconnects to this exact job via ClientRequestToken, and
-      // transcode-complete.ts's own nonce-conditioned patch reconciles the
-      // record once the job actually finishes, regardless of whether this
-      // stamp ever lands.
-      ctx.logger?.error(
-        'Failed to stamp mediaConvertJobId after transcode submission',
-        {
-          error,
+      if (isConditionalCheckFailed(error)) {
+        // Lost ownership, not a transient failure: a concurrent replacement
+        // already moved this record onto its own nonce, so this attempt's
+        // job has nothing left pointing at it and needs its own cleanup --
+        // otherwise nothing else will ever cancel or clean it up.
+        await bestEffortCancelTranscodeJob(ctx.logger, {
+          jobId: mediaConvertJobId,
           courseId,
           moduleId,
           lessonId,
           contentItemId,
-          mediaConvertJobId,
-        },
-      );
+          submissionNonce,
+        });
+      } else {
+        // The job itself is real and already running regardless of
+        // whether this stamp lands -- rolling back here (deleting the
+        // record, or marking it failed) would orphan it. submissionNonce
+        // is already durable from the .create() above, so a later retry's
+        // crash-gap check reconnects to this exact job via
+        // ClientRequestToken, and transcode-complete.ts's own
+        // nonce-conditioned patch reconciles the record once the job
+        // actually finishes, regardless of whether this stamp ever lands.
+        ctx.logger?.error(
+          'Failed to stamp mediaConvertJobId after transcode submission',
+          {
+            error,
+            courseId,
+            moduleId,
+            lessonId,
+            contentItemId,
+            mediaConvertJobId,
+          },
+        );
+      }
     }
 
     return asContentItemOutput<ICreateContentItemVideoOutput>(contentItem);
@@ -489,9 +534,15 @@ export const updateContentItemVideo = courseProcedure
         // state left to restore. Mark it failed, the same terminal state a
         // genuine MediaConvert ERROR would produce, so the instructor gets
         // an accurate signal instead of an indefinite "processing" spinner.
+        // Conditioned on submissionNonce still being this exact attempt's:
+        // a second concurrent replacement could have already superseded
+        // this record with its own nonce/job while this attempt was still
+        // waiting on submitTranscodeJob, and this attempt's own failure
+        // has nothing to do with that newer, legitimate replacement.
         await coreTable.entities.contentItem
           .patch({ courseId, moduleId, lessonId, contentItemId })
           .set({ status: 'failed' })
+          .where((attr, op) => op.eq(attr.submissionNonce, submissionNonce!))
           .go()
           .catch((patchError: unknown) => {
             ctx.logger?.error(
@@ -512,30 +563,54 @@ export const updateContentItemVideo = courseProcedure
         // Lets transcode-complete.ts recognize a stale completion event
         // from a job a later replacement has since superseded.
         // rawObjectETag lets a later retry of this exact submission be
-        // told apart from a genuine subsequent replacement.
+        // told apart from a genuine subsequent replacement. Conditioned on
+        // submissionNonce still being this exact attempt's, for the same
+        // reason as the mark-failed patch above -- a concurrent
+        // replacement may have already moved the record onto its own
+        // nonce/job, and this stamp landing anyway would silently
+        // repoint mediaConvertJobId/rawObjectETag at this attempt's job
+        // while leaving that replacement's own s3Key/status in place.
         await coreTable.entities.contentItem
           .patch({ courseId, moduleId, lessonId, contentItemId })
           .set({ mediaConvertJobId, rawObjectETag: objectETag })
+          .where((attr, op) => op.eq(attr.submissionNonce, submissionNonce!))
           .go();
       } catch (error) {
-        // The job itself is real and already running regardless of
-        // whether this stamp lands -- marking the record failed here
-        // would orphan it. submissionNonce is already durable from the
-        // patch above, so a later retry's crash-gap check reconnects to
-        // this exact job via ClientRequestToken, and transcode-complete.ts's
-        // own nonce-conditioned patch reconciles the record once the job
-        // actually finishes, regardless of whether this stamp ever lands.
-        ctx.logger?.error(
-          'Failed to stamp mediaConvertJobId after transcode submission',
-          {
-            error,
+        if (isConditionalCheckFailed(error)) {
+          // Lost ownership, not a transient failure: a concurrent
+          // replacement already moved this record onto its own nonce, so
+          // this attempt's job has nothing left pointing at it and needs
+          // its own cleanup -- otherwise nothing else will ever cancel or
+          // clean it up.
+          await bestEffortCancelTranscodeJob(ctx.logger, {
+            jobId: mediaConvertJobId,
             courseId,
             moduleId,
             lessonId,
             contentItemId,
-            mediaConvertJobId,
-          },
-        );
+            submissionNonce: submissionNonce!,
+          });
+        } else {
+          // The job itself is real and already running regardless of
+          // whether this stamp lands -- marking the record failed here
+          // would orphan it. submissionNonce is already durable from the
+          // patch above, so a later retry's crash-gap check reconnects to
+          // this exact job via ClientRequestToken, and
+          // transcode-complete.ts's own nonce-conditioned patch
+          // reconciles the record once the job actually finishes,
+          // regardless of whether this stamp ever lands.
+          ctx.logger?.error(
+            'Failed to stamp mediaConvertJobId after transcode submission',
+            {
+              error,
+              courseId,
+              moduleId,
+              lessonId,
+              contentItemId,
+              mediaConvertJobId,
+            },
+          );
+        }
       }
     }
 
