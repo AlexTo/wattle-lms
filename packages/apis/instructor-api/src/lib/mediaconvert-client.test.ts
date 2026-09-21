@@ -131,6 +131,7 @@ describe('submitTranscodeJob', () => {
           'Audio Selector 1': { DefaultSelection: 'DEFAULT' },
         },
         TimecodeSource: 'ZEROBASED',
+        VideoSelector: { Rotate: 'AUTO' },
       },
     ]);
     expect(
@@ -139,6 +140,25 @@ describe('submitTranscodeJob', () => {
     ).toBe(
       `s3://${MEDIA_BUCKET_NAME}/courses/${COURSE_ID}/modules/${MODULE_ID}/lessons/${LESSON_ID}/content-items/${CONTENT_ITEM_ID}/${SUBMISSION_NONCE}/master`,
     );
+  });
+
+  // MediaConvert's own default is to ignore rotation metadata entirely,
+  // even when present -- without this, a phone-shot portrait upload
+  // transcodes sideways.
+  it('applies automatic rotation from the input own container metadata', async () => {
+    await submitTranscodeJob({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: LESSON_ID,
+      contentItemId: CONTENT_ITEM_ID,
+      objectKey: OBJECT_KEY,
+      submissionNonce: SUBMISSION_NONCE,
+    });
+
+    const [command] = mediaConvertSend.mock.calls[0]!;
+    expect(command.Settings.Inputs[0].VideoSelector).toEqual({
+      Rotate: 'AUTO',
+    });
   });
 
   // Two submissions for the same content item -- e.g. a canceled job and

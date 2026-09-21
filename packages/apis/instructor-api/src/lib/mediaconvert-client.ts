@@ -139,6 +139,13 @@ export const submitTranscodeJob = async ({
               'Audio Selector 1': { DefaultSelection: 'DEFAULT' },
             },
             TimecodeSource: 'ZEROBASED',
+            // MediaConvert's own default is to ignore rotation metadata
+            // entirely, even when present -- without this, a phone-shot
+            // portrait upload (rotation metadata on an otherwise landscape
+            // frame, the ordinary case for a phone camera) transcodes
+            // sideways. AUTO applies it when present and within 1 degree
+            // of 90/180/270; does nothing otherwise.
+            VideoSelector: { Rotate: 'AUTO' },
           },
         ],
         OutputGroups: [
