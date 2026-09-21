@@ -379,6 +379,18 @@ export const updateContentItemVideo = courseProcedure
             ...(mimeType !== undefined && { mimeType }),
             ...(durationSeconds !== undefined && { durationSeconds }),
           })
+          // Clearing mediaConvertJobId here (rather than leaving whatever
+          // job, if any, the video being replaced previously had) makes it
+          // an unambiguous signal for a future read of this record: still
+          // undefined means no job has been stamped for *this* submission
+          // attempt yet. Without this, a retry after a crash between
+          // submitTranscodeJob succeeding and the follow-up stamp below
+          // would see a defined-but-stale id here, fail the crash-gap
+          // nonce-reuse check above, and submit a duplicate job instead of
+          // reconnecting to the one that attempt already created. A
+          // no-op when there was nothing to clear (a fresh item, or a
+          // retry already resuming this same attempt).
+          .remove(['mediaConvertJobId'])
           // Guards against a second updateContentItemVideo replace racing
           // this one: if status/s3Key/submissionNonce have changed since
           // the .get() above, another replace already landed first, and

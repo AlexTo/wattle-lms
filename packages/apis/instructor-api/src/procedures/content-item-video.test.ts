@@ -20,6 +20,7 @@ const {
   contentItemGet,
   contentItemPatch,
   contentItemPatchSet,
+  contentItemPatchRemove,
   contentItemPatchWhere,
   contentItemDelete,
   s3Send,
@@ -38,6 +39,7 @@ const {
   contentItemGet: vi.fn(),
   contentItemPatch: vi.fn(),
   contentItemPatchSet: vi.fn(),
+  contentItemPatchRemove: vi.fn(),
   contentItemPatchWhere: vi.fn(),
   contentItemDelete: vi.fn(),
   s3Send: vi.fn(),
@@ -208,6 +210,11 @@ beforeEach(() => {
   });
   contentItemPatch.mockReturnValue({ set: contentItemPatchSet });
   contentItemPatchSet.mockReturnValue({
+    go: vi.fn().mockResolvedValue({ data: contentItem }),
+    where: contentItemPatchWhere,
+    remove: contentItemPatchRemove,
+  });
+  contentItemPatchRemove.mockReturnValue({
     go: vi.fn().mockResolvedValue({ data: contentItem }),
     where: contentItemPatchWhere,
   });
@@ -903,10 +910,12 @@ describe('updateContentItemVideo', () => {
     const callOrder: string[] = [];
     contentItemPatchSet
       .mockReturnValueOnce({
-        where: () => ({
-          go: vi.fn().mockImplementation(async () => {
-            callOrder.push('patch');
-            return { data: contentItem };
+        remove: () => ({
+          where: () => ({
+            go: vi.fn().mockImplementation(async () => {
+              callOrder.push('patch');
+              return { data: contentItem };
+            }),
           }),
         }),
       })
@@ -976,8 +985,10 @@ describe('updateContentItemVideo', () => {
     );
     contentItemPatchSet
       .mockReturnValueOnce({
-        where: () => ({
-          go: vi.fn().mockResolvedValue({ data: contentItem }),
+        remove: () => ({
+          where: () => ({
+            go: vi.fn().mockResolvedValue({ data: contentItem }),
+          }),
         }),
       })
       .mockReturnValueOnce({
@@ -1079,6 +1090,25 @@ describe('updateContentItemVideo', () => {
     expect(result).toBe(
       `status = ${pendingItem.status} AND s3Key = ${pendingItem.s3Key} AND submissionNonce = nonce-1`,
     );
+  });
+
+  // Invariant: leaving the previous video's mediaConvertJobId in place
+  // would make it indistinguishable, on a later retry, from a stale id
+  // that no longer means anything -- a crash between submitTranscodeJob
+  // succeeding and the follow-up stamp would then be read as "already
+  // fully submitted with a defined (but wrong) job id" instead of "no job
+  // stamped for this attempt yet", failing the crash-gap nonce-reuse
+  // check and submitting a duplicate job instead of reconnecting to the
+  // one that attempt already created.
+  it('clears the previous mediaConvertJobId when replacing the file', async () => {
+    const newObjectKey = `${OBJECT_KEY_PREFIX}some-other-fresh-id.mp4`;
+
+    await callAs().updateContentItemVideo({
+      ...input,
+      objectKey: newObjectKey,
+    });
+
+    expect(contentItemPatchRemove).toHaveBeenCalledWith(['mediaConvertJobId']);
   });
 
   it('does not condition a metadata-only edit on status/s3Key (no CONFLICT risk from a concurrent replace)', async () => {
