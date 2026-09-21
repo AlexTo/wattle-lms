@@ -64,6 +64,13 @@ export interface MediaBucketProps {
    * @default true
    */
   readonly enableWaf?: boolean;
+  /**
+   * Removal policy applied to the bucket when its stack is deleted.
+   * `autoDeleteObjects` is only enabled when this is `RemovalPolicy.DESTROY`.
+   *
+   * @default RemovalPolicy.RETAIN
+   */
+  readonly removalPolicy?: RemovalPolicy;
 }
 
 /**
@@ -88,6 +95,7 @@ export class MediaBucket extends Construct {
       encryptionKey,
       enableKeyRotation = true,
       enableWaf = true,
+      removalPolicy = RemovalPolicy.RETAIN,
     }: MediaBucketProps,
   ) {
     super(scope, id);
@@ -97,15 +105,15 @@ export class MediaBucket extends Construct {
       : undefined;
 
     this.bucket = new Bucket(this, runtimeConfigKey, {
-      versioned: true,
+      versioned: false,
       enforceSSL: true,
       encryption: key ? BucketEncryption.KMS : BucketEncryption.S3_MANAGED,
       encryptionKey: key,
       objectOwnership: ObjectOwnership.BUCKET_OWNER_ENFORCED,
       publicReadAccess: false,
       blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
-      removalPolicy: RemovalPolicy.DESTROY,
-      autoDeleteObjects: true,
+      removalPolicy,
+      autoDeleteObjects: removalPolicy === RemovalPolicy.DESTROY,
       cors: [
         {
           allowedMethods: [HttpMethods.PUT, HttpMethods.GET],
@@ -119,6 +127,11 @@ export class MediaBucket extends Construct {
       this.bucket,
       ['CKV_AWS_18'],
       'Private, presigned-only bucket; server access logs are not required',
+    );
+    suppressRules(
+      this.bucket,
+      ['CKV_AWS_21'],
+      'Every object is written to a unique, nonce-scoped path and never overwritten; versioning has no use here and only complicates deletion',
     );
 
     // CloudFront needs a PublicKey/KeyGroup pair to validate signed URLs;

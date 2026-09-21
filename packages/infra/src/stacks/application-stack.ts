@@ -261,6 +261,9 @@ export class ApplicationStack extends Stack {
       enableWaf: lessonMediaWafEnabled,
       enableKmsEncryption: lessonMediaKmsEnabled,
       enableKeyRotation: lessonMediaConfig?.enableKeyRotation ?? true,
+      removalPolicy: lessonMediaConfig?.retainOnDelete
+        ? RemovalPolicy.RETAIN
+        : RemovalPolicy.DESTROY,
     });
     if (!lessonMediaKmsEnabled) {
       suppressRules(
@@ -353,13 +356,6 @@ export class ApplicationStack extends Stack {
         'KMS CMK encryption disabled for this stage',
       );
     }
-    // Raw uploads are deleted as soon as transcoding succeeds or fails;
-    // versioning would only retain copies of something already discarded.
-    suppressRules(
-      lessonMediaUploadBucket.bucket,
-      ['CKV_AWS_21'],
-      'Ephemeral raw upload with no retention need for old versions',
-    );
     // createContentItemVideoUploadUrl now targets this bucket instead of
     // lessonMediaBucket -- the raw upload never sits behind CloudFront.
     lessonMediaUploadBucket.grantPut(

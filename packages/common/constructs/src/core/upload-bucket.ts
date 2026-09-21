@@ -81,6 +81,7 @@ export class UploadBucket extends Construct {
       : undefined;
 
     this.bucket = new Bucket(this, runtimeConfigKey, {
+      versioned: false,
       enforceSSL: true,
       encryption: key ? BucketEncryption.KMS : BucketEncryption.S3_MANAGED,
       encryptionKey: key,
@@ -108,6 +109,11 @@ export class UploadBucket extends Construct {
       this.bucket,
       ['CKV_AWS_18'],
       'Private, presigned-only bucket; server access logs are not required',
+    );
+    suppressRules(
+      this.bucket,
+      ['CKV_AWS_21'],
+      'Raw uploads are deleted as soon as downstream processing succeeds or fails; versioning would only retain copies of something already discarded',
     );
 
     RuntimeConfig.ensure(this).set('s3', runtimeConfigKey, {
