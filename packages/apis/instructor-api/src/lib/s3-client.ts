@@ -10,6 +10,7 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { resolveAppConfigValue } from './runtime-config.js';
+import { scheduleTranscodeCleanup } from './transcode-cleanup-scheduler.js';
 
 let _client: S3Client | undefined;
 
@@ -74,6 +75,7 @@ export type IDeletableVideoContentItem = {
   moduleId: string;
   lessonId: string;
   contentItemId: string;
+  submissionNonce?: string;
 };
 
 // S3 hard caps: ListObjectsV2 returns at most 1,000 keys per page, and
@@ -141,35 +143,60 @@ const deleteObjectsInBatches = async (
 };
 
 /**
- * Best-effort deletes one or more video content items' underlying S3
+ * Best-effort cleans up one or more video content items' underlying S3
  * object(s) -- a single item for a direct delete/replace, or several at
  * once for a lesson/module cascade delete. Failures are logged, never
  * thrown: the DynamoDB record is always the source of truth for whether a
  * piece of content exists, so a failure to clean up here must never fail
  * the caller's mutation.
  *
- * Which bucket holds an item's object(s) depends on its `status`: a
- * `'ready'` item's `s3Key` is its HLS manifest in LessonMediaBucket,
- * alongside segment files that aren't individually tracked, so the whole
- * `.../content-items/<contentItemId>/` prefix is deleted; any other status
- * means `s3Key` is still the single raw upload in LessonMediaUploadBucket.
+ * Which bucket holds an item's object(s), and how they're cleaned up,
+ * depends on its `status`:
+ * - `'ready'`: `s3Key` is its HLS manifest in LessonMediaBucket, alongside
+ *   segment files that aren't individually tracked -- the whole
+ *   `.../content-items/<contentItemId>/<submissionNonce>/` prefix needs
+ *   deleting, which can span many objects. Rather than paginating through
+ *   all of them inline (delaying the caller's response for no benefit --
+ *   nothing about it needs to happen before responding), this schedules a
+ *   delayed cleanup the same way a canceled job's own output is cleaned up
+ *   (see scheduleTranscodeCleanup). A `'ready'` item from before
+ *   `submissionNonce` existed has no scoped prefix to schedule against --
+ *   falls back to the old inline delete for just those, best-effort.
+ * - anything else: `s3Key` is still the single raw upload in
+ *   LessonMediaUploadBucket -- one object, cheap to delete inline.
  */
 export const bestEffortDeleteContentItemVideos = async (
   logger: Logger | undefined,
   contentItems: readonly IDeletableVideoContentItem[],
 ): Promise<void> => {
-  const readyItems = contentItems.filter(
-    (item) => item.status === 'ready' && item.s3Key,
+  const readyItemsWithNonce = contentItems.filter(
+    (item): item is IDeletableVideoContentItem & { submissionNonce: string } =>
+      item.status === 'ready' && !!item.s3Key && !!item.submissionNonce,
+  );
+  const readyItemsWithoutNonce = contentItems.filter(
+    (item) => item.status === 'ready' && item.s3Key && !item.submissionNonce,
   );
   const rawKeys = contentItems
     .filter((item) => item.status !== 'ready' && item.s3Key)
     .map((item) => item.s3Key!);
 
-  if (readyItems.length > 0) {
+  await Promise.all(
+    readyItemsWithNonce.map((item) =>
+      scheduleTranscodeCleanup(logger, {
+        courseId: item.courseId,
+        moduleId: item.moduleId,
+        lessonId: item.lessonId,
+        contentItemId: item.contentItemId,
+        submissionNonce: item.submissionNonce,
+      }),
+    ),
+  );
+
+  if (readyItemsWithoutNonce.length > 0) {
     const bucket = await resolveLessonMediaBucketName();
     const keysToDelete = (
       await Promise.all(
-        readyItems.map((item) => {
+        readyItemsWithoutNonce.map((item) => {
           const prefix = `courses/${item.courseId}/modules/${item.moduleId}/lessons/${item.lessonId}/content-items/${item.contentItemId}/`;
           return listAllObjectKeys(logger, bucket, prefix);
         }),
