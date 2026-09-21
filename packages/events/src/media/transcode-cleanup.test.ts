@@ -134,6 +134,31 @@ describe('transcodeCleanup', () => {
     expect(s3Send).toHaveBeenCalledTimes(1);
   });
 
+  // ListObjectsV2 omits Contents entirely (rather than returning an empty
+  // array) when a page has nothing in it -- distinct from the empty-array
+  // case above.
+  it('treats a response with no Contents field as empty', async () => {
+    s3Send.mockResolvedValueOnce({ IsTruncated: false });
+
+    await transcodeCleanup(buildEvent());
+
+    expect(s3Send).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips a listed object with no Key', async () => {
+    s3Send
+      .mockResolvedValueOnce({
+        Contents: [{ Key: undefined }, { Key: `${PREFIX}seg1.ts` }],
+        IsTruncated: false,
+      })
+      .mockResolvedValueOnce({});
+
+    await transcodeCleanup(buildEvent());
+
+    const [deleteCall] = s3Send.mock.calls[1]!;
+    expect(deleteCall.Delete.Objects).toEqual([{ Key: `${PREFIX}seg1.ts` }]);
+  });
+
   it('throws on an invalid event so EventBridge Scheduler retries', async () => {
     await expect(transcodeCleanup({ courseId: COURSE_ID })).rejects.toThrow();
     expect(s3Send).not.toHaveBeenCalled();
