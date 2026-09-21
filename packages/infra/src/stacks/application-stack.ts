@@ -7,6 +7,7 @@ import {
   CoreApi,
   CoreTable,
   EventsPostConfirmation,
+  EventsTranscodeCleanup,
   EventsTranscodeComplete,
   InstructorApi,
   InstructorPortal,
@@ -33,8 +34,9 @@ import { Mfa, UserPoolOperation } from 'aws-cdk-lib/aws-cognito';
 import { TableEncryption } from 'aws-cdk-lib/aws-dynamodb';
 import { Rule } from 'aws-cdk-lib/aws-events';
 import { LambdaFunction } from 'aws-cdk-lib/aws-events-targets';
-import { PolicyStatement } from 'aws-cdk-lib/aws-iam';
+import { PolicyStatement, Role, ServicePrincipal } from 'aws-cdk-lib/aws-iam';
 import { BucketEncryption } from 'aws-cdk-lib/aws-s3';
+import { ScheduleGroup } from 'aws-cdk-lib/aws-scheduler';
 import { Construct } from 'constructs';
 
 type InstructorApiIntegrations = ReturnType<
@@ -102,6 +104,10 @@ export class ApplicationStack extends Stack {
       instructorApiIntegrations,
     );
     this.createTranscodeCompleteLambda(lessonMediaUploadBucket, coreTable);
+    this.createTranscodeCleanupLambda(
+      lessonMediaBucket,
+      instructorApiIntegrations,
+    );
 
     const studentPortal = this.createStudentPortal(studentPortalConfig);
     const instructorPortal = this.createInstructorPortal(
@@ -439,13 +445,9 @@ export class ApplicationStack extends Stack {
     // #123 and the delete-mid-transcode follow-up) -- unlike CreateJob, a
     // job to cancel already exists here, so this can be scoped to the
     // resource type instead of needing a suppression.
-    const cancelHandlers = [
-      instructorApiIntegrations['contentItem.updateVideo'].handler,
-      instructorApiIntegrations['contentItem.delete'].handler,
-      instructorApiIntegrations['lesson.delete'].handler,
-      instructorApiIntegrations['module.delete'].handler,
-    ];
-    for (const handler of cancelHandlers) {
+    for (const handler of this.getTranscodeCancelHandlers(
+      instructorApiIntegrations,
+    )) {
       handler.addToRolePolicy(
         new PolicyStatement({
           actions: ['mediaconvert:CancelJob'],
@@ -459,6 +461,21 @@ export class ApplicationStack extends Stack {
         }),
       );
     }
+  }
+
+  // The handlers that can reach bestEffortCancelTranscodeJob(s) -- every
+  // caller of it also needs permission to schedule that job's delayed S3
+  // cleanup (see createTranscodeCleanupLambda), so both grants are scoped
+  // to the same list.
+  private getTranscodeCancelHandlers(
+    instructorApiIntegrations: InstructorApiIntegrations,
+  ) {
+    return [
+      instructorApiIntegrations['contentItem.updateVideo'].handler,
+      instructorApiIntegrations['contentItem.delete'].handler,
+      instructorApiIntegrations['lesson.delete'].handler,
+      instructorApiIntegrations['module.delete'].handler,
+    ];
   }
 
   private createTranscodeCompleteLambda(
@@ -492,6 +509,70 @@ export class ApplicationStack extends Stack {
     });
 
     return transcodeComplete;
+  }
+
+  // bestEffortCancelTranscodeJob schedules a one-time, delayed invocation
+  // of this Lambda for the exact job it just canceled (see
+  // mediaconvert-client.ts) -- invoked directly by EventBridge Scheduler,
+  // not via a persistent Rule like TranscodeComplete, since each
+  // invocation is its own one-off event rather than a recurring pattern.
+  private createTranscodeCleanupLambda(
+    lessonMediaBucket: LessonMediaBucket,
+    instructorApiIntegrations: InstructorApiIntegrations,
+  ) {
+    const transcodeCleanup = new EventsTranscodeCleanup(
+      this,
+      'TranscodeCleanup',
+    );
+    const runtimeConfig = RuntimeConfig.ensure(this);
+    transcodeCleanup.addEnvironment(
+      'RUNTIME_CONFIG_APP_ID',
+      runtimeConfig.appConfigApplicationId,
+    );
+    runtimeConfig.grantReadAppConfig(transcodeCleanup);
+    // Needs both: list the job's own nonce-scoped prefix, then delete
+    // everything found there.
+    lessonMediaBucket.grantRead(transcodeCleanup);
+    lessonMediaBucket.grantDelete(transcodeCleanup);
+
+    // A dedicated group (rather than the account's default one) so the
+    // scheduler:CreateSchedule/UpdateSchedule grant below can be scoped to
+    // just these schedules instead of every schedule in the account.
+    const scheduleGroup = new ScheduleGroup(this, 'TranscodeCleanupGroup');
+
+    // EventBridge Scheduler assumes this to invoke the cleanup Lambda on
+    // each schedule's behalf -- distinct from the instructor-api handlers'
+    // own role, which only needs to create the schedule, not run it.
+    const schedulerRole = new Role(this, 'TranscodeCleanupSchedulerRole', {
+      assumedBy: new ServicePrincipal('scheduler.amazonaws.com'),
+    });
+    transcodeCleanup.grantInvoke(schedulerRole);
+
+    for (const handler of this.getTranscodeCancelHandlers(
+      instructorApiIntegrations,
+    )) {
+      scheduleGroup.grantWriteSchedules(handler);
+      // Creating a schedule with a target role requires the creator to be
+      // allowed to pass that role -- scoped to just this one role, and
+      // only for EventBridge Scheduler to assume, not any service.
+      handler.addToRolePolicy(
+        new PolicyStatement({
+          actions: ['iam:PassRole'],
+          resources: [schedulerRole.roleArn],
+          conditions: {
+            StringEquals: { 'iam:PassedToService': 'scheduler.amazonaws.com' },
+          },
+        }),
+      );
+    }
+
+    runtimeConfig.set('mediaConvert', 'TranscodeCleanup', {
+      lambdaArn: transcodeCleanup.functionArn,
+      schedulerRoleArn: schedulerRole.roleArn,
+      scheduleGroupName: scheduleGroup.scheduleGroupName,
+    });
+
+    return transcodeCleanup;
   }
 
   private createStudentPortal(

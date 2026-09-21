@@ -9,6 +9,10 @@ import {
   CreateJobCommand,
   MediaConvertClient,
 } from '@aws-sdk/client-mediaconvert';
+import {
+  CreateScheduleCommand,
+  SchedulerClient,
+} from '@aws-sdk/client-scheduler';
 import { resolveAppConfigValue } from './runtime-config.js';
 import {
   resolveLessonMediaBucketName,
@@ -27,6 +31,15 @@ const getMediaConvertClient = (): MediaConvertClient => {
   return _client;
 };
 
+let _schedulerClient: SchedulerClient | undefined;
+
+const getSchedulerClient = (): SchedulerClient => {
+  if (!_schedulerClient) {
+    _schedulerClient = new SchedulerClient({});
+  }
+  return _schedulerClient;
+};
+
 type VideoTranscodePipelineConfig = {
   roleArn: string;
   jobTemplateArn: string;
@@ -38,6 +51,94 @@ const resolveVideoTranscodePipelineConfig =
       'mediaConvert',
       'VideoTranscodePipeline',
     );
+
+type TranscodeCleanupConfig = {
+  lambdaArn: string;
+  schedulerRoleArn: string;
+  scheduleGroupName: string;
+};
+
+const resolveTranscodeCleanupConfig = (): Promise<TranscodeCleanupConfig> =>
+  resolveAppConfigValue<TranscodeCleanupConfig>(
+    'mediaConvert',
+    'TranscodeCleanup',
+  );
+
+// How long to wait after canceling a job before deleting its output.
+// MediaConvert doesn't stop writing the instant CancelJob is called --
+// direct testing observed writes continuing for ~30s afterward -- and
+// once destinations are nonce-scoped (see submitTranscodeJob), a longer
+// delay costs nothing (nothing else will ever reference that prefix
+// again, so there's no race to avoid by cleaning up sooner), while a
+// delay that's too short risks missing the job's last few writes and
+// leaving a smaller version of the same orphan behind. 10 minutes is a
+// comfortable, arbitrary-but-safe multiple of the one tail we've
+// actually measured, not a value derived from a documented guarantee.
+const CANCELLATION_CLEANUP_DELAY_MINUTES = 10;
+
+/**
+ * Schedules a one-time cleanup of a single canceled job's own nonce-scoped
+ * S3 output, via an EventBridge Scheduler schedule that invokes
+ * transcode-cleanup.ts a few minutes from now. Best-effort: a failure to
+ * schedule just means that job's output isn't automatically cleaned up,
+ * not that the cancellation itself (already done by the caller) is
+ * undone.
+ */
+const scheduleTranscodeCleanup = async (
+  logger: Logger | undefined,
+  params: {
+    courseId: string;
+    moduleId: string;
+    lessonId: string;
+    contentItemId: string;
+    submissionNonce: string;
+  },
+): Promise<void> => {
+  try {
+    const { lambdaArn, schedulerRoleArn, scheduleGroupName } =
+      await resolveTranscodeCleanupConfig();
+
+    // Schedule names cap out at 64 characters; a hash of the two ids that
+    // actually identify this job's own prefix keeps this well within
+    // that regardless of their length, and needs no other uniqueness --
+    // the identifying detail lives in the target's Input, not the name.
+    const scheduleName = `cleanup-${createHash('sha256')
+      .update(`${params.contentItemId}:${params.submissionNonce}`)
+      .digest('hex')
+      .slice(0, 32)}`;
+
+    // EventBridge Scheduler's at() expression takes a literal local
+    // timestamp with no timezone suffix or fractional seconds.
+    const runAt = new Date(
+      Date.now() + CANCELLATION_CLEANUP_DELAY_MINUTES * 60_000,
+    )
+      .toISOString()
+      .slice(0, 19);
+
+    await getSchedulerClient().send(
+      new CreateScheduleCommand({
+        Name: scheduleName,
+        GroupName: scheduleGroupName,
+        ScheduleExpression: `at(${runAt})`,
+        FlexibleTimeWindow: { Mode: 'OFF' },
+        // The schedule has done its job once it's fired once; nothing
+        // reuses a specific job's cleanup schedule, so there's no reason
+        // to let it linger.
+        ActionAfterCompletion: 'DELETE',
+        Target: {
+          Arn: lambdaArn,
+          RoleArn: schedulerRoleArn,
+          Input: JSON.stringify(params),
+        },
+      }),
+    );
+  } catch (error) {
+    logger?.error('Failed to schedule transcode cleanup', {
+      error,
+      ...params,
+    });
+  }
+};
 
 /**
  * Submits a MediaConvert job transcoding a just-uploaded video into HLS.
@@ -159,6 +260,15 @@ export const submitTranscodeJob = async ({
   return Job.Id;
 };
 
+export type ICancelableTranscodeJob = {
+  jobId: string;
+  courseId: string;
+  moduleId: string;
+  lessonId: string;
+  contentItemId: string;
+  submissionNonce?: string;
+};
+
 /**
  * Cancels a MediaConvert job that no longer has anywhere to report to --
  * either a replacement upload has superseded it, or the content item it was
@@ -167,19 +277,38 @@ export const submitTranscodeJob = async ({
  * mutation or delete) must still succeed regardless. transcodeComplete's
  * mediaConvertJobId check is what actually guards DynamoDB against a
  * replacement job this fails to stop; for a delete there's no longer any
- * record to guard, so this just avoids wasting MediaConvert time and
- * leaving an orphaned HLS output with nothing pointing at it.
+ * record to guard.
+ *
+ * Also schedules a delayed cleanup of this job's own S3 output (see
+ * scheduleTranscodeCleanup) -- whether or not the cancel above actually
+ * succeeds. The caller has already decided to supersede or delete this
+ * content item's video regardless, so even a job that happened to finish
+ * on its own moments before the cancel landed has nothing left pointing
+ * at its output; scheduling cleanup for it is still correct.
  */
 export const bestEffortCancelTranscodeJob = async (
   logger: Logger | undefined,
-  jobId: string,
+  job: ICancelableTranscodeJob,
 ): Promise<void> => {
   try {
-    await getMediaConvertClient().send(new CancelJobCommand({ Id: jobId }));
+    await getMediaConvertClient().send(new CancelJobCommand({ Id: job.jobId }));
   } catch (error) {
     logger?.error('Failed to cancel transcode job', {
       error,
-      jobId,
+      jobId: job.jobId,
+    });
+  }
+
+  // Older records from before submissionNonce existed have nothing to
+  // scope a cleanup to -- best-effort, so this is silently skipped for
+  // them rather than treated as an error.
+  if (job.submissionNonce !== undefined) {
+    await scheduleTranscodeCleanup(logger, {
+      courseId: job.courseId,
+      moduleId: job.moduleId,
+      lessonId: job.lessonId,
+      contentItemId: job.contentItemId,
+      submissionNonce: job.submissionNonce,
     });
   }
 };
@@ -187,6 +316,11 @@ export const bestEffortCancelTranscodeJob = async (
 export type ICancelableVideoContentItem = {
   status: string;
   mediaConvertJobId?: string;
+  courseId: string;
+  moduleId: string;
+  lessonId: string;
+  contentItemId: string;
+  submissionNonce?: string;
 };
 
 /**
@@ -209,7 +343,14 @@ export const bestEffortCancelTranscodeJobs = async (
         } => item.status === 'pending' && !!item.mediaConvertJobId,
       )
       .map((item) =>
-        bestEffortCancelTranscodeJob(logger, item.mediaConvertJobId),
+        bestEffortCancelTranscodeJob(logger, {
+          jobId: item.mediaConvertJobId,
+          courseId: item.courseId,
+          moduleId: item.moduleId,
+          lessonId: item.lessonId,
+          contentItemId: item.contentItemId,
+          submissionNonce: item.submissionNonce,
+        }),
       ),
   );
 };

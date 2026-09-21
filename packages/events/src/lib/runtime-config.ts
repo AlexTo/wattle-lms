@@ -42,3 +42,6 @@ const resolveAppConfigValue = (() => {
 export const resolveLessonMediaUploadBucketName = async (): Promise<string> =>
   (await resolveAppConfigValue<S3Config>('s3', 'LessonMediaUploadBucket'))
     .bucketName;
+
+export const resolveLessonMediaBucketName = async (): Promise<string> =>
+  (await resolveAppConfigValue<S3Config>('s3', 'LessonMediaBucket')).bucketName;

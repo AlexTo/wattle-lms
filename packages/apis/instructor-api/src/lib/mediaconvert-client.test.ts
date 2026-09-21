@@ -11,11 +11,13 @@ import {
 
 const {
   mediaConvertSend,
+  schedulerSend,
   resolveAppConfigValue,
   resolveLessonMediaBucketName,
   resolveLessonMediaUploadBucketName,
 } = vi.hoisted(() => ({
   mediaConvertSend: vi.fn(),
+  schedulerSend: vi.fn(),
   resolveAppConfigValue: vi.fn(),
   resolveLessonMediaBucketName: vi.fn(),
   resolveLessonMediaUploadBucketName: vi.fn(),
@@ -30,6 +32,15 @@ vi.mock('@aws-sdk/client-mediaconvert', () => ({
   }),
   CancelJobCommand: vi.fn(function (input) {
     return { __command: 'CancelJob', ...input };
+  }),
+}));
+
+vi.mock('@aws-sdk/client-scheduler', () => ({
+  SchedulerClient: vi.fn(function () {
+    return { send: schedulerSend };
+  }),
+  CreateScheduleCommand: vi.fn(function (input) {
+    return { __command: 'CreateSchedule', ...input };
   }),
 }));
 
@@ -53,16 +64,33 @@ const MEDIA_BUCKET_NAME = 'lesson-media-bucket';
 const ROLE_ARN = 'arn:aws:iam::123456789012:role/MediaConvert';
 const JOB_TEMPLATE_ARN =
   'arn:aws:mediaconvert:ap-southeast-2:123456789012:jobTemplates/template';
+const CLEANUP_LAMBDA_ARN =
+  'arn:aws:lambda:ap-southeast-2:123456789012:function:TranscodeCleanup';
+const SCHEDULER_ROLE_ARN =
+  'arn:aws:iam::123456789012:role/TranscodeCleanupSchedulerRole';
+const SCHEDULE_GROUP_NAME = 'wattle-transcode-cleanup';
 
 beforeEach(() => {
   vi.clearAllMocks();
-  resolveAppConfigValue.mockResolvedValue({
-    roleArn: ROLE_ARN,
-    jobTemplateArn: JOB_TEMPLATE_ARN,
-  });
+  resolveAppConfigValue.mockImplementation(
+    async (_namespace: string, key: string) => {
+      if (key === 'VideoTranscodePipeline') {
+        return { roleArn: ROLE_ARN, jobTemplateArn: JOB_TEMPLATE_ARN };
+      }
+      if (key === 'TranscodeCleanup') {
+        return {
+          lambdaArn: CLEANUP_LAMBDA_ARN,
+          schedulerRoleArn: SCHEDULER_ROLE_ARN,
+          scheduleGroupName: SCHEDULE_GROUP_NAME,
+        };
+      }
+      throw new Error(`Unexpected resolveAppConfigValue key: ${key}`);
+    },
+  );
   resolveLessonMediaUploadBucketName.mockResolvedValue(UPLOAD_BUCKET_NAME);
   resolveLessonMediaBucketName.mockResolvedValue(MEDIA_BUCKET_NAME);
   mediaConvertSend.mockResolvedValue({ Job: { Id: 'job-1' } });
+  schedulerSend.mockResolvedValue({});
 });
 
 describe('submitTranscodeJob', () => {
@@ -267,11 +295,20 @@ describe('submitTranscodeJob', () => {
   });
 });
 
+const CANCELABLE_JOB = {
+  jobId: 'job-1',
+  courseId: COURSE_ID,
+  moduleId: MODULE_ID,
+  lessonId: LESSON_ID,
+  contentItemId: CONTENT_ITEM_ID,
+  submissionNonce: SUBMISSION_NONCE,
+};
+
 describe('bestEffortCancelTranscodeJob', () => {
   it('cancels the given job', async () => {
     mediaConvertSend.mockResolvedValue({});
 
-    await bestEffortCancelTranscodeJob(undefined, 'job-1');
+    await bestEffortCancelTranscodeJob(undefined, CANCELABLE_JOB);
 
     expect(mediaConvertSend).toHaveBeenCalledWith(
       expect.objectContaining({ __command: 'CancelJob', Id: 'job-1' }),
@@ -283,7 +320,7 @@ describe('bestEffortCancelTranscodeJob', () => {
     const logger = { error: vi.fn() };
 
     await expect(
-      bestEffortCancelTranscodeJob(logger as any, 'job-1'),
+      bestEffortCancelTranscodeJob(logger as any, CANCELABLE_JOB),
     ).resolves.toBeUndefined();
     expect(logger.error).toHaveBeenCalledWith(
       'Failed to cancel transcode job',
@@ -295,20 +332,88 @@ describe('bestEffortCancelTranscodeJob', () => {
     mediaConvertSend.mockRejectedValue(new Error('job already completed'));
 
     await expect(
-      bestEffortCancelTranscodeJob(undefined, 'job-1'),
+      bestEffortCancelTranscodeJob(undefined, CANCELABLE_JOB),
     ).resolves.toBeUndefined();
+  });
+
+  // The prerequisite for safe cleanup: every canceled job's own nonce-
+  // scoped prefix gets a schedule, regardless of what else is going on
+  // with the content item afterward.
+  it('schedules a delayed cleanup of the job’s own nonce-scoped prefix', async () => {
+    await bestEffortCancelTranscodeJob(undefined, CANCELABLE_JOB);
+
+    expect(schedulerSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        __command: 'CreateSchedule',
+        GroupName: SCHEDULE_GROUP_NAME,
+        FlexibleTimeWindow: { Mode: 'OFF' },
+        ActionAfterCompletion: 'DELETE',
+        Target: expect.objectContaining({
+          Arn: CLEANUP_LAMBDA_ARN,
+          RoleArn: SCHEDULER_ROLE_ARN,
+          Input: JSON.stringify({
+            courseId: COURSE_ID,
+            moduleId: MODULE_ID,
+            lessonId: LESSON_ID,
+            contentItemId: CONTENT_ITEM_ID,
+            submissionNonce: SUBMISSION_NONCE,
+          }),
+        }),
+      }),
+    );
+  });
+
+  // Whether or not the cancel itself succeeds, this job's output is
+  // orphaned as far as the caller's record is concerned -- the caller
+  // already decided to supersede or delete it regardless.
+  it('still schedules cleanup even when the cancel itself fails', async () => {
+    mediaConvertSend.mockRejectedValue(new Error('job already completed'));
+
+    await bestEffortCancelTranscodeJob(undefined, CANCELABLE_JOB);
+
+    expect(schedulerSend).toHaveBeenCalled();
+  });
+
+  it('skips scheduling cleanup for a job with no submissionNonce (a record from before it existed)', async () => {
+    await bestEffortCancelTranscodeJob(undefined, {
+      ...CANCELABLE_JOB,
+      submissionNonce: undefined,
+    });
+
+    expect(schedulerSend).not.toHaveBeenCalled();
+  });
+
+  it('swallows a scheduling failure and logs it, without throwing', async () => {
+    schedulerSend.mockRejectedValue(new Error('Scheduler is unavailable'));
+    const logger = { error: vi.fn() };
+
+    await expect(
+      bestEffortCancelTranscodeJob(logger as any, CANCELABLE_JOB),
+    ).resolves.toBeUndefined();
+    expect(logger.error).toHaveBeenCalledWith(
+      'Failed to schedule transcode cleanup',
+      expect.objectContaining({ contentItemId: CONTENT_ITEM_ID }),
+    );
   });
 });
 
 describe('bestEffortCancelTranscodeJobs', () => {
+  const baseItem = {
+    courseId: COURSE_ID,
+    moduleId: MODULE_ID,
+    lessonId: LESSON_ID,
+    contentItemId: CONTENT_ITEM_ID,
+    submissionNonce: SUBMISSION_NONCE,
+  };
+
   it('cancels only pending items that have a job id', async () => {
     mediaConvertSend.mockResolvedValue({});
 
     await bestEffortCancelTranscodeJobs(undefined, [
-      { status: 'pending', mediaConvertJobId: 'job-1' },
-      { status: 'ready', mediaConvertJobId: 'job-2' },
-      { status: 'pending', mediaConvertJobId: undefined },
-      { status: 'failed', mediaConvertJobId: 'job-3' },
+      { ...baseItem, status: 'pending', mediaConvertJobId: 'job-1' },
+      { ...baseItem, status: 'ready', mediaConvertJobId: 'job-2' },
+      { ...baseItem, status: 'pending', mediaConvertJobId: undefined },
+      { ...baseItem, status: 'failed', mediaConvertJobId: 'job-3' },
     ]);
 
     expect(mediaConvertSend).toHaveBeenCalledTimes(1);
@@ -319,9 +424,10 @@ describe('bestEffortCancelTranscodeJobs', () => {
 
   it('does nothing when given no cancelable items', async () => {
     await bestEffortCancelTranscodeJobs(undefined, [
-      { status: 'ready', mediaConvertJobId: 'job-1' },
+      { ...baseItem, status: 'ready', mediaConvertJobId: 'job-1' },
     ]);
 
     expect(mediaConvertSend).not.toHaveBeenCalled();
+    expect(schedulerSend).not.toHaveBeenCalled();
   });
 });

@@ -4,4 +4,5 @@
  */
 
 export * from './events-post-confirmation.js';
+export * from './events-transcode-cleanup.js';
 export * from './events-transcode-complete.js';

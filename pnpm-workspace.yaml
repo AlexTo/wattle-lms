@@ -49,6 +49,7 @@ catalog:
   '@aws-sdk/client-iam': 3.1126.0
   '@aws-sdk/client-cognito-identity-provider': 3.1126.0
   '@aws-sdk/client-mediaconvert': 3.1126.0
+  '@aws-sdk/client-scheduler': 3.1126.0
   '@trpc/server': 11.18.0
   rolldown: 1.2.7
   aws-xray-sdk-core: 3.12.0
