@@ -79,19 +79,10 @@ export const transcodeComplete = async (
       await coreTable.entities.contentItem
         .patch({ courseId, moduleId, lessonId, contentItemId })
         .set({ status: 'ready', s3Key: manifestKey })
-        // Conditioned on submissionNonce, not mediaConvertJobId: the record
-        // gets its nonce durably before submitTranscodeJob is ever called
-        // (createContentItemVideo/updateContentItemVideo persist it first),
-        // but only gets mediaConvertJobId *after* that call returns -- a
-        // job that reaches a terminal state in that gap would otherwise
-        // find mediaConvertJobId still unset and have this event dropped,
-        // leaving the item pending forever. Nonce also closes a second gap
-        // a jobId check can't: a replace's first patch updates
-        // s3Key/status/submissionNonce together but leaves the *previous*
-        // job's mediaConvertJobId in place until its own submission
-        // completes, so a stale completion event from that superseded job
-        // would otherwise still match on jobId and overwrite the new
-        // replacement's in-progress record with the old job's result.
+        // submissionNonce is persisted durably before submitTranscodeJob is
+        // ever called, and gets overwritten as soon as a replacement
+        // supersedes this job -- so a completion event only patches the
+        // record while it's still genuinely this exact submission's own.
         .where((attr, op) => op.eq(attr.submissionNonce, submissionNonce))
         .go();
     } catch (error) {
