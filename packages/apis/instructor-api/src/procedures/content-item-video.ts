@@ -441,13 +441,19 @@ export const updateContentItemVideo = courseProcedure
           if (!isConditionalCheckFailed(error)) {
             throw error;
           }
-          // Lost ownership: something else (a genuine replacement, or the
-          // transcode itself completing) has already superseded this
-          // record since it was read above. There's nothing stable left
-          // to apply this edit to -- silently dropping it here is no
-          // different from the caller's request having lost an ordinary
-          // race against a concurrent edit.
-          return asContentItemOutput<IUpdateContentItemVideoOutput>(existing);
+          // Lost ownership: a concurrent replacement or delete has already
+          // superseded this record since it was read above -- an ordinary
+          // transcode completion never touches submissionNonce, so this
+          // can't be that. Reporting success here (even with the earlier
+          // snapshot) would be wrong: the caller's edit was explicitly
+          // rejected, not applied, and the snapshot may already describe a
+          // submission that no longer exists. Same CONFLICT the
+          // replacement branch below throws for the same kind of race.
+          throw new TRPCError({
+            code: 'CONFLICT',
+            message:
+              'Content item was modified by another request; please retry',
+          });
         }
       }
 

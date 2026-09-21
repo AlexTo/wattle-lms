@@ -893,7 +893,7 @@ describe('updateContentItemVideo', () => {
       expect(result).toBe(`submissionNonce = ${inFlightItem.submissionNonce}`);
     });
 
-    it('drops the metadata edit, falling back to the current record, when it loses ownership of the submission', async () => {
+    it('throws CONFLICT, rather than reporting success, when the metadata edit loses ownership of the submission', async () => {
       contentItemGet.mockReturnValue({
         go: vi.fn().mockResolvedValue({ data: inFlightItem }),
       });
@@ -901,19 +901,16 @@ describe('updateContentItemVideo', () => {
         go: vi.fn().mockRejectedValue(conditionalCheckFailedError()),
       });
 
-      const result = await callAs().updateContentItemVideo({
-        ...input,
-        objectKey: pendingObjectKey,
-        title: 'New title',
-      });
-
-      const {
-        mediaConvertJobId: _job,
-        rawObjectETag: _etag,
-        submissionNonce: _nonce,
-        ...expected
-      } = inFlightItem;
-      expect(result).toEqual(expected);
+      await expect(
+        callAs().updateContentItemVideo({
+          ...input,
+          objectKey: pendingObjectKey,
+          title: 'New title',
+        }),
+      ).rejects.toMatchObject({ code: 'CONFLICT' });
+      expect(bestEffortCancelTranscodeJobs).not.toHaveBeenCalled();
+      expect(bestEffortDeleteContentItemVideos).not.toHaveBeenCalled();
+      expect(submitTranscodeJob).not.toHaveBeenCalled();
     });
 
     it('rethrows a transient failure applying the metadata edit instead of swallowing it', async () => {
