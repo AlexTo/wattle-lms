@@ -87,11 +87,18 @@ export const submitTranscodeJob = async ({
       resolveLessonMediaBucketName(),
     ]);
 
-  // MediaConvert derives every output filename in the group from the last
-  // path segment of `Destination` (the "base filename") -- "master" here is
-  // what makes the multivariant playlist come out as master.m3u8, with
-  // renditions as master_1080p.m3u8 etc. alongside it.
-  const destination = `s3://${mediaBucketName}/courses/${courseId}/modules/${moduleId}/lessons/${lessonId}/content-items/${contentItemId}/master`;
+  // Scoped by submissionNonce, not just contentItemId: every submission
+  // attempt (including one a cancellation supersedes) writes to its own
+  // subdirectory, so a canceled job's in-flight writes never share a path
+  // with -- and can never be confused for -- the job that replaces it.
+  // MediaConvert's own job id can't serve this role: it doesn't exist
+  // until after CreateJob returns, by which point Destination has already
+  // had to be specified. MediaConvert derives every output filename in the
+  // group from the last path segment of `Destination` (the "base
+  // filename") -- "master" here is what makes the multivariant playlist
+  // come out as master.m3u8, with renditions as master_1080p.m3u8 etc.
+  // alongside it.
+  const destination = `s3://${mediaBucketName}/courses/${courseId}/modules/${moduleId}/lessons/${lessonId}/content-items/${contentItemId}/${submissionNonce}/master`;
 
   // ClientRequestToken caps out at 64 ASCII characters; hashing keeps this
   // well within that regardless of contentItemId/nonce length.
@@ -107,12 +114,16 @@ export const submitTranscodeJob = async ({
       JobTemplate: jobTemplateArn,
       // rawObjectKey lets the completion callback delete the raw upload
       // without needing to guess its extension back from just the 4 ids.
+      // submissionNonce lets it reconstruct this same job's nonce-scoped
+      // manifest path without needing to parse Destination back out of
+      // the job's own settings.
       UserMetadata: {
         courseId,
         moduleId,
         lessonId,
         contentItemId,
         rawObjectKey: objectKey,
+        submissionNonce,
       },
       Settings: {
         // AudioSelectors/TimecodeSource are per-input, not settable on the

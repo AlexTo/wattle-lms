@@ -49,6 +49,7 @@ const MediaConvertJobStateChangeDetailSchema = z.object({
     lessonId: z.string(),
     contentItemId: z.string(),
     rawObjectKey: z.string(),
+    submissionNonce: z.string(),
   }),
 });
 
@@ -59,13 +60,21 @@ export const transcodeComplete = async (
 
   const detail = MediaConvertJobStateChangeDetailSchema.parse(event.detail);
   const { jobId } = detail;
-  const { courseId, moduleId, lessonId, contentItemId, rawObjectKey } =
-    detail.userMetadata;
+  const {
+    courseId,
+    moduleId,
+    lessonId,
+    contentItemId,
+    rawObjectKey,
+    submissionNonce,
+  } = detail.userMetadata;
 
   const coreTable = await getCoreTable();
 
   if (detail.status === 'COMPLETE') {
-    const manifestKey = `courses/${courseId}/modules/${moduleId}/lessons/${lessonId}/content-items/${contentItemId}/master.m3u8`;
+    // Must match submitTranscodeJob's Destination exactly -- see its
+    // docstring for why submissionNonce, not jobId, scopes this path.
+    const manifestKey = `courses/${courseId}/modules/${moduleId}/lessons/${lessonId}/content-items/${contentItemId}/${submissionNonce}/master.m3u8`;
     try {
       await coreTable.entities.contentItem
         .patch({ courseId, moduleId, lessonId, contentItemId })

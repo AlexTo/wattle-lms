@@ -49,6 +49,7 @@ const CONTENT_ITEM_ID = 'content-item-1';
 const RAW_OBJECT_KEY = `courses/${COURSE_ID}/modules/${MODULE_ID}/lessons/${LESSON_ID}/content-items/${CONTENT_ITEM_ID}.mp4`;
 const UPLOAD_BUCKET_NAME = 'lesson-media-upload-bucket';
 const JOB_ID = 'job-1';
+const SUBMISSION_NONCE = 'nonce-1';
 
 const buildEvent = (status: string, jobId: string = JOB_ID) => ({
   version: '0',
@@ -68,6 +69,7 @@ const buildEvent = (status: string, jobId: string = JOB_ID) => ({
       lessonId: LESSON_ID,
       contentItemId: CONTENT_ITEM_ID,
       rawObjectKey: RAW_OBJECT_KEY,
+      submissionNonce: SUBMISSION_NONCE,
     },
   },
 });
@@ -95,7 +97,29 @@ describe('transcodeComplete', () => {
     });
     expect(contentItemPatchSet).toHaveBeenCalledWith({
       status: 'ready',
-      s3Key: `courses/${COURSE_ID}/modules/${MODULE_ID}/lessons/${LESSON_ID}/content-items/${CONTENT_ITEM_ID}/master.m3u8`,
+      s3Key: `courses/${COURSE_ID}/modules/${MODULE_ID}/lessons/${LESSON_ID}/content-items/${CONTENT_ITEM_ID}/${SUBMISSION_NONCE}/master.m3u8`,
+    });
+  });
+
+  // Must match submitTranscodeJob's Destination exactly, or a genuinely
+  // completed job's output would never be found at the s3Key this stamps.
+  it('scopes the repointed s3Key by the job own submissionNonce', async () => {
+    const buildEventWithNonce = (nonce: string) => ({
+      ...buildEvent('COMPLETE'),
+      detail: {
+        ...buildEvent('COMPLETE').detail,
+        userMetadata: {
+          ...buildEvent('COMPLETE').detail.userMetadata,
+          submissionNonce: nonce,
+        },
+      },
+    });
+
+    await transcodeComplete(buildEventWithNonce('a-different-nonce') as any);
+
+    expect(contentItemPatchSet).toHaveBeenCalledWith({
+      status: 'ready',
+      s3Key: `courses/${COURSE_ID}/modules/${MODULE_ID}/lessons/${LESSON_ID}/content-items/${CONTENT_ITEM_ID}/a-different-nonce/master.m3u8`,
     });
   });
 

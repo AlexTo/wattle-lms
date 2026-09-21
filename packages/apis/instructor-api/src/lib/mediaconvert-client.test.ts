@@ -91,6 +91,7 @@ describe('submitTranscodeJob', () => {
           lessonId: LESSON_ID,
           contentItemId: CONTENT_ITEM_ID,
           rawObjectKey: OBJECT_KEY,
+          submissionNonce: SUBMISSION_NONCE,
         },
       }),
     );
@@ -108,8 +109,48 @@ describe('submitTranscodeJob', () => {
       command.Settings.OutputGroups[0].OutputGroupSettings.HlsGroupSettings
         .Destination,
     ).toBe(
-      `s3://${MEDIA_BUCKET_NAME}/courses/${COURSE_ID}/modules/${MODULE_ID}/lessons/${LESSON_ID}/content-items/${CONTENT_ITEM_ID}/master`,
+      `s3://${MEDIA_BUCKET_NAME}/courses/${COURSE_ID}/modules/${MODULE_ID}/lessons/${LESSON_ID}/content-items/${CONTENT_ITEM_ID}/${SUBMISSION_NONCE}/master`,
     );
+  });
+
+  // Two submissions for the same content item -- e.g. a canceled job and
+  // the replacement that superseded it -- must never write to the same S3
+  // destination, or one job's output can end up mixed in with the
+  // other's leftovers. Scoping by submissionNonce (not just
+  // contentItemId) guarantees that: it's the one thing durably decided
+  // before either job exists, and it's always different across two
+  // genuinely different submissions.
+  it('scopes the S3 destination by submissionNonce, not just contentItemId', async () => {
+    await submitTranscodeJob({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: LESSON_ID,
+      contentItemId: CONTENT_ITEM_ID,
+      objectKey: OBJECT_KEY,
+      submissionNonce: SUBMISSION_NONCE,
+    });
+    const [firstCall] = mediaConvertSend.mock.calls[0]!;
+
+    mediaConvertSend.mockClear();
+    await submitTranscodeJob({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: LESSON_ID,
+      contentItemId: CONTENT_ITEM_ID,
+      objectKey: OBJECT_KEY,
+      submissionNonce: 'a-different-nonce',
+    });
+    const [secondCall] = mediaConvertSend.mock.calls[0]!;
+
+    const firstDestination =
+      firstCall.Settings.OutputGroups[0].OutputGroupSettings.HlsGroupSettings
+        .Destination;
+    const secondDestination =
+      secondCall.Settings.OutputGroups[0].OutputGroupSettings.HlsGroupSettings
+        .Destination;
+    expect(firstDestination).toContain(SUBMISSION_NONCE);
+    expect(secondDestination).toContain('a-different-nonce');
+    expect(firstDestination).not.toBe(secondDestination);
   });
 
   // A retry of the same tRPC mutation (e.g. after a client-side timeout,
