@@ -279,19 +279,38 @@ export class ApplicationStack extends Stack {
     lessonMediaBucket.grantReadSigningKey(
       instructorApiIntegrations['contentItem.createVideoUrl'].handler,
     );
+    // bestEffortDeleteContentItemVideos lists a ready item's whole
+    // .../content-items/<id>/ prefix (manifest + segments) before batch-
+    // deleting it, so every handler that can reach that best-effort cleanup
+    // for a ready video needs read (for ListObjectsV2) alongside delete --
+    // delete alone can't list, so without this the list throws AccessDenied,
+    // gets swallowed by the best-effort error handling, and the old HLS
+    // output is silently orphaned forever instead of cleaned up.
+    lessonMediaBucket.grantRead(
+      instructorApiIntegrations['contentItem.delete'].handler,
+    );
     lessonMediaBucket.grantDelete(
       instructorApiIntegrations['contentItem.delete'].handler,
     );
     // updateContentItemVideo best-effort-deletes the old S3 object when a
     // video is replaced with a new file. updateContentItemText never touches
     // S3, so it gets no bucket permissions.
+    lessonMediaBucket.grantRead(
+      instructorApiIntegrations['contentItem.updateVideo'].handler,
+    );
     lessonMediaBucket.grantDelete(
       instructorApiIntegrations['contentItem.updateVideo'].handler,
     );
     // Deleting a lesson or module cascades to its content items, best-
     // effort-deleting each one's underlying S3 object.
+    lessonMediaBucket.grantRead(
+      instructorApiIntegrations['lesson.delete'].handler,
+    );
     lessonMediaBucket.grantDelete(
       instructorApiIntegrations['lesson.delete'].handler,
+    );
+    lessonMediaBucket.grantRead(
+      instructorApiIntegrations['module.delete'].handler,
     );
     lessonMediaBucket.grantDelete(
       instructorApiIntegrations['module.delete'].handler,

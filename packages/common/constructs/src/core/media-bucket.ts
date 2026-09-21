@@ -219,6 +219,14 @@ export class MediaBucket extends Construct {
     return this.signingKeyPairSecret.grantReadSecret(grantee);
   }
 
+  // Direct-IAM read, not the CloudFront-signed-URL path content is actually
+  // served over -- for a Lambda that needs to enumerate this bucket's own
+  // objects itself (e.g. listing a content item's HLS output before
+  // deleting it), not for anything that ends up in front of a viewer.
+  public grantRead(grantee: IGrantable): Grant {
+    return this.bucket.grantRead(grantee);
+  }
+
   public grantDelete(grantee: IGrantable): Grant {
     return this.bucket.grantDelete(grantee);
   }
