@@ -48,16 +48,22 @@ const resolveVideoTranscodePipelineConfig =
  * transcode-complete.ts uses it to ignore a stale completion event from a
  * job a later replacement has since superseded.
  *
- * `objectETag` (the raw upload's S3 ETag, a content fingerprint) becomes
- * MediaConvert's `ClientRequestToken`: if a caller retries the same tRPC
- * mutation (e.g. after a client-side timeout, even though the original
- * call actually succeeded), CreateJob recognizes the token it already
- * handled within the last minute and returns the existing job instead of
- * starting a redundant one that immediately gets canceled and resubmitted.
- * `objectKey` alone can't serve as that token -- it's deterministic from
- * `contentItemId` + extension, so a genuinely different replacement upload
- * with the same extension would collide on it; the ETag changes whenever
- * the object's content actually does.
+ * `submissionNonce` becomes MediaConvert's `ClientRequestToken`. It's the
+ * caller's own durable record of "is this the same submission attempt as
+ * before" (see content-item-video.ts), not a fingerprint of the uploaded
+ * file -- a caller retrying this exact mutation after a crash (e.g. the
+ * process died after this function returned but before the caller could
+ * stamp the job id onto its record) passes back the *same* nonce it
+ * already persisted, so CreateJob recognizes the token it already handled
+ * and returns the existing job instead of starting a redundant one. A
+ * genuinely new submission always gets a fresh nonce from the caller, so
+ * it can never collide with anything, no matter how much time has passed
+ * or how identical the uploaded content happens to be to something past.
+ * (An earlier version derived this token from the raw upload's S3 ETag
+ * instead -- abandoned because MediaConvert's own token-reuse window
+ * turned out to be far less bounded in practice than documented, so a
+ * coincidental content match could dedupe onto an unrelated, long-dead
+ * job. The nonce sidesteps that entirely by never depending on content.)
  */
 export const submitTranscodeJob = async ({
   courseId,
@@ -65,14 +71,14 @@ export const submitTranscodeJob = async ({
   lessonId,
   contentItemId,
   objectKey,
-  objectETag,
+  submissionNonce,
 }: {
   courseId: string;
   moduleId: string;
   lessonId: string;
   contentItemId: string;
   objectKey: string;
-  objectETag: string;
+  submissionNonce: string;
 }): Promise<string> => {
   const [{ roleArn, jobTemplateArn }, uploadBucketName, mediaBucketName] =
     await Promise.all([
@@ -88,9 +94,9 @@ export const submitTranscodeJob = async ({
   const destination = `s3://${mediaBucketName}/courses/${courseId}/modules/${moduleId}/lessons/${lessonId}/content-items/${contentItemId}/master`;
 
   // ClientRequestToken caps out at 64 ASCII characters; hashing keeps this
-  // well within that regardless of contentItemId/ETag length.
+  // well within that regardless of contentItemId/nonce length.
   const clientRequestToken = createHash('sha256')
-    .update(`${contentItemId}:${objectETag}`)
+    .update(`${contentItemId}:${submissionNonce}`)
     .digest('hex')
     .slice(0, 32);
 

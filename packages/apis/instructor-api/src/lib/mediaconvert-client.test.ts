@@ -47,7 +47,7 @@ const MODULE_ID = 'module-1';
 const LESSON_ID = 'lesson-1';
 const CONTENT_ITEM_ID = 'content-item-1';
 const OBJECT_KEY = `courses/${COURSE_ID}/modules/${MODULE_ID}/lessons/${LESSON_ID}/content-items/${CONTENT_ITEM_ID}.mp4`;
-const OBJECT_ETAG = '"etag-1"';
+const SUBMISSION_NONCE = 'nonce-1';
 const UPLOAD_BUCKET_NAME = 'lesson-media-upload-bucket';
 const MEDIA_BUCKET_NAME = 'lesson-media-bucket';
 const ROLE_ARN = 'arn:aws:iam::123456789012:role/MediaConvert';
@@ -73,7 +73,7 @@ describe('submitTranscodeJob', () => {
       lessonId: LESSON_ID,
       contentItemId: CONTENT_ITEM_ID,
       objectKey: OBJECT_KEY,
-      objectETag: OBJECT_ETAG,
+      submissionNonce: SUBMISSION_NONCE,
     });
 
     expect(jobId).toBe('job-1');
@@ -113,18 +113,18 @@ describe('submitTranscodeJob', () => {
   });
 
   // A retry of the same tRPC mutation (e.g. after a client-side timeout,
-  // even though the original call actually succeeded) submits the exact
-  // same contentItemId + objectETag -- CreateJob must see the same
-  // ClientRequestToken both times so MediaConvert dedupes it, rather than
-  // starting a redundant job.
-  it('derives a stable ClientRequestToken from contentItemId and objectETag', async () => {
+  // even though the original call actually succeeded) passes back the
+  // exact same submissionNonce its record already has recorded -- CreateJob
+  // must see the same ClientRequestToken both times so MediaConvert dedupes
+  // it, rather than starting a redundant job.
+  it('derives a stable ClientRequestToken from contentItemId and submissionNonce', async () => {
     await submitTranscodeJob({
       courseId: COURSE_ID,
       moduleId: MODULE_ID,
       lessonId: LESSON_ID,
       contentItemId: CONTENT_ITEM_ID,
       objectKey: OBJECT_KEY,
-      objectETag: OBJECT_ETAG,
+      submissionNonce: SUBMISSION_NONCE,
     });
     const [firstCall] = mediaConvertSend.mock.calls[0]!;
 
@@ -135,7 +135,7 @@ describe('submitTranscodeJob', () => {
       lessonId: LESSON_ID,
       contentItemId: CONTENT_ITEM_ID,
       objectKey: OBJECT_KEY,
-      objectETag: OBJECT_ETAG,
+      submissionNonce: SUBMISSION_NONCE,
     });
     const [secondCall] = mediaConvertSend.mock.calls[0]!;
 
@@ -143,14 +143,19 @@ describe('submitTranscodeJob', () => {
     expect(firstCall.ClientRequestToken).toBe(secondCall.ClientRequestToken);
   });
 
-  it('derives a different ClientRequestToken for a different objectETag', async () => {
+  // A genuinely new submission always gets a fresh nonce from the caller
+  // (see content-item-video.ts) -- this just confirms the token actually
+  // changes when the nonce does, so two unrelated submissions can never
+  // collide with each other no matter how identical their uploaded content
+  // happens to be.
+  it('derives a different ClientRequestToken for a different submissionNonce', async () => {
     await submitTranscodeJob({
       courseId: COURSE_ID,
       moduleId: MODULE_ID,
       lessonId: LESSON_ID,
       contentItemId: CONTENT_ITEM_ID,
       objectKey: OBJECT_KEY,
-      objectETag: OBJECT_ETAG,
+      submissionNonce: SUBMISSION_NONCE,
     });
     const [firstCall] = mediaConvertSend.mock.calls[0]!;
 
@@ -161,7 +166,7 @@ describe('submitTranscodeJob', () => {
       lessonId: LESSON_ID,
       contentItemId: CONTENT_ITEM_ID,
       objectKey: OBJECT_KEY,
-      objectETag: '"a-different-etag"',
+      submissionNonce: 'a-different-nonce',
     });
     const [secondCall] = mediaConvertSend.mock.calls[0]!;
 
@@ -182,7 +187,7 @@ describe('submitTranscodeJob', () => {
         lessonId: LESSON_ID,
         contentItemId: CONTENT_ITEM_ID,
         objectKey: OBJECT_KEY,
-        objectETag: OBJECT_ETAG,
+        submissionNonce: SUBMISSION_NONCE,
       }),
     ).rejects.toThrow();
     expect(mediaConvertSend).not.toHaveBeenCalled();
@@ -200,7 +205,7 @@ describe('submitTranscodeJob', () => {
         lessonId: LESSON_ID,
         contentItemId: CONTENT_ITEM_ID,
         objectKey: OBJECT_KEY,
-        objectETag: OBJECT_ETAG,
+        submissionNonce: SUBMISSION_NONCE,
       }),
     ).rejects.toThrow('MediaConvert is unavailable');
   });
@@ -215,7 +220,7 @@ describe('submitTranscodeJob', () => {
         lessonId: LESSON_ID,
         contentItemId: CONTENT_ITEM_ID,
         objectKey: OBJECT_KEY,
-        objectETag: OBJECT_ETAG,
+        submissionNonce: SUBMISSION_NONCE,
       }),
     ).rejects.toThrow('MediaConvert CreateJob response is missing Job.Id');
   });

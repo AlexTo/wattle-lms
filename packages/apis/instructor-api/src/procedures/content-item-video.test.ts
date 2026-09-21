@@ -449,9 +449,21 @@ describe('createContentItemVideo', () => {
       lessonId: LESSON_ID,
       contentItemId: CONTENT_ITEM_ID,
       objectKey: validInput.objectKey,
-      objectETag: OBJECT_ETAG,
+      submissionNonce: expect.any(String),
     });
     expect(callOrder).toEqual(['create', 'submitTranscodeJob', 'patchJobId']);
+  });
+
+  // The nonce is what submitTranscodeJob's ClientRequestToken is derived
+  // from -- it has to be the exact same value the record itself is
+  // stamped with, or a crashed retry could never reconnect to this job.
+  it('stamps the record with the same nonce passed to submitTranscodeJob', async () => {
+    await callAs().createContentItemVideo(validInput);
+
+    const [createArgs] = contentItemCreate.mock.calls[0]!;
+    const [submitArgs] = submitTranscodeJob.mock.calls[0]!;
+    expect(createArgs.submissionNonce).toBeTruthy();
+    expect(createArgs.submissionNonce).toBe(submitArgs.submissionNonce);
   });
 
   it('stamps the submitted job id onto the record so a later replacement can be told apart', async () => {
@@ -659,6 +671,7 @@ describe('updateContentItemVideo', () => {
       s3Key: pendingObjectKey,
       mediaConvertJobId: 'job-1',
       rawObjectETag: OBJECT_ETAG,
+      submissionNonce: 'existing-nonce',
     };
 
     it('reports the current state back unchanged, touching nothing', async () => {
@@ -671,11 +684,12 @@ describe('updateContentItemVideo', () => {
         objectKey: pendingObjectKey,
       });
 
-      // mediaConvertJobId/rawObjectETag are internal-only and stripped by
-      // the tRPC output schema, same as any other response.
+      // mediaConvertJobId/rawObjectETag/submissionNonce are internal-only
+      // and stripped by the tRPC output schema, same as any other response.
       const {
         mediaConvertJobId: _job,
         rawObjectETag: _etag,
+        submissionNonce: _nonce,
         ...expected
       } = inFlightItem;
       expect(result).toEqual(expected);
@@ -748,6 +762,111 @@ describe('updateContentItemVideo', () => {
     });
   });
 
+  // The nonce feeds submitTranscodeJob's ClientRequestToken -- reusing the
+  // record's own nonce (rather than a fresh one) is what lets a crashed
+  // retry reconnect to whatever job that attempt already created, instead
+  // of MediaConvert being asked to dedupe on a content fingerprint (see
+  // mediaconvert-client.ts's docstring for why that was abandoned).
+  describe('submissionNonce', () => {
+    const pendingObjectKey = `${OBJECT_KEY_PREFIX}some-other-fresh-id.mp4`;
+
+    it('reuses the existing nonce when resuming a submission that never got its job id stamped', async () => {
+      contentItemGet.mockReturnValue({
+        go: vi.fn().mockResolvedValue({
+          data: {
+            ...contentItem,
+            status: 'pending' as const,
+            s3Key: pendingObjectKey,
+            mediaConvertJobId: undefined,
+            submissionNonce: 'crashed-attempt-nonce',
+          },
+        }),
+      });
+
+      await callAs().updateContentItemVideo({
+        ...input,
+        objectKey: pendingObjectKey,
+      });
+
+      expect(contentItemPatchSet).toHaveBeenCalledWith(
+        expect.objectContaining({ submissionNonce: 'crashed-attempt-nonce' }),
+      );
+      expect(submitTranscodeJob).toHaveBeenCalledWith(
+        expect.objectContaining({
+          submissionNonce: 'crashed-attempt-nonce',
+        }),
+      );
+    });
+
+    it('mints a fresh nonce for a genuinely new replacement (different objectKey)', async () => {
+      contentItemGet.mockReturnValue({
+        go: vi.fn().mockResolvedValue({
+          data: {
+            ...contentItem,
+            status: 'pending' as const,
+            s3Key: `${OBJECT_KEY_PREFIX}some-unrelated-id.mp4`,
+            mediaConvertJobId: undefined,
+            submissionNonce: 'unrelated-attempt-nonce',
+          },
+        }),
+      });
+
+      await callAs().updateContentItemVideo({
+        ...input,
+        objectKey: pendingObjectKey,
+      });
+
+      const [patchArgs] = contentItemPatchSet.mock.calls[0]!;
+      const [submitArgs] = submitTranscodeJob.mock.calls[0]!;
+      expect(patchArgs.submissionNonce).not.toBe('unrelated-attempt-nonce');
+      expect(submitArgs.submissionNonce).toBe(patchArgs.submissionNonce);
+    });
+
+    // A prior submission that already recorded a job id fully completed
+    // its write cycle -- reusing its nonce here would let MediaConvert
+    // dedupe onto that (soon to be canceled) job instead of the new
+    // content this call is actually replacing it with.
+    it('mints a fresh nonce when the content changed even though the objectKey and job id already recorded', async () => {
+      contentItemGet.mockReturnValue({
+        go: vi.fn().mockResolvedValue({
+          data: {
+            ...contentItem,
+            status: 'pending' as const,
+            s3Key: pendingObjectKey,
+            mediaConvertJobId: 'job-1',
+            rawObjectETag: '"a-different-etag"',
+            submissionNonce: 'previous-attempt-nonce',
+          },
+        }),
+      });
+
+      await callAs().updateContentItemVideo({
+        ...input,
+        objectKey: pendingObjectKey,
+      });
+
+      const [patchArgs] = contentItemPatchSet.mock.calls[0]!;
+      expect(patchArgs.submissionNonce).not.toBe('previous-attempt-nonce');
+      expect(bestEffortCancelTranscodeJobs).toHaveBeenCalled();
+    });
+
+    it('mints a fresh nonce for a brand new video with no prior attempt', async () => {
+      contentItemGet.mockReturnValue({
+        go: vi.fn().mockResolvedValue({
+          data: { ...contentItem, status: 'ready' as const },
+        }),
+      });
+
+      await callAs().updateContentItemVideo({
+        ...input,
+        objectKey: pendingObjectKey,
+      });
+
+      const [patchArgs] = contentItemPatchSet.mock.calls[0]!;
+      expect(patchArgs.submissionNonce).toBeTruthy();
+    });
+  });
+
   // Invariant: replacing a video's underlying file must not leave the old
   // object in the bucket, or the lesson media bucket accumulates orphans
   // every time an instructor swaps a video out. While
@@ -767,6 +886,7 @@ describe('updateContentItemVideo', () => {
     expect(contentItemPatchSet).toHaveBeenCalledWith({
       s3Key: newObjectKey,
       status: 'pending',
+      submissionNonce: expect.any(String),
       mimeType: 'video/webm',
     });
     expect(bestEffortDeleteContentItemVideos).toHaveBeenCalledWith(
@@ -812,7 +932,7 @@ describe('updateContentItemVideo', () => {
       lessonId: LESSON_ID,
       contentItemId: CONTENT_ITEM_ID,
       objectKey: newObjectKey,
-      objectETag: OBJECT_ETAG,
+      submissionNonce: expect.any(String),
     });
     expect(callOrder).toEqual(['patch', 'submitTranscodeJob', 'patchJobId']);
   });

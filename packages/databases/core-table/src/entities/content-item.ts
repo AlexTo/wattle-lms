@@ -83,6 +83,18 @@ export const createContentItemEntity = async () =>
         rawObjectETag: {
           type: 'string',
         },
+        // A random value minted for a genuinely new video submission
+        // (create, or a replace that isn't resuming one already in
+        // flight), and reused by a retry that finds this exact target
+        // still pending with no job id recorded yet (the record's own
+        // status/s3Key already prove it's the same interrupted attempt).
+        // Feeds submitTranscodeJob's ClientRequestToken instead of the
+        // raw upload's content -- unlike content, it can never coincide
+        // with an unrelated past submission. Never exposed in any API
+        // output schema.
+        submissionNonce: {
+          type: 'string',
+        },
         // Tiptap's JSON document, stored as a string. Only present for
         // type: 'text'.
         body: {

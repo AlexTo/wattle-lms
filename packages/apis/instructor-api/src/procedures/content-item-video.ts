@@ -2,6 +2,7 @@
  * Copyright Wattle LMS Contributors. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
+import { randomUUID } from 'node:crypto';
 import { extname } from 'node:path';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -177,6 +178,11 @@ export const createContentItemVideo = courseProcedure
     const order =
       contentItems.reduce((max, item) => Math.max(max, item.order), 0) + 1;
 
+    // Feeds submitTranscodeJob's ClientRequestToken -- see its docstring
+    // for why a nonce, not the upload's own content, is what that token is
+    // derived from.
+    const submissionNonce = randomUUID();
+
     const { data: contentItem } = await coreTable.entities.contentItem
       .create({
         contentItemId,
@@ -191,6 +197,7 @@ export const createContentItemVideo = courseProcedure
         mimeType,
         durationSeconds,
         order,
+        submissionNonce,
       })
       .go();
 
@@ -204,7 +211,7 @@ export const createContentItemVideo = courseProcedure
         lessonId,
         contentItemId,
         objectKey,
-        objectETag,
+        submissionNonce,
       });
 
       // Lets transcode-complete.ts recognize a stale completion event from
@@ -298,6 +305,7 @@ export const updateContentItemVideo = courseProcedure
     }
 
     let objectETag: string | undefined;
+    let submissionNonce: string | undefined;
     if (objectKey !== undefined) {
       objectETag = await getVideoUploadETag(objectKey);
       if (!objectETag) {
@@ -325,6 +333,25 @@ export const updateContentItemVideo = courseProcedure
       ) {
         return asContentItemOutput<IUpdateContentItemVideoOutput>(existing);
       }
+
+      // A crashed retry (submitTranscodeJob succeeded, but the process
+      // died before the follow-up patch below could stamp mediaConvertJobId
+      // onto the record) targets the exact same still-pending replacement
+      // this record already has in flight, just without a job id recorded
+      // yet -- status/s3Key already prove that, durably, regardless of how
+      // long ago the crash happened. Reusing its nonce lets
+      // submitTranscodeJob's ClientRequestToken reconnect to whatever job
+      // that attempt already created instead of starting a duplicate. Any
+      // other case -- the content actually changed, the key differs, or
+      // the item wasn't pending at all -- is a genuinely new submission
+      // and gets a fresh nonce that can never collide with anything.
+      submissionNonce =
+        existing.status === 'pending' &&
+        existing.s3Key === objectKey &&
+        existing.mediaConvertJobId === undefined &&
+        existing.submissionNonce
+          ? existing.submissionNonce
+          : randomUUID();
     }
 
     // A replacement while the previous upload is still transcoding would
@@ -348,6 +375,7 @@ export const updateContentItemVideo = courseProcedure
             // through it again before it's playable.
             s3Key: objectKey,
             status: 'pending',
+            submissionNonce,
             ...(mimeType !== undefined && { mimeType }),
             ...(durationSeconds !== undefined && { durationSeconds }),
           })
@@ -400,7 +428,7 @@ export const updateContentItemVideo = courseProcedure
           lessonId,
           contentItemId,
           objectKey,
-          objectETag: objectETag!,
+          submissionNonce: submissionNonce!,
         });
 
         // Lets transcode-complete.ts recognize a stale completion event
