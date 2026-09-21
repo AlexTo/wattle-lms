@@ -1064,6 +1064,40 @@ describe('updateContentItemVideo', () => {
     );
   });
 
+  // Invariant: cancellation schedules cleanup for the previous job's
+  // output regardless of whether the cancel itself succeeds -- so it must
+  // only run once this request's own conditional patch has proven its
+  // view of the record is still current. Calling it beforehand risks
+  // scheduling deletion of content that turns out to still be the
+  // record's own current, legitimate output (e.g. the previous job
+  // finished for real in the window between this request's initial read
+  // and now, which the patch's own condition would catch and reject as
+  // CONFLICT -- but only if cancellation hasn't already run by then).
+  it('cancels the previous job only after the replacement patch has landed', async () => {
+    const newObjectKey = `${OBJECT_KEY_PREFIX}some-other-fresh-id.mp4`;
+    const callOrder: string[] = [];
+    contentItemPatchSet.mockReturnValueOnce({
+      remove: () => ({
+        where: () => ({
+          go: vi.fn().mockImplementation(async () => {
+            callOrder.push('patch');
+            return { data: contentItem };
+          }),
+        }),
+      }),
+    });
+    bestEffortCancelTranscodeJobs.mockImplementation(async () => {
+      callOrder.push('cancel');
+    });
+
+    await callAs().updateContentItemVideo({
+      ...input,
+      objectKey: newObjectKey,
+    });
+
+    expect(callOrder).toEqual(['patch', 'cancel']);
+  });
+
   // Invariant: two updateContentItemVideo replace calls for the same
   // content item racing each other would otherwise both submit a job
   // writing to the same S3 destination (#123). Conditioning the patch on
@@ -1080,6 +1114,24 @@ describe('updateContentItemVideo', () => {
       callAs().updateContentItemVideo({ ...input, objectKey: newObjectKey }),
     ).rejects.toMatchObject({ code: 'CONFLICT' });
     expect(submitTranscodeJob).not.toHaveBeenCalled();
+  });
+
+  // Invariant: a rejected replacement must leave the previous job (and
+  // whatever content it's currently pointing at) completely untouched --
+  // no cancellation attempt, and critically no cleanup scheduled for it,
+  // since a CONFLICT here specifically means the record's real current
+  // state no longer matches what this request read, so that job's output
+  // may well still be the content item's own current, legitimate content.
+  it('does not cancel the previous job when the replacement patch is rejected as a conflict', async () => {
+    const newObjectKey = `${OBJECT_KEY_PREFIX}some-other-fresh-id.mp4`;
+    contentItemPatchWhere.mockReturnValue({
+      go: vi.fn().mockRejectedValue(new Error('ConditionalCheckFailed')),
+    });
+
+    await expect(
+      callAs().updateContentItemVideo({ ...input, objectKey: newObjectKey }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+    expect(bestEffortCancelTranscodeJobs).not.toHaveBeenCalled();
   });
 
   it('conditions the patch on the status and s3Key read at the start of the call', async () => {

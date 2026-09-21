@@ -377,14 +377,6 @@ export const updateContentItemVideo = courseProcedure
           : randomUUID();
     }
 
-    // A replacement while the previous upload is still transcoding would
-    // otherwise leave that job running against the raw object the cleanup
-    // below is about to delete, and racing the new job to write the same
-    // S3 destination (#123) -- cancel it first so it stops doing either.
-    if (objectKey !== undefined) {
-      await bestEffortCancelTranscodeJobs(ctx.logger, [existing]);
-    }
-
     let contentItem;
     if (objectKey !== undefined) {
       try {
@@ -458,6 +450,19 @@ export const updateContentItemVideo = courseProcedure
     }
 
     if (objectKey !== undefined) {
+      // Only reachable once the patch above has actually landed -- this
+      // request's view of the record it just replaced is now provably
+      // current, not stale. Canceling (and scheduling cleanup for) the
+      // previous job here, rather than before the patch, matters
+      // specifically when that job already finished for real in the
+      // window between this request's initial .get() and now: the patch's
+      // own status/s3Key/submissionNonce condition would already have
+      // caught that (the row no longer matches what this request read)
+      // and thrown CONFLICT above, so a job scheduleTranscodeCleanup would
+      // otherwise queue for deletion is never a job whose output is still
+      // the record's own current, legitimate content.
+      await bestEffortCancelTranscodeJobs(ctx.logger, [existing]);
+
       // Best-effort: the patch above already orphaned the old S3 object,
       // regardless of whether the new transcode job below ever
       // successfully starts, so this doesn't wait on that outcome.
