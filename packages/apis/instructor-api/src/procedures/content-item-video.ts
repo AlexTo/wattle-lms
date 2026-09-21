@@ -92,8 +92,10 @@ export const createContentItemVideoUploadUrl = courseProcedure
 
     // When replacing an existing video, reuse its id in the object key
     // instead of minting a fresh one, so the key's id segment always
-    // matches a real content item -- the transcode-trigger Lambda parses
-    // this id straight out of the S3 key with no DynamoDB lookup.
+    // matches a real content item -- createContentItemVideo/
+    // updateContentItemVideo validate the key against the ids they
+    // already have from context, rather than trusting anything parsed
+    // back out of it.
     if (input.contentItemId !== undefined) {
       const { data: existing } = await coreTable.entities.contentItem
         .get({
@@ -109,7 +111,18 @@ export const createContentItemVideoUploadUrl = courseProcedure
     }
 
     const contentItemId = input.contentItemId ?? uuidv7();
-    const objectKey = `courses/${courseId}/modules/${moduleId}/lessons/${lessonId}/content-items/${contentItemId}.${ext}`;
+    // A fresh id per upload attempt, always -- unlike contentItemId (which
+    // a replace deliberately reuses), this must never repeat, or two
+    // different uploads (e.g. successive replacements of the same video)
+    // land at the same S3 key and can overwrite or delete each other:
+    // DynamoDB's own conditions (see updateContentItemVideo) can't protect
+    // a plain S3 object from a second, unrelated write to the same path.
+    // Mirrors submissionNonce scoping the transcode *output* the same way
+    // (see submitTranscodeJob's Destination) -- this scopes the raw
+    // *input* identically, just one level shallower (a single object, not
+    // a directory of segments).
+    const uploadId = randomUUID();
+    const objectKey = `courses/${courseId}/modules/${moduleId}/lessons/${lessonId}/content-items/${contentItemId}/${uploadId}.${ext}`;
 
     const uploadUrl = await getSignedUrl(
       getS3Client(),

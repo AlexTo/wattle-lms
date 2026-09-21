@@ -324,11 +324,11 @@ describe('createContentItemVideoUploadUrl', () => {
     expect(result.contentItemId).toBeTruthy();
   });
 
-  // Invariant: the transcode pipeline parses courseId/moduleId/lessonId/
-  // contentItemId straight out of the S3 key, with no DynamoDB lookup. A
-  // replacement upload must reuse the existing content item's real id in
-  // the key instead of minting an unrelated one, or the pipeline can never
-  // find the record to update once transcoding finishes.
+  // Invariant: a replacement upload must reuse the existing content item's
+  // real id in the key instead of minting an unrelated one -- the id
+  // segment is what createContentItemVideo/updateContentItemVideo validate
+  // the key against, and a mismatch there means a replacement can never be
+  // recorded against the right content item.
   it('reuses the given contentItemId in the object key when replacing an existing video', async () => {
     const result = await callAs().createContentItemVideoUploadUrl({
       courseId: COURSE_ID,
@@ -345,9 +345,34 @@ describe('createContentItemVideoUploadUrl', () => {
       contentItemId: CONTENT_ITEM_ID,
     });
     expect(result.contentItemId).toBe(CONTENT_ITEM_ID);
-    expect(result.objectKey).toBe(
-      `${OBJECT_KEY_PREFIX}${CONTENT_ITEM_ID}.webm`,
-    );
+    expect(
+      result.objectKey.startsWith(`${OBJECT_KEY_PREFIX}${CONTENT_ITEM_ID}/`),
+    ).toBe(true);
+    expect(result.objectKey.endsWith('.webm')).toBe(true);
+  });
+
+  // Invariant: two uploads for the same content item (e.g. successive
+  // replacements) must never land at the same S3 key -- DynamoDB's own
+  // conditions can't protect a plain S3 object from a second, unrelated
+  // write to the same path (see updateContentItemVideo's nonce-conditioned
+  // patches), so uniqueness has to come from the key itself.
+  it('mints a different object key for each upload, even for the same content item', async () => {
+    const first = await callAs().createContentItemVideoUploadUrl({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: LESSON_ID,
+      fileName: 'intro.mp4',
+      contentItemId: CONTENT_ITEM_ID,
+    });
+    const second = await callAs().createContentItemVideoUploadUrl({
+      courseId: COURSE_ID,
+      moduleId: MODULE_ID,
+      lessonId: LESSON_ID,
+      fileName: 'intro.mp4',
+      contentItemId: CONTENT_ITEM_ID,
+    });
+
+    expect(first.objectKey).not.toBe(second.objectKey);
   });
 
   it('throws NOT_FOUND when the given contentItemId does not exist', async () => {
