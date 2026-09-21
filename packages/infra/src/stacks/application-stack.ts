@@ -467,6 +467,7 @@ export class ApplicationStack extends Stack {
     instructorApiIntegrations: InstructorApiIntegrations,
   ) {
     return [
+      instructorApiIntegrations['contentItem.createVideo'].handler,
       instructorApiIntegrations['contentItem.updateVideo'].handler,
       instructorApiIntegrations['contentItem.delete'].handler,
       instructorApiIntegrations['lesson.delete'].handler,
