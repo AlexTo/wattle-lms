@@ -534,6 +534,23 @@ describe('createContentItemVideo', () => {
     );
   });
 
+  // Invariant: CreateJob succeeding means a real, billable job now exists
+  // regardless of whether this stamp lands -- rolling back (deleting the
+  // record) here would orphan it, since the completion event would then
+  // find no record to patch. submissionNonce is already durable from the
+  // .create() above, so a later retry's crash-gap check reconnects to
+  // this exact job instead.
+  it('does not delete the record when only the job-id stamp fails after a successful submission', async () => {
+    contentItemPatchSet.mockReturnValueOnce({
+      go: vi.fn().mockRejectedValue(new Error('DynamoDB is unavailable')),
+    });
+
+    const result = await callAs().createContentItemVideo(validInput);
+
+    expect(result).toMatchObject({ contentItemId: CONTENT_ITEM_ID });
+    expect(contentItemDelete).not.toHaveBeenCalled();
+  });
+
   it('appends after the highest existing order', async () => {
     contentItemQueryPrimary.mockReturnValue({
       go: vi.fn().mockResolvedValue({
@@ -976,6 +993,35 @@ describe('updateContentItemVideo', () => {
     ).rejects.toThrow('MediaConvert is unavailable');
 
     expect(contentItemPatchSet).toHaveBeenCalledWith({ status: 'failed' });
+  });
+
+  // Invariant: CreateJob succeeding means a real, billable job now exists
+  // regardless of whether this stamp lands -- marking the record failed
+  // here would orphan it. submissionNonce is already durable from the
+  // first patch, so a later retry's crash-gap check reconnects to this
+  // exact job instead, and transcode-complete.ts's own nonce-conditioned
+  // patch reconciles status once the job actually finishes.
+  it('does not mark the content item failed when only the job-id stamp fails after a successful replace submission', async () => {
+    const newObjectKey = `${OBJECT_KEY_PREFIX}some-other-fresh-id.mp4`;
+    contentItemPatchSet
+      .mockReturnValueOnce({
+        remove: () => ({
+          where: () => ({
+            go: vi.fn().mockResolvedValue({ data: contentItem }),
+          }),
+        }),
+      })
+      .mockReturnValueOnce({
+        go: vi.fn().mockRejectedValue(new Error('DynamoDB is unavailable')),
+      });
+
+    const result = await callAs().updateContentItemVideo({
+      ...input,
+      objectKey: newObjectKey,
+    });
+
+    expect(result).toMatchObject({ contentItemId: CONTENT_ITEM_ID });
+    expect(contentItemPatchSet).not.toHaveBeenCalledWith({ status: 'failed' });
   });
 
   it('still surfaces the original submission error even if marking it failed also fails', async () => {

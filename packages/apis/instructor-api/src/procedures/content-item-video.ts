@@ -201,11 +201,12 @@ export const createContentItemVideo = courseProcedure
       })
       .go();
 
+    let mediaConvertJobId: string;
     try {
       // Submitted only after the record exists, so the completion callback
       // (which patches this exact record once transcoding finishes) can
       // never race ahead of it.
-      const mediaConvertJobId = await submitTranscodeJob({
+      mediaConvertJobId = await submitTranscodeJob({
         courseId,
         moduleId,
         lessonId,
@@ -213,20 +214,11 @@ export const createContentItemVideo = courseProcedure
         objectKey,
         submissionNonce,
       });
-
-      // Lets transcode-complete.ts recognize a stale completion event from
-      // a job a later replacement has since superseded. rawObjectETag lets
-      // a future updateContentItemVideo call tell a genuine replacement
-      // apart from a retry of this exact submission.
-      await coreTable.entities.contentItem
-        .patch({ courseId, moduleId, lessonId, contentItemId })
-        .set({ mediaConvertJobId, rawObjectETag: objectETag })
-        .go();
     } catch (error) {
-      // Job submission failed after the record was already created --
-      // delete it so a retry (even with the exact same input) starts clean
-      // instead of leaving a permanently broken 'pending' record with no
-      // job behind it, or piling a duplicate alongside it.
+      // Job submission itself failed -- delete the record so a retry
+      // (even with the exact same input) starts clean instead of leaving
+      // a permanently broken 'pending' record with no job behind it, or
+      // piling a duplicate alongside it.
       await coreTable.entities.contentItem
         .delete({ courseId, moduleId, lessonId, contentItemId })
         .go()
@@ -237,6 +229,37 @@ export const createContentItemVideo = courseProcedure
           );
         });
       throw error;
+    }
+
+    try {
+      // Lets transcode-complete.ts recognize a stale completion event from
+      // a job a later replacement has since superseded. rawObjectETag lets
+      // a future updateContentItemVideo call tell a genuine replacement
+      // apart from a retry of this exact submission.
+      await coreTable.entities.contentItem
+        .patch({ courseId, moduleId, lessonId, contentItemId })
+        .set({ mediaConvertJobId, rawObjectETag: objectETag })
+        .go();
+    } catch (error) {
+      // The job itself is real and already running regardless of whether
+      // this stamp lands -- rolling back here (deleting the record, or
+      // marking it failed) would orphan it. submissionNonce is already
+      // durable from the .create() above, so a later retry's crash-gap
+      // check reconnects to this exact job via ClientRequestToken, and
+      // transcode-complete.ts's own nonce-conditioned patch reconciles the
+      // record once the job actually finishes, regardless of whether this
+      // stamp ever lands.
+      ctx.logger?.error(
+        'Failed to stamp mediaConvertJobId after transcode submission',
+        {
+          error,
+          courseId,
+          moduleId,
+          lessonId,
+          contentItemId,
+          mediaConvertJobId,
+        },
+      );
     }
 
     return asContentItemOutput<ICreateContentItemVideoOutput>(contentItem);
@@ -442,10 +465,11 @@ export const updateContentItemVideo = courseProcedure
         await bestEffortDeleteContentItemVideos(ctx.logger, [existing]);
       }
 
+      let mediaConvertJobId: string;
       try {
         // Submitted only after the patch above has landed -- see the same
         // note in createContentItemVideo.
-        const mediaConvertJobId = await submitTranscodeJob({
+        mediaConvertJobId = await submitTranscodeJob({
           courseId,
           moduleId,
           lessonId,
@@ -453,20 +477,11 @@ export const updateContentItemVideo = courseProcedure
           objectKey,
           submissionNonce: submissionNonce!,
         });
-
-        // Lets transcode-complete.ts recognize a stale completion event
-        // from a job a later replacement has since superseded.
-        // rawObjectETag lets a later retry of this exact submission be
-        // told apart from a genuine subsequent replacement.
-        await coreTable.entities.contentItem
-          .patch({ courseId, moduleId, lessonId, contentItemId })
-          .set({ mediaConvertJobId, rawObjectETag: objectETag })
-          .go();
       } catch (error) {
-        // Job submission failed after the record was already patched to
-        // point at the new upload -- any job for the previous video has
-        // already been canceled above too, so there's no working state
-        // left to restore. Mark it failed, the same terminal state a
+        // Job submission itself failed -- the record was already patched
+        // to point at the new upload, and any job for the previous video
+        // has already been canceled above too, so there's no working
+        // state left to restore. Mark it failed, the same terminal state a
         // genuine MediaConvert ERROR would produce, so the instructor gets
         // an accurate signal instead of an indefinite "processing" spinner.
         await coreTable.entities.contentItem
@@ -486,6 +501,36 @@ export const updateContentItemVideo = courseProcedure
             );
           });
         throw error;
+      }
+
+      try {
+        // Lets transcode-complete.ts recognize a stale completion event
+        // from a job a later replacement has since superseded.
+        // rawObjectETag lets a later retry of this exact submission be
+        // told apart from a genuine subsequent replacement.
+        await coreTable.entities.contentItem
+          .patch({ courseId, moduleId, lessonId, contentItemId })
+          .set({ mediaConvertJobId, rawObjectETag: objectETag })
+          .go();
+      } catch (error) {
+        // The job itself is real and already running regardless of
+        // whether this stamp lands -- marking the record failed here
+        // would orphan it. submissionNonce is already durable from the
+        // patch above, so a later retry's crash-gap check reconnects to
+        // this exact job via ClientRequestToken, and transcode-complete.ts's
+        // own nonce-conditioned patch reconciles the record once the job
+        // actually finishes, regardless of whether this stamp ever lands.
+        ctx.logger?.error(
+          'Failed to stamp mediaConvertJobId after transcode submission',
+          {
+            error,
+            courseId,
+            moduleId,
+            lessonId,
+            contentItemId,
+            mediaConvertJobId,
+          },
+        );
       }
     }
 
