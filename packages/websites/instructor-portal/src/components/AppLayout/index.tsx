@@ -79,10 +79,17 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
           delete next[path];
           return next;
         }
+        if (prev[path] === label) return prev;
         return { ...prev, [path]: label };
       });
     },
     [],
+  );
+
+  // Memoized: consumers (useBreadcrumbLabel) depend on this identity.
+  const breadcrumbOverrideContextValue = React.useMemo(
+    () => ({ setOverride }),
+    [setOverride],
   );
 
   React.useEffect(() => {
@@ -97,7 +104,7 @@ const AppLayout = ({ children }: { children: React.ReactNode }) => {
   }, [matchRoute, pathname, search, overrides]);
 
   return (
-    <BreadcrumbOverrideContext.Provider value={{ setOverride }}>
+    <BreadcrumbOverrideContext.Provider value={breadcrumbOverrideContextValue}>
       <SidebarProvider>
         <AppSidebar />
         <SidebarInset>
