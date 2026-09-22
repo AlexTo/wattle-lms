@@ -2,12 +2,13 @@
  * Copyright Wattle LMS Contributors. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
-import { CfnOutput, Lazy, RemovalPolicy } from 'aws-cdk-lib';
+import { CfnOutput, Duration, Lazy, RemovalPolicy } from 'aws-cdk-lib';
 import { ICertificate } from 'aws-cdk-lib/aws-certificatemanager';
 import {
   Distribution,
   KeyGroup,
   PublicKey,
+  ResponseHeadersPolicy,
   SecurityPolicyProtocol,
   ViewerProtocolPolicy,
 } from 'aws-cdk-lib/aws-cloudfront';
@@ -154,6 +155,27 @@ export class MediaBucket extends Construct {
 
     const wafStack = enableWaf ? new CloudfrontWebAcl(this, 'waf') : undefined;
 
+    // hls.js fetches the manifest/segments via XHR/fetch, which is
+    // subject to CORS unlike a plain <video src> load. CloudFront doesn't
+    // forward S3's own CORS headers (see restrictCorsTo) on its own, so
+    // this distribution needs its own.
+    const corsResponseHeadersPolicy = new ResponseHeadersPolicy(
+      this,
+      'CorsResponseHeadersPolicy',
+      {
+        corsBehavior: {
+          accessControlAllowCredentials: false,
+          accessControlAllowHeaders: ['*'],
+          accessControlAllowMethods: ['GET', 'HEAD'],
+          accessControlAllowOrigins: Lazy.list({
+            produce: () => this.allowedOrigins,
+          }),
+          accessControlMaxAge: Duration.seconds(3000),
+          originOverride: true,
+        },
+      },
+    );
+
     this.cloudFrontDistribution = new Distribution(this, 'Distribution', {
       webAclId: wafStack?.wafArn,
       ...(certificate
@@ -167,6 +189,7 @@ export class MediaBucket extends Construct {
         origin: S3BucketOrigin.withOriginAccessControl(this.bucket),
         viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         trustedKeyGroups: [signingKeyGroup],
+        responseHeadersPolicy: corsResponseHeadersPolicy,
       },
     });
     // For SSE-KMS objects CloudFront also needs kms:Decrypt on the bucket's

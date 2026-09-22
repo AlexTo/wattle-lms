@@ -62,7 +62,8 @@ const CONTENT_SECURITY_POLICY = [
   "img-src 'self' data:",
   "font-src 'self' data:",
   "connect-src 'self' https: wss:",
-  "media-src 'self' https:",
+  // blob: is required for hls.js/MediaSource-based HLS playback.
+  "media-src 'self' https: blob:",
   "object-src 'none'",
   "base-uri 'self'",
   "frame-ancestors 'none'",
