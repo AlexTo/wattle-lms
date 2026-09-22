@@ -39,7 +39,11 @@ const importFreshModule = async () => {
   return import('./cloudfront-client.js');
 };
 
-describe('getSignedCloudFrontUrl', () => {
+const PREFIX_KEY =
+  'courses/course-1/modules/module-1/lessons/lesson-1/content-items/item-1/nonce-1/';
+const MANIFEST_KEY = `${PREFIX_KEY}master.m3u8`;
+
+describe('getSignedCloudFrontPrefixUrl', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.RUNTIME_CONFIG_APP_ID = 'app-1';
@@ -55,25 +59,46 @@ describe('getSignedCloudFrontUrl', () => {
     getSignedUrl.mockReturnValue('https://d123.cloudfront.net/signed-url');
   });
 
-  it('signs a CloudFront URL built from the resolved domain and object key', async () => {
-    const { getSignedCloudFrontUrl } = await importFreshModule();
+  it('signs a URL for the initial object key, with a custom policy covering the whole prefix', async () => {
+    const { getSignedCloudFrontPrefixUrl } = await importFreshModule();
 
-    const result = await getSignedCloudFrontUrl('lessons/lesson-1/video.mp4');
+    const result = await getSignedCloudFrontPrefixUrl(PREFIX_KEY, MANIFEST_KEY);
 
     expect(result).toBe('https://d123.cloudfront.net/signed-url');
-    expect(getSignedUrl).toHaveBeenCalledWith(
-      expect.objectContaining({
-        url: `https://${DOMAIN_NAME}/lessons/lesson-1/video.mp4`,
-        keyPairId: KEY_PAIR_ID,
-        privateKey: PRIVATE_KEY_PEM,
-      }),
+    const [call] = getSignedUrl.mock.calls[0]!;
+    expect(call.url).toBe(`https://${DOMAIN_NAME}/${MANIFEST_KEY}`);
+    expect(call.keyPairId).toBe(KEY_PAIR_ID);
+    expect(call.privateKey).toBe(PRIVATE_KEY_PEM);
+    expect(call.dateLessThan).toBeUndefined();
+    const policy = JSON.parse(call.policy);
+    expect(policy.Statement[0].Resource).toBe(
+      `https://${DOMAIN_NAME}/${PREFIX_KEY}*`,
+    );
+    expect(policy.Statement[0].Condition.DateLessThan['AWS:EpochTime']).toEqual(
+      expect.any(Number),
     );
   });
 
-  it('resolves the private key from the secret named in runtime config', async () => {
-    const { getSignedCloudFrontUrl } = await importFreshModule();
+  // hls.js fetches the manifest, then separately fetches rendition
+  // playlists and segment files under the same prefix -- a canned,
+  // single-object policy (the pre-HLS shape) would 403 all of those.
+  it('scopes the policy to the given prefix, not just the initial object', async () => {
+    const { getSignedCloudFrontPrefixUrl } = await importFreshModule();
 
-    await getSignedCloudFrontUrl('lessons/lesson-1/video.mp4');
+    await getSignedCloudFrontPrefixUrl(PREFIX_KEY, MANIFEST_KEY);
+
+    const [call] = getSignedUrl.mock.calls[0]!;
+    const policy = JSON.parse(call.policy);
+    expect(policy.Statement[0].Resource).not.toBe(
+      `https://${DOMAIN_NAME}/${MANIFEST_KEY}`,
+    );
+    expect(policy.Statement[0].Resource.endsWith('*')).toBe(true);
+  });
+
+  it('resolves the private key from the secret named in runtime config', async () => {
+    const { getSignedCloudFrontPrefixUrl } = await importFreshModule();
+
+    await getSignedCloudFrontPrefixUrl(PREFIX_KEY, MANIFEST_KEY);
 
     expect(getSecret).toHaveBeenCalledWith(
       SECRET_ARN,
@@ -82,10 +107,10 @@ describe('getSignedCloudFrontUrl', () => {
   });
 
   it('caches the resolved config and private key across calls', async () => {
-    const { getSignedCloudFrontUrl } = await importFreshModule();
+    const { getSignedCloudFrontPrefixUrl } = await importFreshModule();
 
-    await getSignedCloudFrontUrl('lessons/lesson-1/a.mp4');
-    await getSignedCloudFrontUrl('lessons/lesson-1/b.mp4');
+    await getSignedCloudFrontPrefixUrl(PREFIX_KEY, MANIFEST_KEY);
+    await getSignedCloudFrontPrefixUrl(PREFIX_KEY, MANIFEST_KEY);
 
     expect(getAppConfig).toHaveBeenCalledTimes(1);
     expect(getSecret).toHaveBeenCalledTimes(1);
@@ -93,10 +118,10 @@ describe('getSignedCloudFrontUrl', () => {
 
   it('throws when RUNTIME_CONFIG_APP_ID is not set', async () => {
     delete process.env.RUNTIME_CONFIG_APP_ID;
-    const { getSignedCloudFrontUrl } = await importFreshModule();
+    const { getSignedCloudFrontPrefixUrl } = await importFreshModule();
 
     await expect(
-      getSignedCloudFrontUrl('lessons/lesson-1/video.mp4'),
+      getSignedCloudFrontPrefixUrl(PREFIX_KEY, MANIFEST_KEY),
     ).rejects.toThrow('RUNTIME_CONFIG_APP_ID');
   });
 
@@ -104,19 +129,19 @@ describe('getSignedCloudFrontUrl', () => {
     getAppConfig.mockResolvedValue({
       LessonMediaBucket: { bucketName: 'lesson-media-bucket' },
     });
-    const { getSignedCloudFrontUrl } = await importFreshModule();
+    const { getSignedCloudFrontPrefixUrl } = await importFreshModule();
 
     await expect(
-      getSignedCloudFrontUrl('lessons/lesson-1/video.mp4'),
+      getSignedCloudFrontPrefixUrl(PREFIX_KEY, MANIFEST_KEY),
     ).rejects.toThrow('Could not resolve CloudFront signing config');
   });
 
   it('throws when the secret has no private key', async () => {
     getSecret.mockResolvedValue(undefined);
-    const { getSignedCloudFrontUrl } = await importFreshModule();
+    const { getSignedCloudFrontPrefixUrl } = await importFreshModule();
 
     await expect(
-      getSignedCloudFrontUrl('lessons/lesson-1/video.mp4'),
+      getSignedCloudFrontPrefixUrl(PREFIX_KEY, MANIFEST_KEY),
     ).rejects.toThrow('Could not resolve CloudFront signing private key');
   });
 });

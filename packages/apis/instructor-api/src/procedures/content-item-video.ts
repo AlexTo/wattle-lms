@@ -9,7 +9,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { TRPCError } from '@trpc/server';
 import { v7 as uuidv7 } from 'uuid';
 import { courseProcedure } from '../init.js';
-import { getSignedCloudFrontUrl } from '../lib/cloudfront-client.js';
+import { getSignedCloudFrontPrefixUrl } from '../lib/cloudfront-client.js';
 import {
   bestEffortCancelTranscodeJob,
   bestEffortCancelTranscodeJobs,
@@ -701,7 +701,18 @@ export const createContentItemVideoUrl = courseProcedure
       throw new TRPCError({ code: 'NOT_FOUND' });
     }
 
-    const url = await getSignedCloudFrontUrl(contentItem.s3Key);
+    // Everything up to and including the trailing slash before
+    // master.m3u8 -- the nonce-scoped (or, for pre-nonce records, just
+    // content-item-scoped) directory this submission's manifest,
+    // rendition playlists, and segments all live under.
+    const prefixKey = contentItem.s3Key.slice(
+      0,
+      contentItem.s3Key.lastIndexOf('/') + 1,
+    );
+    const url = await getSignedCloudFrontPrefixUrl(
+      prefixKey,
+      contentItem.s3Key,
+    );
 
     return { url };
   });

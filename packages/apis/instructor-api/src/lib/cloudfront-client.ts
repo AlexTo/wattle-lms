@@ -73,12 +73,14 @@ const resolvePrivateKey = async (secretArn: string): Promise<string> => {
 const DOWNLOAD_URL_EXPIRY_SECONDS = 5 * 60;
 
 /**
- * Signs a CloudFront URL for the given lesson media object key, valid for
- * `DOWNLOAD_URL_EXPIRY_SECONDS`. Replaces the presigned-S3-GET approach:
- * the bucket stays private and playback goes through CloudFront instead.
+ * Signs a URL for `initialObjectKey`, but via a custom policy whose
+ * wildcard resource covers every object under `prefixKey` -- HLS needs
+ * the manifest plus separate rendition/segment files, all distinct S3
+ * objects hls.js fetches with this same signed query string.
  */
-export const getSignedCloudFrontUrl = async (
-  objectKey: string,
+export const getSignedCloudFrontPrefixUrl = async (
+  prefixKey: string,
+  initialObjectKey: string,
 ): Promise<string> => {
   const {
     cloudFrontDomainName,
@@ -86,11 +88,23 @@ export const getSignedCloudFrontUrl = async (
     cloudFrontPrivateKeySecretArn,
   } = await resolveCloudFrontConfig();
   const privateKey = await resolvePrivateKey(cloudFrontPrivateKeySecretArn);
+  const expiresAt = Date.now() + DOWNLOAD_URL_EXPIRY_SECONDS * 1000;
+
+  const policy = JSON.stringify({
+    Statement: [
+      {
+        Resource: `https://${cloudFrontDomainName}/${prefixKey}*`,
+        Condition: {
+          DateLessThan: { 'AWS:EpochTime': Math.floor(expiresAt / 1000) },
+        },
+      },
+    ],
+  });
 
   return getSignedUrl({
-    url: `https://${cloudFrontDomainName}/${objectKey}`,
+    url: `https://${cloudFrontDomainName}/${initialObjectKey}`,
+    policy,
     keyPairId: cloudFrontKeyPairId,
     privateKey,
-    dateLessThan: new Date(Date.now() + DOWNLOAD_URL_EXPIRY_SECONDS * 1000),
   });
 };
