@@ -102,7 +102,9 @@ const cloudFrontStatements = (template: Template, type: string) =>
     );
   });
 
-describe('MediaBucket', () => {
+// Synthesizing a stack takes well under a second in isolation but can pass
+// Vitest's 5s default when CI runs every project's tests in parallel.
+describe('MediaBucket', { timeout: 30_000 }, () => {
   it.each([true, false])(
     'has no resource dependency cycle (KMS encryption: %s)',
     (enableKmsEncryption) => {

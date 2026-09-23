@@ -38,7 +38,9 @@ const fileAssetKeys = (stack: Stack): string[] => {
   );
 };
 
-describe('StageIsolationSynthesizer', () => {
+// Synthesizing a stack takes well under a second in isolation but can pass
+// Vitest's 5s default when CI runs every project's tests in parallel.
+describe('StageIsolationSynthesizer', { timeout: 30_000 }, () => {
   it('prefixes every asset, including the template, with the stage name', () => {
     const app = new App({
       defaultStackSynthesizer: new StageIsolationSynthesizer(),
@@ -74,7 +76,7 @@ describe('StageIsolationSynthesizer', () => {
   });
 });
 
-describe('stage permissions boundary', () => {
+describe('stage permissions boundary', { timeout: 30_000 }, () => {
   /**
    * Roles across two stacks linked by a cross-region reference, which makes
    * CDK add export writer/reader custom resource roles while preparing the app,
