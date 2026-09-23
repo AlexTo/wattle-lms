@@ -85,6 +85,10 @@ export type StudentPortalComponentConfig = {
   enableKmsEncryption?: boolean;
   /** Enable automatic key rotation on the website bucket's KMS key. Only used when `enableKmsEncryption` is true */
   enableKeyRotation?: boolean;
+  /** Custom domain names for the CloudFront distribution. Requires `certificateArn`. */
+  domainNames?: string[];
+  /** ACM certificate ARN for the custom domain names. Must be in us-east-1. */
+  certificateArn?: string;
 };
 
 /**

@@ -30,6 +30,7 @@ import type {
   StudentPortalComponentConfig,
 } from '@wattle/common-infra-config';
 import { CfnResource, RemovalPolicy, Stack, StackProps } from 'aws-cdk-lib';
+import { Certificate } from 'aws-cdk-lib/aws-certificatemanager';
 import { Mfa, UserPoolOperation } from 'aws-cdk-lib/aws-cognito';
 import { TableEncryption } from 'aws-cdk-lib/aws-dynamodb';
 import { Rule } from 'aws-cdk-lib/aws-events';
@@ -611,10 +612,19 @@ export class ApplicationStack extends Stack {
     const studentPortalWafEnabled = studentPortalConfig?.enableWaf ?? true;
     const studentPortalKmsEnabled =
       studentPortalConfig?.enableKmsEncryption ?? true;
+    const certificate = studentPortalConfig?.certificateArn
+      ? Certificate.fromCertificateArn(
+          this,
+          'StudentPortalCertificate',
+          studentPortalConfig.certificateArn,
+        )
+      : undefined;
 
     const studentPortal = new StudentPortal(this, 'StudentPortal', {
       enableWaf: studentPortalWafEnabled,
       enableKeyRotation: studentPortalConfig?.enableKeyRotation ?? true,
+      domainNames: studentPortalConfig?.domainNames,
+      certificate,
       ...(studentPortalKmsEnabled
         ? {}
         : { encryption: BucketEncryption.S3_MANAGED }),
