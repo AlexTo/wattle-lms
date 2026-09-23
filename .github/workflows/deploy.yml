@@ -1,8 +1,10 @@
 name: Deploy
 
-# wattle-development deploys automatically once CI passes on main. Any stage
-# (including wattle-production) can be deployed manually via workflow_dispatch;
-# gate production with required reviewers on its GitHub environment.
+# Any stage in packages/common/infra-config/src/stages.config.ts can be
+# deployed manually via workflow_dispatch; gate production-like stages with
+# required reviewers on their GitHub environment. Setting the repository
+# variable AUTO_DEPLOY_STAGE also deploys that stage whenever CI passes on main;
+# leave it unset (the default in a fresh fork) to only deploy manually.
 #
 # Each stage deploys from the GitHub environment of the same name, whose
 # AWS_REGION / AWS_DEPLOY_ROLE_ARN / AWS_EXECUTION_ROLE_ARN variables are
@@ -15,11 +17,9 @@ on:
   workflow_dispatch:
     inputs:
       stage:
-        description: Stage to deploy
-        type: choice
-        options:
-          - wattle-development
-          - wattle-production
+        description: Stage to deploy (a stage name from stages.config.ts)
+        type: string
+        required: true
         default: wattle-development
 
 permissions:
@@ -32,15 +32,15 @@ env:
 
 jobs:
   deploy:
-    name: Deploy (${{ inputs.stage || 'wattle-development' }})
+    name: Deploy (${{ inputs.stage || vars.AUTO_DEPLOY_STAGE }})
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
-    environment: ${{ inputs.stage || 'wattle-development' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && vars.AUTO_DEPLOY_STAGE != '') }}
+    environment: ${{ inputs.stage || vars.AUTO_DEPLOY_STAGE }}
     concurrency:
-      group: deploy-${{ inputs.stage || 'wattle-development' }}
+      group: deploy-${{ inputs.stage || vars.AUTO_DEPLOY_STAGE }}
       cancel-in-progress: false
     env:
-      STAGE: ${{ inputs.stage || 'wattle-development' }}
+      STAGE: ${{ inputs.stage || vars.AUTO_DEPLOY_STAGE }}
       AWS_EXECUTION_ROLE_ARN: ${{ vars.AWS_EXECUTION_ROLE_ARN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -58,6 +58,20 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # Fail before touching AWS if the stage doesn't exist, rather than with a
+      # confusing credentials error from an unconfigured GitHub environment.
+      - name: Check stage exists
+        run: |
+          pnpm exec tsx --eval "
+            import('./packages/common/infra-config/src/index.ts').then((m) => {
+              const stages = m.listStageNames('packages/infra');
+              if (!stages.includes(process.env.STAGE)) {
+                console.error('Unknown stage \"' + process.env.STAGE + '\". Configured stages: ' + stages.join(', '));
+                process.exit(1);
+              }
+            });
+          "
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0

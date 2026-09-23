@@ -6,42 +6,71 @@
 #
 set -euo pipefail
 
-# GitHub Actions OIDC setup for wattle-lms.
+# GitHub Actions OIDC setup for Wattle LMS.
 #
-# This script is intended to be run once per deployment stage (as defined in
-# packages/common/infra-config/src/stages.config.ts). It creates or updates:
+# Run this once per deployment stage (as defined in
+# packages/common/infra-config/src/stages.config.ts), from a clone of the
+# repository that will run the deploy workflow — your fork, if you forked.
+# It creates or updates:
 # - the GitHub OIDC provider (shared by every stage in the account)
 # - the GitHub deploy role assumed by the workflow
 # - the CloudFormation execution role passed to `cdk deploy --role-arn`
 #
-# Stages are not tied to separate AWS accounts, so the stage is passed
-# explicitly rather than inferred from the account ID. Each stage gets its own
-# pair of roles, and the deploy role trusts only the GitHub environment of the
-# same name.
+# Stages may share an AWS account, so the stage is passed explicitly rather
+# than inferred from the account ID. Each stage gets its own pair of roles, and
+# the deploy role trusts only the GitHub environment of the same name.
 #
 # Usage:
-#   1. Authenticate the AWS CLI against the target account
-#   2. Run: ./scripts/setup-github-oidc.sh <stage>
+#   1. pnpm install (the stage list and settings are read from stages.config.ts)
+#   2. Authenticate the AWS CLI against the stage's target account
+#   3. Run: ./scripts/setup-github-oidc.sh <stage>
 #      e.g. ./scripts/setup-github-oidc.sh wattle-development
-#   3. Add the printed values to the matching GitHub environment
+#   4. Add the printed values to the matching GitHub environment
+#
+# Overrides (environment variables):
+#   GITHUB_REPOSITORY    owner/repo trusted by the deploy role (default: parsed
+#                        from the `origin` remote)
+#   AWS_REGION           used when the stage config sets no region (default:
+#                        AWS_DEFAULT_REGION, then the AWS CLI's configured region)
+#   CDK_QUALIFIER        CDK bootstrap qualifier (default: hnb659fds)
+#   DEPLOY_ROLE_NAME, EXECUTION_ROLE_NAME
 #
 # This script is designed to be idempotent and safe to run multiple times.
 
-readonly SUPPORTED_STAGES=("wattle-development" "wattle-production")
-
-readonly AWS_REGION="${AWS_REGION:-ap-southeast-2}"
+readonly INFRA_PROJECT_PATH="packages/infra"
 # CloudFront-scoped WAF web ACLs are deployed as separate stacks in us-east-1.
 readonly GLOBAL_REGION="us-east-1"
-readonly GITHUB_ORG="AlexTo"
-readonly GITHUB_REPO="wattle-lms"
 readonly OIDC_PROVIDER_URL="https://token.actions.githubusercontent.com"
 readonly OIDC_PROVIDER_HOST="token.actions.githubusercontent.com"
-readonly CDK_QUALIFIER="hnb659fds"
+readonly CDK_QUALIFIER="${CDK_QUALIFIER:-hnb659fds}"
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly REPO_ROOT
+
+# Prints `<stage>` lines, or `<field>=<value>` lines for one stage's config.
+read_stages_config() {
+  (
+    cd "$REPO_ROOT"
+    pnpm exec tsx --eval "
+      import('./packages/common/infra-config/src/index.ts').then((m) => {
+        const [project, stage] = process.argv.slice(1);
+        if (!stage) return console.log(m.listStageNames(project).join('\n'));
+        const config = m.resolveStage(project, stage) ?? {};
+        console.log('region=' + (config.region ?? ''));
+        console.log('account=' + (config.account ?? ''));
+        console.log('profile=' + (config.credentials?.type === 'profile' ? config.credentials.profile : ''));
+      });
+    " "$@"
+  )
+}
 
 usage() {
   echo "Usage: $0 <stage>" >&2
-  echo "Supported stages: ${SUPPORTED_STAGES[*]}" >&2
+  echo "Configured stages: ${CONFIGURED_STAGES[*]}" >&2
 }
+
+mapfile -t CONFIGURED_STAGES < <(read_stages_config "$INFRA_PROJECT_PATH")
+readonly CONFIGURED_STAGES
 
 if [[ $# -ne 1 ]]; then
   usage
@@ -49,34 +78,91 @@ if [[ $# -ne 1 ]]; then
 fi
 
 TARGET_STAGE=""
-for stage in "${SUPPORTED_STAGES[@]}"; do
+for stage in "${CONFIGURED_STAGES[@]}"; do
   if [[ "$1" == "$stage" ]]; then
     TARGET_STAGE="$stage"
   fi
 done
 
 if [[ -z "$TARGET_STAGE" ]]; then
-  echo "Unsupported stage: $1" >&2
+  echo "Unknown stage: $1" >&2
   usage
-  echo "Add it to scripts/setup-github-oidc.sh before using this stage." >&2
+  echo "Add it to packages/common/infra-config/src/stages.config.ts first." >&2
   exit 1
 fi
 
 readonly TARGET_STAGE
+
+STAGE_REGION=""
+STAGE_ACCOUNT=""
+STAGE_PROFILE=""
+while IFS='=' read -r key value; do
+  case "$key" in
+    region) STAGE_REGION="$value" ;;
+    account) STAGE_ACCOUNT="$value" ;;
+    profile) STAGE_PROFILE="$value" ;;
+  esac
+done < <(read_stages_config "$INFRA_PROJECT_PATH" "$TARGET_STAGE")
+
+# Deploy with the same profile `nx deploy` would use for this stage, unless
+# the caller already picked one.
+if [[ -n "$STAGE_PROFILE" && -z "${AWS_PROFILE:-}" ]]; then
+  export AWS_PROFILE="$STAGE_PROFILE"
+fi
+
+resolve_github_repository() {
+  if [[ -n "${GITHUB_REPOSITORY:-}" ]]; then
+    echo "$GITHUB_REPOSITORY"
+    return
+  fi
+
+  local remote_url
+  remote_url="$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null || true)"
+  if [[ "$remote_url" =~ github\.com[:/]([^/]+)/([^/]+)$ ]]; then
+    echo "${BASH_REMATCH[1]}/${BASH_REMATCH[2]%.git}"
+    return
+  fi
+
+  echo "Couldn't determine the GitHub repository from the 'origin' remote." >&2
+  echo "Set GITHUB_REPOSITORY=owner/repo and re-run." >&2
+  exit 1
+}
+
+GITHUB_REPOSITORY="$(resolve_github_repository)"
+readonly GITHUB_REPOSITORY
+
+AWS_REGION="${STAGE_REGION:-${AWS_REGION:-${AWS_DEFAULT_REGION:-$(aws configure get region 2>/dev/null || true)}}}"
+if [[ -z "$AWS_REGION" ]]; then
+  echo "No region: set 'region' for $TARGET_STAGE in stages.config.ts, or AWS_REGION." >&2
+  exit 1
+fi
+readonly AWS_REGION
+
+CALLER_ARN="$(aws sts get-caller-identity --query Arn --output text)"
+readonly CALLER_ARN
+# arn:<partition>:<service>::<account>:<resource>
+AWS_PARTITION="$(cut -d: -f2 <<<"$CALLER_ARN")"
+ACCOUNT_ID="$(cut -d: -f5 <<<"$CALLER_ARN")"
+readonly AWS_PARTITION ACCOUNT_ID
+
+if [[ -n "$STAGE_ACCOUNT" && "$STAGE_ACCOUNT" != "$ACCOUNT_ID" ]]; then
+  echo "$TARGET_STAGE is configured for account $STAGE_ACCOUNT, but the AWS CLI is authenticated against $ACCOUNT_ID." >&2
+  exit 1
+fi
+
 # CloudFormation-generated physical names (roles, functions, buckets, tables,
 # rules) are prefixed with the stack name, and every stack in a stage is named
 # `<stage>-*`, so this prefix scopes most permissions to one stage.
 readonly RESOURCE_PREFIX="$TARGET_STAGE-"
+# Generated bucket names are the lowercased equivalent.
+readonly BUCKET_PREFIX="${RESOURCE_PREFIX,,}"
 # CDK-generated names for some resources (MediaConvert job templates, Scheduler
 # groups) drop the hyphens from the stack path.
 readonly COMPACT_PREFIX="${TARGET_STAGE//-/}"
 # Role names deliberately don't start with RESOURCE_PREFIX, so the execution
 # role's IAM permissions (scoped to `role/<stage>-*`) can't modify either role.
-readonly DEPLOY_ROLE_NAME="${DEPLOY_ROLE_NAME:-wattle-lms-${TARGET_STAGE#wattle-}-github-deploy}"
-readonly EXECUTION_ROLE_NAME="${EXECUTION_ROLE_NAME:-wattle-lms-${TARGET_STAGE#wattle-}-cfn-execution}"
-
-ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
-readonly ACCOUNT_ID
+readonly DEPLOY_ROLE_NAME="${DEPLOY_ROLE_NAME:-github-deploy-$TARGET_STAGE}"
+readonly EXECUTION_ROLE_NAME="${EXECUTION_ROLE_NAME:-cfn-execution-$TARGET_STAGE}"
 
 cleanup() {
   rm -f "${DEPLOY_TRUST_POLICY_FILE:-}" \
@@ -91,8 +177,7 @@ log_header() {
   echo "============================================"
   echo "GitHub Actions OIDC Setup"
   echo "============================================"
-  echo "GitHub Org:      $GITHUB_ORG"
-  echo "GitHub Repo:     $GITHUB_REPO"
+  echo "GitHub Repo:     $GITHUB_REPOSITORY"
   echo "AWS Account ID:  $ACCOUNT_ID"
   echo "AWS Region:      $AWS_REGION (+ $GLOBAL_REGION)"
   echo "Target Stage:    $TARGET_STAGE"
@@ -117,7 +202,7 @@ confirm() {
 }
 
 ensure_oidc_provider() {
-  local provider_arn="arn:aws:iam::$ACCOUNT_ID:oidc-provider/$OIDC_PROVIDER_HOST"
+  local provider_arn="arn:$AWS_PARTITION:iam::$ACCOUNT_ID:oidc-provider/$OIDC_PROVIDER_HOST"
 
   if aws iam get-open-id-connect-provider \
     --open-id-connect-provider-arn "$provider_arn" >/dev/null 2>&1; then
@@ -143,13 +228,13 @@ create_policy_files() {
     {
       "Effect": "Allow",
       "Principal": {
-        "Federated": "arn:aws:iam::$ACCOUNT_ID:oidc-provider/$OIDC_PROVIDER_HOST"
+        "Federated": "arn:$AWS_PARTITION:iam::$ACCOUNT_ID:oidc-provider/$OIDC_PROVIDER_HOST"
       },
       "Action": "sts:AssumeRoleWithWebIdentity",
       "Condition": {
         "StringEquals": {
           "$OIDC_PROVIDER_HOST:aud": "sts.amazonaws.com",
-          "$OIDC_PROVIDER_HOST:sub": "repo:$GITHUB_ORG/$GITHUB_REPO:environment:$TARGET_STAGE"
+          "$OIDC_PROVIDER_HOST:sub": "repo:$GITHUB_REPOSITORY:environment:$TARGET_STAGE"
         }
       }
     }
@@ -196,8 +281,8 @@ EOF
         "cloudformation:ListChangeSets"
       ],
       "Resource": [
-        "arn:aws:cloudformation:$AWS_REGION:$ACCOUNT_ID:stack/$RESOURCE_PREFIX*/*",
-        "arn:aws:cloudformation:$GLOBAL_REGION:$ACCOUNT_ID:stack/$RESOURCE_PREFIX*/*"
+        "arn:$AWS_PARTITION:cloudformation:$AWS_REGION:$ACCOUNT_ID:stack/$RESOURCE_PREFIX*/*",
+        "arn:$AWS_PARTITION:cloudformation:$GLOBAL_REGION:$ACCOUNT_ID:stack/$RESOURCE_PREFIX*/*"
       ]
     },
     {
@@ -205,8 +290,8 @@ EOF
       "Effect": "Allow",
       "Action": "ssm:GetParameter",
       "Resource": [
-        "arn:aws:ssm:$AWS_REGION:$ACCOUNT_ID:parameter/cdk-bootstrap/$CDK_QUALIFIER/version",
-        "arn:aws:ssm:$GLOBAL_REGION:$ACCOUNT_ID:parameter/cdk-bootstrap/$CDK_QUALIFIER/version"
+        "arn:$AWS_PARTITION:ssm:$AWS_REGION:$ACCOUNT_ID:parameter/cdk-bootstrap/$CDK_QUALIFIER/version",
+        "arn:$AWS_PARTITION:ssm:$GLOBAL_REGION:$ACCOUNT_ID:parameter/cdk-bootstrap/$CDK_QUALIFIER/version"
       ]
     },
     {
@@ -217,8 +302,8 @@ EOF
         "s3:GetBucketLocation"
       ],
       "Resource": [
-        "arn:aws:s3:::cdk-$CDK_QUALIFIER-assets-$ACCOUNT_ID-$AWS_REGION",
-        "arn:aws:s3:::cdk-$CDK_QUALIFIER-assets-$ACCOUNT_ID-$GLOBAL_REGION"
+        "arn:$AWS_PARTITION:s3:::cdk-$CDK_QUALIFIER-assets-$ACCOUNT_ID-$AWS_REGION",
+        "arn:$AWS_PARTITION:s3:::cdk-$CDK_QUALIFIER-assets-$ACCOUNT_ID-$GLOBAL_REGION"
       ]
     },
     {
@@ -233,15 +318,15 @@ EOF
         "s3:ListMultipartUploadParts"
       ],
       "Resource": [
-        "arn:aws:s3:::cdk-$CDK_QUALIFIER-assets-$ACCOUNT_ID-$AWS_REGION/*",
-        "arn:aws:s3:::cdk-$CDK_QUALIFIER-assets-$ACCOUNT_ID-$GLOBAL_REGION/*"
+        "arn:$AWS_PARTITION:s3:::cdk-$CDK_QUALIFIER-assets-$ACCOUNT_ID-$AWS_REGION/*",
+        "arn:$AWS_PARTITION:s3:::cdk-$CDK_QUALIFIER-assets-$ACCOUNT_ID-$GLOBAL_REGION/*"
       ]
     },
     {
       "Sid": "PassCloudFormationServiceRole",
       "Effect": "Allow",
       "Action": "iam:PassRole",
-      "Resource": "arn:aws:iam::$ACCOUNT_ID:role/$EXECUTION_ROLE_NAME"
+      "Resource": "arn:$AWS_PARTITION:iam::$ACCOUNT_ID:role/$EXECUTION_ROLE_NAME"
     }
   ]
 }
@@ -294,10 +379,10 @@ attach_execution_policy() {
         "ssm:GetParameters"
       ],
       "Resource": [
-        "arn:aws:ssm:$AWS_REGION:$ACCOUNT_ID:parameter/cdk-bootstrap/$CDK_QUALIFIER/version",
-        "arn:aws:ssm:$GLOBAL_REGION:$ACCOUNT_ID:parameter/cdk-bootstrap/$CDK_QUALIFIER/version",
-        "arn:aws:ssm:$AWS_REGION:$ACCOUNT_ID:parameter/cdk/exports/$RESOURCE_PREFIX*",
-        "arn:aws:ssm:$GLOBAL_REGION:$ACCOUNT_ID:parameter/cdk/exports/$RESOURCE_PREFIX*"
+        "arn:$AWS_PARTITION:ssm:$AWS_REGION:$ACCOUNT_ID:parameter/cdk-bootstrap/$CDK_QUALIFIER/version",
+        "arn:$AWS_PARTITION:ssm:$GLOBAL_REGION:$ACCOUNT_ID:parameter/cdk-bootstrap/$CDK_QUALIFIER/version",
+        "arn:$AWS_PARTITION:ssm:$AWS_REGION:$ACCOUNT_ID:parameter/cdk/exports/$RESOURCE_PREFIX*",
+        "arn:$AWS_PARTITION:ssm:$GLOBAL_REGION:$ACCOUNT_ID:parameter/cdk/exports/$RESOURCE_PREFIX*"
       ]
     },
     {
@@ -324,7 +409,7 @@ attach_execution_policy() {
         "s3:PutBucketAcl"
       ],
       "Resource": [
-        "arn:aws:s3:::$RESOURCE_PREFIX*"
+        "arn:$AWS_PARTITION:s3:::$BUCKET_PREFIX*"
       ]
     },
     {
@@ -339,7 +424,7 @@ attach_execution_policy() {
         "s3:DeleteObjectTagging"
       ],
       "Resource": [
-        "arn:aws:s3:::$RESOURCE_PREFIX*/*"
+        "arn:$AWS_PARTITION:s3:::$BUCKET_PREFIX*/*"
       ]
     },
     {
@@ -350,8 +435,8 @@ attach_execution_policy() {
         "s3:GetObjectVersion"
       ],
       "Resource": [
-        "arn:aws:s3:::cdk-$CDK_QUALIFIER-assets-$ACCOUNT_ID-$AWS_REGION/*",
-        "arn:aws:s3:::cdk-$CDK_QUALIFIER-assets-$ACCOUNT_ID-$GLOBAL_REGION/*"
+        "arn:$AWS_PARTITION:s3:::cdk-$CDK_QUALIFIER-assets-$ACCOUNT_ID-$AWS_REGION/*",
+        "arn:$AWS_PARTITION:s3:::cdk-$CDK_QUALIFIER-assets-$ACCOUNT_ID-$GLOBAL_REGION/*"
       ]
     },
     {
@@ -381,10 +466,10 @@ attach_execution_policy() {
         "lambda:DeleteLayerVersion"
       ],
       "Resource": [
-        "arn:aws:lambda:$AWS_REGION:$ACCOUNT_ID:function:$RESOURCE_PREFIX*",
-        "arn:aws:lambda:$GLOBAL_REGION:$ACCOUNT_ID:function:$RESOURCE_PREFIX*",
-        "arn:aws:lambda:$AWS_REGION:$ACCOUNT_ID:layer:*",
-        "arn:aws:lambda:$GLOBAL_REGION:$ACCOUNT_ID:layer:*"
+        "arn:$AWS_PARTITION:lambda:$AWS_REGION:$ACCOUNT_ID:function:$RESOURCE_PREFIX*",
+        "arn:$AWS_PARTITION:lambda:$GLOBAL_REGION:$ACCOUNT_ID:function:$RESOURCE_PREFIX*",
+        "arn:$AWS_PARTITION:lambda:$AWS_REGION:$ACCOUNT_ID:layer:*",
+        "arn:$AWS_PARTITION:lambda:$GLOBAL_REGION:$ACCOUNT_ID:layer:*"
       ]
     },
     {
@@ -407,8 +492,8 @@ attach_execution_policy() {
         "dynamodb:GetResourcePolicy"
       ],
       "Resource": [
-        "arn:aws:dynamodb:$AWS_REGION:$ACCOUNT_ID:table/$RESOURCE_PREFIX*",
-        "arn:aws:dynamodb:$AWS_REGION:$ACCOUNT_ID:table/$RESOURCE_PREFIX*/index/*"
+        "arn:$AWS_PARTITION:dynamodb:$AWS_REGION:$ACCOUNT_ID:table/$RESOURCE_PREFIX*",
+        "arn:$AWS_PARTITION:dynamodb:$AWS_REGION:$ACCOUNT_ID:table/$RESOURCE_PREFIX*/index/*"
       ]
     },
     {
@@ -524,7 +609,7 @@ attach_execution_policy() {
         "events:ListTargetsByRule"
       ],
       "Resource": [
-        "arn:aws:events:$AWS_REGION:$ACCOUNT_ID:rule/$RESOURCE_PREFIX*"
+        "arn:$AWS_PARTITION:events:$AWS_REGION:$ACCOUNT_ID:rule/$RESOURCE_PREFIX*"
       ]
     },
     {
@@ -539,7 +624,7 @@ attach_execution_policy() {
         "scheduler:ListTagsForResource"
       ],
       "Resource": [
-        "arn:aws:scheduler:$AWS_REGION:$ACCOUNT_ID:schedule-group/$COMPACT_PREFIX*"
+        "arn:$AWS_PARTITION:scheduler:$AWS_REGION:$ACCOUNT_ID:schedule-group/$COMPACT_PREFIX*"
       ]
     },
     {
@@ -561,7 +646,7 @@ attach_execution_policy() {
         "mediaconvert:ListTagsForResource"
       ],
       "Resource": [
-        "arn:aws:mediaconvert:$AWS_REGION:$ACCOUNT_ID:jobTemplates/$COMPACT_PREFIX*"
+        "arn:$AWS_PARTITION:mediaconvert:$AWS_REGION:$ACCOUNT_ID:jobTemplates/$COMPACT_PREFIX*"
       ]
     },
     {
@@ -594,7 +679,7 @@ attach_execution_policy() {
         "appconfig:UntagResource",
         "appconfig:ListTagsForResource"
       ],
-      "Resource": "arn:aws:appconfig:$AWS_REGION:$ACCOUNT_ID:*"
+      "Resource": "arn:$AWS_PARTITION:appconfig:$AWS_REGION:$ACCOUNT_ID:*"
     },
     {
       "Sid": "ManageWattleIamRolesAndPolicies",
@@ -616,7 +701,7 @@ attach_execution_policy() {
         "iam:ListAttachedRolePolicies"
       ],
       "Resource": [
-        "arn:aws:iam::$ACCOUNT_ID:role/$RESOURCE_PREFIX*"
+        "arn:$AWS_PARTITION:iam::$ACCOUNT_ID:role/$RESOURCE_PREFIX*"
       ]
     },
     {
@@ -677,7 +762,7 @@ attach_execution_policy() {
       "Effect": "Allow",
       "Action": "iam:PassRole",
       "Resource": [
-        "arn:aws:iam::$ACCOUNT_ID:role/$RESOURCE_PREFIX*"
+        "arn:$AWS_PARTITION:iam::$ACCOUNT_ID:role/$RESOURCE_PREFIX*"
       ]
     }
   ]
@@ -692,8 +777,8 @@ EOF
 }
 
 print_next_steps() {
-  local deploy_role_arn="arn:aws:iam::$ACCOUNT_ID:role/$DEPLOY_ROLE_NAME"
-  local execution_role_arn="arn:aws:iam::$ACCOUNT_ID:role/$EXECUTION_ROLE_NAME"
+  local deploy_role_arn="arn:$AWS_PARTITION:iam::$ACCOUNT_ID:role/$DEPLOY_ROLE_NAME"
+  local execution_role_arn="arn:$AWS_PARTITION:iam::$ACCOUNT_ID:role/$EXECUTION_ROLE_NAME"
 
   echo ""
   echo "Complete. Configure the GitHub environment named '$TARGET_STAGE' with:"
@@ -701,8 +786,9 @@ print_next_steps() {
   echo "  Variable:   AWS_DEPLOY_ROLE_ARN=$deploy_role_arn"
   echo "  Variable:   AWS_EXECUTION_ROLE_ARN=$execution_role_arn"
   echo ""
-  echo "Deploy from a workflow job running in that environment with:"
-  echo "  pnpm nx deploy-ci @wattle/infra \"$TARGET_STAGE/*\" --role-arn \"\$AWS_EXECUTION_ROLE_ARN\""
+  echo "Then deploy it from the Deploy workflow (Actions tab > Deploy > Run workflow)."
+  echo "To deploy it automatically whenever CI passes on main, also set the"
+  echo "repository variable AUTO_DEPLOY_STAGE=$TARGET_STAGE."
 }
 
 log_header
@@ -712,11 +798,11 @@ create_policy_files
 upsert_role \
   "$DEPLOY_ROLE_NAME" \
   "$DEPLOY_TRUST_POLICY_FILE" \
-  "GitHub Actions deploy role for $GITHUB_ORG/$GITHUB_REPO ($TARGET_STAGE)"
+  "GitHub Actions deploy role for $GITHUB_REPOSITORY ($TARGET_STAGE)"
 attach_inline_policy
 upsert_role \
   "$EXECUTION_ROLE_NAME" \
   "$EXECUTION_TRUST_POLICY_FILE" \
-  "CloudFormation execution role for wattle-lms ($TARGET_STAGE)"
+  "CloudFormation execution role for $GITHUB_REPOSITORY ($TARGET_STAGE)"
 attach_execution_policy
 print_next_steps
