@@ -60,6 +60,13 @@
           "command": "node -e \"\""
         }
       }
+    },
+    "test": {
+      "inputs": [
+        "default",
+        "^default",
+        "{workspaceRoot}/scripts/setup-github-oidc.sh"
+      ]
     }
   }
 }

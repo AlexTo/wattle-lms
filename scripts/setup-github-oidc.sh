@@ -201,23 +201,37 @@ resolve_oidc_subject_prefix() {
     return
   fi
 
-  local api="repos/$GITHUB_REPOSITORY/actions/oidc/customization/sub"
-  local use_default
-  if github_cli_ready && use_default="$(gh api "$api" --jq '.use_default' 2>/dev/null)"; then
-    if [[ "$use_default" != "true" ]]; then
-      echo "$GITHUB_REPOSITORY uses a custom OIDC subject claim template, so its tokens' subject can't be predicted here." >&2
-      echo "Set GITHUB_OIDC_SUBJECT_PREFIX to the part of the subject before ':environment:' and re-run." >&2
-      exit 1
-    fi
-    local prefix
-    prefix="$(gh api "$api" --jq '.sub_claim_prefix // empty')"
-    echo "${prefix:-repo:$GITHUB_REPOSITORY}"
+  if ! github_cli_ready; then
+    echo "Couldn't read $GITHUB_REPOSITORY's OIDC subject settings (needs an authenticated gh CLI); assuming the default prefix repo:$GITHUB_REPOSITORY." >&2
+    echo "If the repository uses immutable subject claims, set GITHUB_OIDC_SUBJECT_PREFIX instead." >&2
+    echo "repo:$GITHUB_REPOSITORY"
     return
   fi
 
-  echo "Couldn't read $GITHUB_REPOSITORY's OIDC subject settings (needs an authenticated gh CLI); assuming the default prefix repo:$GITHUB_REPOSITORY." >&2
-  echo "If the repository uses immutable subject claims, set GITHUB_OIDC_SUBJECT_PREFIX instead." >&2
-  echo "repo:$GITHUB_REPOSITORY"
+  # One request for both fields. errexit doesn't apply inside the command
+  # substitution this runs in, so failures are handled explicitly: guessing
+  # the prefix here would write a trust policy the repository can't satisfy.
+  local settings use_default prefix
+  if ! settings="$(gh api "repos/$GITHUB_REPOSITORY/actions/oidc/customization/sub" \
+    --jq '"\(.use_default)\t\(.sub_claim_prefix // "")"')"; then
+    echo "Couldn't read $GITHUB_REPOSITORY's OIDC subject settings from GitHub." >&2
+    echo "Re-run, or set GITHUB_OIDC_SUBJECT_PREFIX to the part of the subject before ':environment:'." >&2
+    return 1
+  fi
+  IFS=$'\t' read -r use_default prefix <<<"$settings"
+
+  case "$use_default" in
+    true) echo "${prefix:-repo:$GITHUB_REPOSITORY}" ;;
+    false)
+      echo "$GITHUB_REPOSITORY uses a custom OIDC subject claim template, so its tokens' subject can't be predicted here." >&2
+      echo "Set GITHUB_OIDC_SUBJECT_PREFIX to the part of the subject before ':environment:' and re-run." >&2
+      return 1
+      ;;
+    *)
+      echo "Unexpected OIDC subject settings from GitHub: $settings" >&2
+      return 1
+      ;;
+  esac
 }
 
 echo "============================================"
@@ -273,7 +287,9 @@ while true; do
   GITHUB_REPOSITORY=""
 done
 readonly GITHUB_REPOSITORY
-OIDC_SUBJECT_PREFIX="$(resolve_oidc_subject_prefix)"
+if ! OIDC_SUBJECT_PREFIX="$(resolve_oidc_subject_prefix)"; then
+  exit 1
+fi
 readonly OIDC_SUBJECT_PREFIX
 echo "OIDC subject: $OIDC_SUBJECT_PREFIX:environment:$TARGET_STAGE"
 
