@@ -983,6 +983,11 @@ EOF
 # covers what the application's roles use, scoped to this stage's resources
 # wherever the resource name allows. Extend it when the app needs a new action;
 # the execution role can't modify it.
+#
+# Grants made to a role ARN in a resource policy (e.g. a bucket policy) are
+# capped by the boundary too, so it also covers those: CDK's S3 auto-delete
+# provider is granted s3:PutBucketPolicy by each auto-deleted bucket's policy,
+# and uses it to deny new uploads before emptying the bucket.
 upsert_boundary_policy() {
   BOUNDARY_POLICY_FILE="$(mktemp -t "${BOUNDARY_POLICY_NAME}.XXXXXX.json")"
 
@@ -1036,6 +1041,12 @@ upsert_boundary_policy() {
         "s3:List*",
         "s3:PutObject*"
       ],
+      "Resource": "arn:$AWS_PARTITION:s3:::$BUCKET_PREFIX*"
+    },
+    {
+      "Sid": "AutoDeleteBlocksNewWrites",
+      "Effect": "Allow",
+      "Action": "s3:PutBucketPolicy",
       "Resource": "arn:$AWS_PARTITION:s3:::$BUCKET_PREFIX*"
     },
     {
