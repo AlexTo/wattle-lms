@@ -44,39 +44,6 @@ It's opinionated by design: one cloud provider, one way to deploy, rather than a
 - [tRPC](https://trpc.io) API
 - Agentic AI: [Amazon Bedrock](https://aws.amazon.com/bedrock/), [Bedrock AgentCore](https://aws.amazon.com/bedrock/agentcore/), and [Strands Agents](https://strandsagents.com) powering the in-app assistant and personalised learning paths
 
-## Getting started
-
-Prerequisites: [Node](https://nodejs.org) 24+, [pnpm](https://pnpm.io) 11+, [Docker](https://www.docker.com).
-
-### Clone and install
-
-```sh
-git clone git@github.com:AlexTo/wattle-lms.git
-cd wattle-lms
-pnpm i
-```
-
-### Deploy
-
-With [AWS credentials configured](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html), deploy the entire stack to your own AWS account with a single command:
-
-```sh
-pnpm nx deploy @wattle/infra "wattle-development/*"
-```
-
-This deploys the `wattle-development` stage, which has WAF, MFA, KMS encryption/key rotation, and deletion protection all turned off for faster, cheaper iteration. Use the `wattle-production` stage for a deployment with these best practices enabled.
-
-### Running locally
-
-Most components (frontends, API) run locally against your machine, but a few, like Cognito, still point at the resources from your deployed stack. Once deployed, pull the runtime config so local dev knows how to reach those, then start the dev servers:
-
-```sh
-pnpm nx load-runtime-config @wattle/student-portal
-pnpm nx load-runtime-config @wattle/instructor-portal
-pnpm nx load-runtime-config @wattle/admin-portal
-pnpm dev
-```
-
 ## Documentation
 
 Full documentation, including architecture and guides, lives at the [Wattle LMS docs site](https://alexto.github.io/wattle-lms/).
