@@ -6,32 +6,36 @@
 #
 set -euo pipefail
 
-# GitHub Actions OIDC setup for Wattle LMS.
+# Guided GitHub Actions OIDC setup for Wattle LMS.
 #
 # Run this once per deployment stage (as defined in
 # packages/common/infra-config/src/stages.config.ts), from a clone of the
-# repository that will run the deploy workflow — your fork, if you forked.
-# It creates or updates:
-# - the GitHub OIDC provider (shared by every stage in the account)
-# - the GitHub deploy role assumed by the workflow
-# - the CloudFormation execution role passed to `cdk deploy --role-arn`
+# repository that will run the deploy workflow — your fork, if you forked. It
+# prompts for everything it needs, defaulting each answer to what it can detect
+# (press Enter to accept), then:
+# - creates the GitHub OIDC provider (shared by every stage in the account)
+# - creates or updates the GitHub deploy role assumed by the workflow
+# - creates or updates the CloudFormation execution role passed to
+#   `cdk deploy --role-arn`
+# - optionally bootstraps CDK in the regions the stage deploys to
+# - optionally creates the matching GitHub environment and sets its variables
+#   (requires an authenticated `gh` CLI)
 #
-# Stages may share an AWS account, so the stage is passed explicitly rather
-# than inferred from the account ID. Each stage gets its own pair of roles, and
-# the deploy role trusts only the GitHub environment of the same name.
+# Stages may share an AWS account, so each stage gets its own pair of roles,
+# and the deploy role trusts only the GitHub environment of the same name.
 #
 # Usage:
-#   1. pnpm install (the stage list and settings are read from stages.config.ts)
-#   2. Authenticate the AWS CLI against the stage's target account
-#   3. Run: ./scripts/setup-github-oidc.sh <stage>
-#      e.g. ./scripts/setup-github-oidc.sh wattle-development
-#   4. Add the printed values to the matching GitHub environment
+#   pnpm install   # the stage list and settings are read from stages.config.ts
+#   ./scripts/setup-github-oidc.sh [--yes] [stage]
 #
-# Overrides (environment variables):
-#   GITHUB_REPOSITORY    owner/repo trusted by the deploy role (default: parsed
-#                        from the `origin` remote)
-#   AWS_REGION           used when the stage config sets no region (default:
-#                        AWS_DEFAULT_REGION, then the AWS CLI's configured region)
+#   --yes   accept every default without prompting (for scripted runs)
+#
+# Defaults can be preset with environment variables:
+#   GITHUB_REPOSITORY    owner/repo trusted by the deploy role (otherwise
+#                        parsed from the `origin` remote)
+#   AWS_PROFILE          AWS CLI profile (otherwise the stage's configured
+#                        profile, then the default credential chain)
+#   AWS_REGION           used when the stage config sets no region
 #   CDK_QUALIFIER        CDK bootstrap qualifier (default: hnb659fds)
 #   DEPLOY_ROLE_NAME, EXECUTION_ROLE_NAME
 #
@@ -47,6 +51,90 @@ readonly CDK_QUALIFIER="${CDK_QUALIFIER:-hnb659fds}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly REPO_ROOT
 
+ASSUME_YES=false
+REQUESTED_STAGE=""
+
+print_usage() {
+  sed -n '/^# Usage:/,/^# This script/p' "${BASH_SOURCE[0]}" | sed '$d; s/^# \{0,1\}//'
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -y|--yes) ASSUME_YES=true ;;
+    -h|--help)
+      print_usage
+      exit 0
+      ;;
+    -*)
+      echo "Unknown option: $1" >&2
+      print_usage >&2
+      exit 1
+      ;;
+    *)
+      if [[ -n "$REQUESTED_STAGE" ]]; then
+        print_usage >&2
+        exit 1
+      fi
+      REQUESTED_STAGE="$1"
+      ;;
+  esac
+  shift
+done
+
+if [[ "$ASSUME_YES" == false && ! -t 0 ]]; then
+  echo "stdin isn't a terminal, so answers can't be prompted for; pass --yes to accept the defaults." >&2
+  exit 1
+fi
+
+# ask <var> <question> [default]: prompts until a non-empty answer, falling
+# back to the default on Enter (or without prompting under --yes).
+ask() {
+  local var="$1" question="$2" default="${3:-}" answer=""
+  while [[ -z "$answer" ]]; do
+    if [[ "$ASSUME_YES" == true ]]; then
+      answer="$default"
+      [[ -n "$answer" ]] || { echo "No default for: $question" >&2; exit 1; }
+    else
+      read -r -p "$question${default:+ [$default]}: " answer
+      answer="${answer:-$default}"
+    fi
+  done
+  printf -v "$var" '%s' "$answer"
+}
+
+# ask_optional <var> <question> [default]: like ask, but an empty answer is
+# allowed; typing `-` clears a non-empty default.
+ask_optional() {
+  local var="$1" question="$2" default="${3:-}" answer=""
+  if [[ "$ASSUME_YES" == true ]]; then
+    answer="$default"
+  else
+    read -r -p "$question${default:+ [$default, - for none]}: " answer
+    answer="${answer:-$default}"
+    [[ "$answer" != "-" ]] || answer=""
+  fi
+  printf -v "$var" '%s' "$answer"
+}
+
+# ask_yes_no <question> <y|n>: succeeds on yes.
+ask_yes_no() {
+  local question="$1" default="$2" answer=""
+  if [[ "$ASSUME_YES" == true ]]; then
+    answer="$default"
+  else
+    local hint="[y/N]"
+    [[ "$default" == y ]] && hint="[Y/n]"
+    read -r -p "$question $hint " answer
+    answer="${answer:-$default}"
+  fi
+  [[ "$answer" =~ ^[yY]([eE][sS])?$ ]]
+}
+
+section() {
+  echo ""
+  echo "== $1"
+}
+
 # Prints `<stage>` lines, or `<field>=<value>` lines for one stage's config.
 read_stages_config() {
   (
@@ -56,99 +144,130 @@ read_stages_config() {
         const [project, stage] = process.argv.slice(1);
         if (!stage) return console.log(m.listStageNames(project).join('\n'));
         const config = m.resolveStage(project, stage) ?? {};
+        const c = config.components ?? {};
+        // Component security settings default to on unless a stage relaxes them.
+        const cloudFrontWaf = [c.studentPortal, c.instructorPortal, c.adminPortal, c.lessonMedia]
+          .some((component) => component?.enableWaf !== false);
         console.log('region=' + (config.region ?? ''));
         console.log('account=' + (config.account ?? ''));
         console.log('profile=' + (config.credentials?.type === 'profile' ? config.credentials.profile : ''));
+        console.log('cloudFrontWaf=' + cloudFrontWaf);
       });
     " "$@"
   )
 }
 
-usage() {
-  echo "Usage: $0 <stage>" >&2
-  echo "Configured stages: ${CONFIGURED_STAGES[*]}" >&2
+detect_github_repository() {
+  local remote_url
+  remote_url="$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null || true)"
+  if [[ "$remote_url" =~ github\.com[:/]([^/]+)/([^/]+)$ ]]; then
+    echo "${BASH_REMATCH[1]}/${BASH_REMATCH[2]%.git}"
+  fi
 }
 
+bootstrap_missing() {
+  ! aws ssm get-parameter \
+    --name "/cdk-bootstrap/$CDK_QUALIFIER/version" \
+    --region "$1" >/dev/null 2>&1
+}
+
+github_cli_ready() {
+  command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1
+}
+
+echo "============================================"
+echo "GitHub Actions OIDC Setup"
+echo "============================================"
+
+section "Stage"
 mapfile -t CONFIGURED_STAGES < <(read_stages_config "$INFRA_PROJECT_PATH")
 readonly CONFIGURED_STAGES
-
-if [[ $# -ne 1 ]]; then
-  usage
+if [[ ${#CONFIGURED_STAGES[@]} -eq 0 ]]; then
+  echo "No stages found in packages/common/infra-config/src/stages.config.ts." >&2
   exit 1
 fi
-
-TARGET_STAGE=""
-for stage in "${CONFIGURED_STAGES[@]}"; do
-  if [[ "$1" == "$stage" ]]; then
-    TARGET_STAGE="$stage"
-  fi
+for i in "${!CONFIGURED_STAGES[@]}"; do
+  echo "  $((i + 1))) ${CONFIGURED_STAGES[$i]}"
 done
 
-if [[ -z "$TARGET_STAGE" ]]; then
-  echo "Unknown stage: $1" >&2
-  usage
-  echo "Add it to packages/common/infra-config/src/stages.config.ts first." >&2
-  exit 1
-fi
-
+TARGET_STAGE=""
+while [[ -z "$TARGET_STAGE" ]]; do
+  ask stage_answer "Stage to set up (name or number)" "${REQUESTED_STAGE:-${CONFIGURED_STAGES[0]}}"
+  for i in "${!CONFIGURED_STAGES[@]}"; do
+    if [[ "$stage_answer" == "${CONFIGURED_STAGES[$i]}" || "$stage_answer" == "$((i + 1))" ]]; then
+      TARGET_STAGE="${CONFIGURED_STAGES[$i]}"
+    fi
+  done
+  if [[ -z "$TARGET_STAGE" ]]; then
+    echo "Unknown stage: $stage_answer (add new stages to stages.config.ts first)" >&2
+    [[ "$ASSUME_YES" == false ]] || exit 1
+  fi
+done
 readonly TARGET_STAGE
 
 STAGE_REGION=""
 STAGE_ACCOUNT=""
 STAGE_PROFILE=""
+STAGE_CLOUDFRONT_WAF=""
 while IFS='=' read -r key value; do
   case "$key" in
     region) STAGE_REGION="$value" ;;
     account) STAGE_ACCOUNT="$value" ;;
     profile) STAGE_PROFILE="$value" ;;
+    cloudFrontWaf) STAGE_CLOUDFRONT_WAF="$value" ;;
   esac
 done < <(read_stages_config "$INFRA_PROJECT_PATH" "$TARGET_STAGE")
 
-# Deploy with the same profile `nx deploy` would use for this stage, unless
-# the caller already picked one.
-if [[ -n "$STAGE_PROFILE" && -z "${AWS_PROFILE:-}" ]]; then
-  export AWS_PROFILE="$STAGE_PROFILE"
-fi
-
-resolve_github_repository() {
-  if [[ -n "${GITHUB_REPOSITORY:-}" ]]; then
-    echo "$GITHUB_REPOSITORY"
-    return
-  fi
-
-  local remote_url
-  remote_url="$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null || true)"
-  if [[ "$remote_url" =~ github\.com[:/]([^/]+)/([^/]+)$ ]]; then
-    echo "${BASH_REMATCH[1]}/${BASH_REMATCH[2]%.git}"
-    return
-  fi
-
-  echo "Couldn't determine the GitHub repository from the 'origin' remote." >&2
-  echo "Set GITHUB_REPOSITORY=owner/repo and re-run." >&2
-  exit 1
-}
-
-GITHUB_REPOSITORY="$(resolve_github_repository)"
+section "GitHub"
+while true; do
+  ask GITHUB_REPOSITORY "Repository that runs the deploy workflow (owner/repo)" \
+    "${GITHUB_REPOSITORY:-$(detect_github_repository)}"
+  [[ "$GITHUB_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] && break
+  echo "Expected owner/repo, got: $GITHUB_REPOSITORY" >&2
+  [[ "$ASSUME_YES" == false ]] || exit 1
+  GITHUB_REPOSITORY=""
+done
 readonly GITHUB_REPOSITORY
 
-AWS_REGION="${STAGE_REGION:-${AWS_REGION:-${AWS_DEFAULT_REGION:-$(aws configure get region 2>/dev/null || true)}}}"
-if [[ -z "$AWS_REGION" ]]; then
-  echo "No region: set 'region' for $TARGET_STAGE in stages.config.ts, or AWS_REGION." >&2
+section "AWS credentials"
+available_profiles="$(aws configure list-profiles 2>/dev/null | paste -sd' ' - || true)"
+[[ -z "$available_profiles" ]] || echo "Profiles in your AWS config: $available_profiles"
+ask_optional selected_profile "AWS CLI profile for the target account (blank = default credential chain)" \
+  "${AWS_PROFILE:-$STAGE_PROFILE}"
+if [[ -n "$selected_profile" ]]; then
+  export AWS_PROFILE="$selected_profile"
+else
+  unset AWS_PROFILE
+fi
+
+if ! CALLER_ARN="$(aws sts get-caller-identity --query Arn --output text 2>&1)"; then
+  echo "$CALLER_ARN" >&2
+  echo "Couldn't authenticate with AWS. Log in first (e.g. \`aws sso login${selected_profile:+ --profile $selected_profile}\` or \`aws configure\`), then re-run." >&2
   exit 1
 fi
-readonly AWS_REGION
-
-CALLER_ARN="$(aws sts get-caller-identity --query Arn --output text)"
 readonly CALLER_ARN
 # arn:<partition>:<service>::<account>:<resource>
 AWS_PARTITION="$(cut -d: -f2 <<<"$CALLER_ARN")"
 ACCOUNT_ID="$(cut -d: -f5 <<<"$CALLER_ARN")"
 readonly AWS_PARTITION ACCOUNT_ID
+echo "Authenticated as $CALLER_ARN (account $ACCOUNT_ID)"
 
 if [[ -n "$STAGE_ACCOUNT" && "$STAGE_ACCOUNT" != "$ACCOUNT_ID" ]]; then
-  echo "$TARGET_STAGE is configured for account $STAGE_ACCOUNT, but the AWS CLI is authenticated against $ACCOUNT_ID." >&2
+  echo "$TARGET_STAGE is configured for account $STAGE_ACCOUNT in stages.config.ts; switch credentials and re-run." >&2
   exit 1
 fi
+
+section "Region"
+if [[ -n "$STAGE_REGION" ]]; then
+  # CDK deploys the stage wherever stages.config.ts says, so don't offer a
+  # different answer here.
+  AWS_REGION="$STAGE_REGION"
+  echo "Using $AWS_REGION (set for $TARGET_STAGE in stages.config.ts)"
+else
+  ask AWS_REGION "Primary AWS region for $TARGET_STAGE" \
+    "${AWS_REGION:-${AWS_DEFAULT_REGION:-$(aws configure get region 2>/dev/null || true)}}"
+fi
+readonly AWS_REGION
 
 # CloudFormation-generated physical names (roles, functions, buckets, tables,
 # rules) are prefixed with the stack name, and every stack in a stage is named
@@ -164,6 +283,37 @@ readonly COMPACT_PREFIX="${TARGET_STAGE//-/}"
 readonly DEPLOY_ROLE_NAME="${DEPLOY_ROLE_NAME:-github-deploy-$TARGET_STAGE}"
 readonly EXECUTION_ROLE_NAME="${EXECUTION_ROLE_NAME:-cfn-execution-$TARGET_STAGE}"
 
+section "CDK bootstrap"
+REQUIRED_REGIONS=("$AWS_REGION")
+if [[ "$STAGE_CLOUDFRONT_WAF" == true && "$AWS_REGION" != "$GLOBAL_REGION" ]]; then
+  REQUIRED_REGIONS+=("$GLOBAL_REGION")
+fi
+BOOTSTRAP_REGIONS=()
+for region in "${REQUIRED_REGIONS[@]}"; do
+  if ! bootstrap_missing "$region"; then
+    echo "Already bootstrapped: $region"
+  elif ask_yes_no "CDK isn't bootstrapped in $region (qualifier $CDK_QUALIFIER). Bootstrap it?" y; then
+    BOOTSTRAP_REGIONS+=("$region")
+  else
+    echo "Skipping; deploys to $region will fail until it's bootstrapped." >&2
+  fi
+done
+
+section "GitHub environment"
+CONFIGURE_GITHUB=false
+SET_AUTO_DEPLOY=false
+if ! github_cli_ready; then
+  echo "The gh CLI isn't installed or logged in, so the GitHub environment will be listed for you to set up by hand."
+elif ask_yes_no "Create the '$TARGET_STAGE' environment in $GITHUB_REPOSITORY and set its variables with gh?" y; then
+  CONFIGURE_GITHUB=true
+  current_auto_deploy="$(gh api "repos/$GITHUB_REPOSITORY/actions/variables/AUTO_DEPLOY_STAGE" --jq .value 2>/dev/null || true)"
+  if [[ "$current_auto_deploy" == "$TARGET_STAGE" ]]; then
+    echo "$TARGET_STAGE already deploys automatically when CI passes on main."
+  elif ask_yes_no "Deploy $TARGET_STAGE automatically whenever CI passes on main?${current_auto_deploy:+ (replaces $current_auto_deploy)}" n; then
+    SET_AUTO_DEPLOY=true
+  fi
+fi
+
 cleanup() {
   rm -f "${DEPLOY_TRUST_POLICY_FILE:-}" \
     "${DEPLOY_POLICY_FILE:-}" \
@@ -173,32 +323,32 @@ cleanup() {
 
 trap cleanup EXIT
 
-log_header() {
-  echo "============================================"
-  echo "GitHub Actions OIDC Setup"
-  echo "============================================"
-  echo "GitHub Repo:     $GITHUB_REPOSITORY"
-  echo "AWS Account ID:  $ACCOUNT_ID"
-  echo "AWS Region:      $AWS_REGION (+ $GLOBAL_REGION)"
-  echo "Target Stage:    $TARGET_STAGE"
-}
-
 confirm() {
+  echo ""
   echo "============================================"
+  echo "GitHub repo:     $GITHUB_REPOSITORY"
+  echo "AWS account:     $ACCOUNT_ID${AWS_PROFILE:+ (profile $AWS_PROFILE)}"
+  echo "AWS region:      $AWS_REGION"
+  echo "Stage:           $TARGET_STAGE"
+  echo ""
   echo "This will create or update:"
   echo "  - OIDC provider: $OIDC_PROVIDER_HOST"
   echo "  - Deploy role:   $DEPLOY_ROLE_NAME"
   echo "  - Exec role:     $EXECUTION_ROLE_NAME"
-  echo "  - GitHub env:    $TARGET_STAGE"
+  if [[ ${#BOOTSTRAP_REGIONS[@]} -gt 0 ]]; then
+    echo "  - CDK bootstrap: ${BOOTSTRAP_REGIONS[*]}"
+  fi
+  if [[ "$CONFIGURE_GITHUB" == true ]]; then
+    echo "  - GitHub env:    $TARGET_STAGE (AWS_REGION, AWS_DEPLOY_ROLE_ARN, AWS_EXECUTION_ROLE_ARN)"
+  fi
+  if [[ "$SET_AUTO_DEPLOY" == true ]]; then
+    echo "  - GitHub var:    AUTO_DEPLOY_STAGE=$TARGET_STAGE"
+  fi
   echo "============================================"
-  read -r -p "Continue? [y/N] " response
-  case "$response" in
-    [yY][eE][sS]|[yY]) ;;
-    *)
-      echo "Aborted."
-      exit 0
-      ;;
-  esac
+  if ! ask_yes_no "Continue?" y; then
+    echo "Aborted."
+    exit 0
+  fi
 }
 
 ensure_oidc_provider() {
@@ -776,23 +926,58 @@ EOF
     --policy-document "file://$EXECUTION_POLICY_FILE"
 }
 
-print_next_steps() {
-  local deploy_role_arn="arn:$AWS_PARTITION:iam::$ACCOUNT_ID:role/$DEPLOY_ROLE_NAME"
-  local execution_role_arn="arn:$AWS_PARTITION:iam::$ACCOUNT_ID:role/$EXECUTION_ROLE_NAME"
-
-  echo ""
-  echo "Complete. Configure the GitHub environment named '$TARGET_STAGE' with:"
-  echo "  Variable:   AWS_REGION=$AWS_REGION"
-  echo "  Variable:   AWS_DEPLOY_ROLE_ARN=$deploy_role_arn"
-  echo "  Variable:   AWS_EXECUTION_ROLE_ARN=$execution_role_arn"
-  echo ""
-  echo "Then deploy it from the Deploy workflow (Actions tab > Deploy > Run workflow)."
-  echo "To deploy it automatically whenever CI passes on main, also set the"
-  echo "repository variable AUTO_DEPLOY_STAGE=$TARGET_STAGE."
+bootstrap_cdk() {
+  local region
+  for region in "${BOOTSTRAP_REGIONS[@]}"; do
+    echo "Bootstrapping CDK in $region"
+    (cd "$REPO_ROOT" && pnpm exec cdk bootstrap "aws://$ACCOUNT_ID/$region" --qualifier "$CDK_QUALIFIER")
+  done
 }
 
-log_header
+configure_github_environment() {
+  echo "Creating GitHub environment: $TARGET_STAGE"
+  gh api --method PUT "repos/$GITHUB_REPOSITORY/environments/$TARGET_STAGE" >/dev/null
+
+  local name value
+  for name in AWS_REGION AWS_DEPLOY_ROLE_ARN AWS_EXECUTION_ROLE_ARN; do
+    case "$name" in
+      AWS_REGION) value="$AWS_REGION" ;;
+      AWS_DEPLOY_ROLE_ARN) value="$DEPLOY_ROLE_ARN" ;;
+      AWS_EXECUTION_ROLE_ARN) value="$EXECUTION_ROLE_ARN" ;;
+    esac
+    gh variable set "$name" --repo "$GITHUB_REPOSITORY" --env "$TARGET_STAGE" --body "$value"
+  done
+
+  if [[ "$SET_AUTO_DEPLOY" == true ]]; then
+    gh variable set AUTO_DEPLOY_STAGE --repo "$GITHUB_REPOSITORY" --body "$TARGET_STAGE"
+  fi
+}
+
+print_next_steps() {
+  echo ""
+  echo "Complete."
+  if [[ "$CONFIGURE_GITHUB" == false ]]; then
+    echo "Create a GitHub environment named '$TARGET_STAGE' in $GITHUB_REPOSITORY with:"
+    echo "  Variable:   AWS_REGION=$AWS_REGION"
+    echo "  Variable:   AWS_DEPLOY_ROLE_ARN=$DEPLOY_ROLE_ARN"
+    echo "  Variable:   AWS_EXECUTION_ROLE_ARN=$EXECUTION_ROLE_ARN"
+    echo "To deploy it automatically whenever CI passes on main, also set the"
+    echo "repository variable AUTO_DEPLOY_STAGE=$TARGET_STAGE."
+    echo ""
+  fi
+  echo "Anyone who can run workflows can deploy this stage. For production-like"
+  echo "stages, add required reviewers and restrict deployments to main at:"
+  echo "  https://github.com/$GITHUB_REPOSITORY/settings/environments"
+  echo ""
+  echo "Deploy from the Actions tab (Deploy > Run workflow), or:"
+  echo "  gh workflow run deploy.yml --repo $GITHUB_REPOSITORY -f stage=$TARGET_STAGE"
+}
+
+readonly DEPLOY_ROLE_ARN="arn:$AWS_PARTITION:iam::$ACCOUNT_ID:role/$DEPLOY_ROLE_NAME"
+readonly EXECUTION_ROLE_ARN="arn:$AWS_PARTITION:iam::$ACCOUNT_ID:role/$EXECUTION_ROLE_NAME"
+
 confirm
+bootstrap_cdk
 ensure_oidc_provider
 create_policy_files
 upsert_role \
@@ -805,4 +990,7 @@ upsert_role \
   "$EXECUTION_TRUST_POLICY_FILE" \
   "CloudFormation execution role for $GITHUB_REPOSITORY ($TARGET_STAGE)"
 attach_execution_policy
+if [[ "$CONFIGURE_GITHUB" == true ]]; then
+  configure_github_environment
+fi
 print_next_steps
