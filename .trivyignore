@@ -1,0 +1,3 @@
+# Trivy ignore file. Add one vulnerability ID (e.g. CVE-2021-12345) per line to
+# suppress it during the dependency/secret scan (`pnpm trivy`).
+# https://trivy.dev/latest/docs/configuration/filtering/#by-finding-ids

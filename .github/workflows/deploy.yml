@@ -74,6 +74,12 @@ jobs:
             });
           "
 
+      # Don't release with a known HIGH/CRITICAL vulnerability (that has a fix)
+      # in the dependency tree, or with a committed secret. Accepted findings go
+      # in .trivyignore.
+      - name: Scan for vulnerabilities and secrets
+        run: pnpm trivy
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
