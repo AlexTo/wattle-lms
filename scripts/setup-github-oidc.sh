@@ -17,12 +17,18 @@ set -euo pipefail
 # - creates or updates the GitHub deploy role assumed by the workflow
 # - creates or updates the CloudFormation execution role passed to
 #   `cdk deploy --role-arn`
+# - creates or updates the stage's permissions boundary policy, which every
+#   role the execution role creates must carry
 # - optionally bootstraps CDK in the regions the stage deploys to
 # - optionally creates the matching GitHub environment and sets its variables
 #   (requires an authenticated `gh` CLI)
 #
 # Stages may share an AWS account, so each stage gets its own pair of roles,
 # and the deploy role trusts only the GitHub environment of the same name.
+# The deploy role can only publish to the stage's own asset prefix, and the
+# execution role can only create roles bounded by the stage's permissions
+# boundary, so one stage's deploys can't reach another stage's assets or
+# resources beyond what that boundary allows.
 #
 # Usage:
 #   pnpm install   # the stage list and settings are read from stages.config.ts
@@ -36,7 +42,6 @@ set -euo pipefail
 #   AWS_PROFILE          AWS CLI profile (otherwise the stage's configured
 #                        profile, then the default credential chain)
 #   AWS_REGION           used when the stage config sets no region
-#   CDK_QUALIFIER        CDK bootstrap qualifier (default: hnb659fds)
 #   DEPLOY_ROLE_NAME, EXECUTION_ROLE_NAME
 #
 # This script is designed to be idempotent and safe to run multiple times.
@@ -46,7 +51,14 @@ readonly INFRA_PROJECT_PATH="packages/infra"
 readonly GLOBAL_REGION="us-east-1"
 readonly OIDC_PROVIDER_URL="https://token.actions.githubusercontent.com"
 readonly OIDC_PROVIDER_HOST="token.actions.githubusercontent.com"
-readonly CDK_QUALIFIER="${CDK_QUALIFIER:-hnb659fds}"
+# The CDK app synthesizes against the default bootstrap qualifier, so bootstrap
+# and grant access to the same one.
+readonly DEFAULT_CDK_QUALIFIER="hnb659fds"
+if [[ -n "${CDK_QUALIFIER:-}" && "$CDK_QUALIFIER" != "$DEFAULT_CDK_QUALIFIER" ]]; then
+  echo "Custom CDK bootstrap qualifiers aren't supported: the CDK app deploys with the default ($DEFAULT_CDK_QUALIFIER). Unset CDK_QUALIFIER and re-run." >&2
+  exit 1
+fi
+readonly CDK_QUALIFIER="$DEFAULT_CDK_QUALIFIER"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly REPO_ROOT
@@ -282,6 +294,17 @@ readonly COMPACT_PREFIX="${TARGET_STAGE//-/}"
 # role's IAM permissions (scoped to `role/<stage>-*`) can't modify either role.
 readonly DEPLOY_ROLE_NAME="${DEPLOY_ROLE_NAME:-github-deploy-$TARGET_STAGE}"
 readonly EXECUTION_ROLE_NAME="${EXECUTION_ROLE_NAME:-cfn-execution-$TARGET_STAGE}"
+# Every role the stage's stacks create must carry this boundary (the deploy
+# workflow synthesizes with it applied), which caps what the execution role can
+# grant through them. Must match stagePermissionsBoundaryName() in
+# packages/common/constructs/src/core/stage-isolation.ts.
+readonly BOUNDARY_POLICY_NAME="permissions-boundary-$TARGET_STAGE"
+readonly BOUNDARY_POLICY_ARN="arn:$AWS_PARTITION:iam::$ACCOUNT_ID:policy/$BOUNDARY_POLICY_NAME"
+# Each stage publishes its assets under its own prefix in the shared bootstrap
+# buckets (see StageIsolationSynthesizer), so access is scoped to that prefix.
+readonly ASSETS_BUCKET_PRIMARY="cdk-$CDK_QUALIFIER-assets-$ACCOUNT_ID-$AWS_REGION"
+readonly ASSETS_BUCKET_GLOBAL="cdk-$CDK_QUALIFIER-assets-$ACCOUNT_ID-$GLOBAL_REGION"
+readonly ASSETS_PREFIX="$TARGET_STAGE/"
 
 section "CDK bootstrap"
 REQUIRED_REGIONS=("$AWS_REGION")
@@ -323,7 +346,8 @@ cleanup() {
   rm -f "${DEPLOY_TRUST_POLICY_FILE:-}" \
     "${DEPLOY_POLICY_FILE:-}" \
     "${EXECUTION_TRUST_POLICY_FILE:-}" \
-    "${EXECUTION_POLICY_FILE:-}"
+    "${EXECUTION_POLICY_FILE:-}" \
+    "${BOUNDARY_POLICY_FILE:-}"
 }
 
 trap cleanup EXIT
@@ -340,6 +364,7 @@ confirm() {
   echo "  - OIDC provider: $OIDC_PROVIDER_HOST"
   echo "  - Deploy role:   $DEPLOY_ROLE_NAME"
   echo "  - Exec role:     $EXECUTION_ROLE_NAME"
+  echo "  - Boundary:      $BOUNDARY_POLICY_NAME"
   if [[ ${#BOOTSTRAP_REGIONS[@]} -gt 0 ]]; then
     echo "  - CDK bootstrap: ${BOOTSTRAP_REGIONS[*]}"
   fi
@@ -450,31 +475,40 @@ EOF
       ]
     },
     {
-      "Sid": "UseBootstrapAssetsBuckets",
+      "Sid": "LocateBootstrapAssetsBuckets",
       "Effect": "Allow",
-      "Action": [
-        "s3:ListBucket",
-        "s3:GetBucketLocation"
-      ],
+      "Action": "s3:GetBucketLocation",
       "Resource": [
-        "arn:$AWS_PARTITION:s3:::cdk-$CDK_QUALIFIER-assets-$ACCOUNT_ID-$AWS_REGION",
-        "arn:$AWS_PARTITION:s3:::cdk-$CDK_QUALIFIER-assets-$ACCOUNT_ID-$GLOBAL_REGION"
+        "arn:$AWS_PARTITION:s3:::$ASSETS_BUCKET_PRIMARY",
+        "arn:$AWS_PARTITION:s3:::$ASSETS_BUCKET_GLOBAL"
       ]
     },
     {
-      "Sid": "ReadWriteBootstrapAssetsObjects",
+      "Sid": "ListStageBootstrapAssets",
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": [
+        "arn:$AWS_PARTITION:s3:::$ASSETS_BUCKET_PRIMARY",
+        "arn:$AWS_PARTITION:s3:::$ASSETS_BUCKET_GLOBAL"
+      ],
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": "$ASSETS_PREFIX*"
+        }
+      }
+    },
+    {
+      "Sid": "PublishStageBootstrapAssets",
       "Effect": "Allow",
       "Action": [
         "s3:GetObject",
         "s3:PutObject",
-        "s3:DeleteObject",
         "s3:AbortMultipartUpload",
-        "s3:ListBucketMultipartUploads",
         "s3:ListMultipartUploadParts"
       ],
       "Resource": [
-        "arn:$AWS_PARTITION:s3:::cdk-$CDK_QUALIFIER-assets-$ACCOUNT_ID-$AWS_REGION/*",
-        "arn:$AWS_PARTITION:s3:::cdk-$CDK_QUALIFIER-assets-$ACCOUNT_ID-$GLOBAL_REGION/*"
+        "arn:$AWS_PARTITION:s3:::$ASSETS_BUCKET_PRIMARY/$ASSETS_PREFIX*",
+        "arn:$AWS_PARTITION:s3:::$ASSETS_BUCKET_GLOBAL/$ASSETS_PREFIX*"
       ]
     },
     {
@@ -590,8 +624,8 @@ attach_execution_policy() {
         "s3:GetObjectVersion"
       ],
       "Resource": [
-        "arn:$AWS_PARTITION:s3:::cdk-$CDK_QUALIFIER-assets-$ACCOUNT_ID-$AWS_REGION/*",
-        "arn:$AWS_PARTITION:s3:::cdk-$CDK_QUALIFIER-assets-$ACCOUNT_ID-$GLOBAL_REGION/*"
+        "arn:$AWS_PARTITION:s3:::$ASSETS_BUCKET_PRIMARY/$ASSETS_PREFIX*",
+        "arn:$AWS_PARTITION:s3:::$ASSETS_BUCKET_GLOBAL/$ASSETS_PREFIX*"
       ]
     },
     {
@@ -783,16 +817,18 @@ attach_execution_policy() {
       ]
     },
     {
-      "Sid": "MediaConvertEndpoints",
+      "Sid": "MediaConvertAccountLevel",
       "Effect": "Allow",
-      "Action": "mediaconvert:DescribeEndpoints",
+      "Action": [
+        "mediaconvert:DescribeEndpoints",
+        "mediaconvert:CreateJobTemplate"
+      ],
       "Resource": "*"
     },
     {
       "Sid": "MediaConvertJobTemplatesForWattle",
       "Effect": "Allow",
       "Action": [
-        "mediaconvert:CreateJobTemplate",
         "mediaconvert:GetJobTemplate",
         "mediaconvert:UpdateJobTemplate",
         "mediaconvert:DeleteJobTemplate",
@@ -837,27 +873,38 @@ attach_execution_policy() {
       "Resource": "arn:$AWS_PARTITION:appconfig:$AWS_REGION:$ACCOUNT_ID:*"
     },
     {
-      "Sid": "ManageWattleIamRolesAndPolicies",
+      "Sid": "ManageWattleRoles",
       "Effect": "Allow",
       "Action": [
-        "iam:CreateRole",
         "iam:DeleteRole",
         "iam:GetRole",
         "iam:TagRole",
         "iam:UntagRole",
         "iam:UpdateRole",
         "iam:UpdateAssumeRolePolicy",
-        "iam:PutRolePolicy",
-        "iam:DeleteRolePolicy",
-        "iam:AttachRolePolicy",
-        "iam:DetachRolePolicy",
         "iam:GetRolePolicy",
         "iam:ListRolePolicies",
         "iam:ListAttachedRolePolicies"
       ],
-      "Resource": [
-        "arn:$AWS_PARTITION:iam::$ACCOUNT_ID:role/$RESOURCE_PREFIX*"
-      ]
+      "Resource": "arn:$AWS_PARTITION:iam::$ACCOUNT_ID:role/$RESOURCE_PREFIX*"
+    },
+    {
+      "Sid": "GrantOnlyWithinStageBoundary",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:PutRolePermissionsBoundary"
+      ],
+      "Resource": "arn:$AWS_PARTITION:iam::$ACCOUNT_ID:role/$RESOURCE_PREFIX*",
+      "Condition": {
+        "StringEquals": {
+          "iam:PermissionsBoundary": "$BOUNDARY_POLICY_ARN"
+        }
+      }
     },
     {
       "Sid": "CognitoUserPools",
@@ -931,6 +978,202 @@ EOF
     --policy-document "file://$EXECUTION_POLICY_FILE"
 }
 
+# The permissions boundary every role in the stage's stacks carries: the most
+# those roles (and so anything the execution role creates) can ever do. It
+# covers what the application's roles use, scoped to this stage's resources
+# wherever the resource name allows. Extend it when the app needs a new action;
+# the execution role can't modify it.
+upsert_boundary_policy() {
+  BOUNDARY_POLICY_FILE="$(mktemp -t "${BOUNDARY_POLICY_NAME}.XXXXXX.json")"
+
+  cat >"$BOUNDARY_POLICY_FILE" <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "LogsAndTracing",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams",
+        "logs:GetLogEvents",
+        "logs:FilterLogEvents",
+        "xray:PutTraceSegments",
+        "xray:PutTelemetryRecords"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "StageTables",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:BatchGetItem",
+        "dynamodb:BatchWriteItem",
+        "dynamodb:ConditionCheckItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:DescribeTable",
+        "dynamodb:GetItem",
+        "dynamodb:GetRecords",
+        "dynamodb:GetShardIterator",
+        "dynamodb:PutItem",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "dynamodb:UpdateItem"
+      ],
+      "Resource": "arn:$AWS_PARTITION:dynamodb:$AWS_REGION:$ACCOUNT_ID:table/$RESOURCE_PREFIX*"
+    },
+    {
+      "Sid": "StageBuckets",
+      "Effect": "Allow",
+      "Action": [
+        "s3:Abort*",
+        "s3:DeleteObject*",
+        "s3:GetBucket*",
+        "s3:GetObject*",
+        "s3:List*",
+        "s3:PutObject*"
+      ],
+      "Resource": "arn:$AWS_PARTITION:s3:::$BUCKET_PREFIX*"
+    },
+    {
+      "Sid": "ReadStageAssets",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetBucket*",
+        "s3:GetObject*",
+        "s3:List*"
+      ],
+      "Resource": [
+        "arn:$AWS_PARTITION:s3:::$ASSETS_BUCKET_PRIMARY",
+        "arn:$AWS_PARTITION:s3:::$ASSETS_BUCKET_PRIMARY/$ASSETS_PREFIX*"
+      ]
+    },
+    {
+      "Sid": "StageFunctions",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:GetFunction",
+        "lambda:InvokeFunction"
+      ],
+      "Resource": [
+        "arn:$AWS_PARTITION:lambda:$AWS_REGION:$ACCOUNT_ID:function:$RESOURCE_PREFIX*",
+        "arn:$AWS_PARTITION:lambda:$GLOBAL_REGION:$ACCOUNT_ID:function:$RESOURCE_PREFIX*"
+      ]
+    },
+    {
+      "Sid": "StageSecrets",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:CreateSecret",
+        "secretsmanager:DeleteSecret",
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:GetSecretValue"
+      ],
+      "Resource": "arn:$AWS_PARTITION:secretsmanager:$AWS_REGION:$ACCOUNT_ID:secret:$COMPACT_PREFIX*"
+    },
+    {
+      "Sid": "StageCrossRegionExports",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:AddTagsToResource",
+        "ssm:DeleteParameters",
+        "ssm:GetParameters",
+        "ssm:ListTagsForResource",
+        "ssm:PutParameter",
+        "ssm:RemoveTagsFromResource"
+      ],
+      "Resource": [
+        "arn:$AWS_PARTITION:ssm:$AWS_REGION:$ACCOUNT_ID:parameter/cdk/exports/$RESOURCE_PREFIX*",
+        "arn:$AWS_PARTITION:ssm:$GLOBAL_REGION:$ACCOUNT_ID:parameter/cdk/exports/$RESOURCE_PREFIX*"
+      ]
+    },
+    {
+      "Sid": "StageSchedules",
+      "Effect": "Allow",
+      "Action": [
+        "scheduler:CreateSchedule",
+        "scheduler:UpdateSchedule"
+      ],
+      "Resource": "arn:$AWS_PARTITION:scheduler:$AWS_REGION:$ACCOUNT_ID:schedule/$COMPACT_PREFIX*"
+    },
+    {
+      "Sid": "PassStageRoles",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:$AWS_PARTITION:iam::$ACCOUNT_ID:role/$RESOURCE_PREFIX*"
+    },
+    {
+      "Sid": "ReadRoles",
+      "Effect": "Allow",
+      "Action": "iam:GetRole",
+      "Resource": "*"
+    },
+    {
+      "Sid": "ApiGatewayAccountSettings",
+      "Effect": "Allow",
+      "Action": [
+        "apigateway:GET",
+        "apigateway:PATCH"
+      ],
+      "Resource": "arn:$AWS_PARTITION:apigateway:$AWS_REGION::/account"
+    },
+    {
+      "Sid": "ResourcesNamedById",
+      "Effect": "Allow",
+      "Action": [
+        "appconfig:GetLatestConfiguration",
+        "appconfig:StartConfigurationSession",
+        "cloudfront:CreateInvalidation",
+        "cloudfront:GetInvalidation",
+        "cognito-idp:AdminAddUserToGroup",
+        "kms:Decrypt",
+        "kms:DescribeKey",
+        "kms:Encrypt",
+        "kms:GenerateDataKey*",
+        "kms:ReEncrypt*",
+        "mediaconvert:CancelJob",
+        "mediaconvert:CreateJob",
+        "sns:Publish"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+EOF
+
+  if aws iam get-policy --policy-arn "$BOUNDARY_POLICY_ARN" >/dev/null 2>&1; then
+    # A managed policy keeps at most five versions; make room for the new one.
+    local non_default_versions
+    non_default_versions="$(aws iam list-policy-versions \
+      --policy-arn "$BOUNDARY_POLICY_ARN" \
+      --query 'sort_by(Versions[?!IsDefaultVersion], &CreateDate)[].VersionId' \
+      --output text)"
+    if [[ $(wc -w <<<"$non_default_versions") -ge 4 ]]; then
+      aws iam delete-policy-version \
+        --policy-arn "$BOUNDARY_POLICY_ARN" \
+        --version-id "${non_default_versions%%[[:space:]]*}"
+    fi
+    echo "Updating permissions boundary: $BOUNDARY_POLICY_NAME"
+    aws iam create-policy-version \
+      --policy-arn "$BOUNDARY_POLICY_ARN" \
+      --policy-document "file://$BOUNDARY_POLICY_FILE" \
+      --set-as-default >/dev/null
+  else
+    echo "Creating permissions boundary: $BOUNDARY_POLICY_NAME"
+    aws iam create-policy \
+      --policy-name "$BOUNDARY_POLICY_NAME" \
+      --policy-document "file://$BOUNDARY_POLICY_FILE" \
+      --description "Permissions boundary for $TARGET_STAGE's IAM roles" \
+      --tags \
+        Key=Project,Value=wattle-lms \
+        Key=ManagedBy,Value=setup-github-oidc.sh \
+        Key=Stage,Value="$TARGET_STAGE" >/dev/null
+  fi
+}
+
 bootstrap_cdk() {
   local region
   for region in "${BOOTSTRAP_REGIONS[@]}"; do
@@ -984,6 +1227,7 @@ readonly EXECUTION_ROLE_ARN="arn:$AWS_PARTITION:iam::$ACCOUNT_ID:role/$EXECUTION
 confirm
 bootstrap_cdk
 ensure_oidc_provider
+upsert_boundary_policy
 create_policy_files
 upsert_role \
   "$DEPLOY_ROLE_NAME" \

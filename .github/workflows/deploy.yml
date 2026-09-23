@@ -87,11 +87,31 @@ jobs:
       # account from CDK_DEFAULT_ACCOUNT, which the CDK CLI resolves from the
       # active credentials. Nx's cache key doesn't cover that, so skip it to
       # avoid reusing an assembly synthesized without an account.
+      # The execution role can only create roles carrying the stage's
+      # permissions boundary, so synthesize with it applied.
       - name: Synthesize
-        run: pnpm nx run @wattle/infra:synth --skip-nx-cache
+        run: pnpm nx run @wattle/infra:synth --skip-nx-cache --context wattle:stagePermissionsBoundary=true
+
+      # A rerun of CI for an older commit (or a run that waited behind a newer
+      # deploy) would otherwise redeploy stale code. Checked here, inside the
+      # job's concurrency slot, so it reflects main right before deploying.
+      # Manual runs deploy whatever they're given, e.g. to roll back.
+      - name: Check commit is still main's latest
+        id: freshness
+        if: ${{ github.event_name == 'workflow_run' }}
+        run: |
+          main_sha="$(git ls-remote --exit-code origin refs/heads/main | cut -f1)"
+          head_sha="$(git rev-parse HEAD)"
+          if [[ -n "$main_sha" && "$main_sha" == "$head_sha" ]]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Skipping deploy: $head_sha is no longer main's latest commit ($main_sha)."
+            echo "current=false" >> "$GITHUB_OUTPUT"
+          fi
 
       # CDK first tries its bootstrap roles, which the deploy role can't
       # assume, and falls back to the deploy role's own credentials (logging a
       # warning); --role-arn hands CloudFormation the scoped execution role.
       - name: Deploy
+        if: ${{ github.event_name != 'workflow_run' || steps.freshness.outputs.current == 'true' }}
         run: pnpm nx run @wattle/infra:deploy-ci "$STAGE/*" --role-arn "$AWS_EXECUTION_ROLE_ARN"
