@@ -36,7 +36,9 @@ runs:
       shell: bash
       run: |
         echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
-    - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+    # Newer than nx-plugin-for-aws's pin (v4), which runs on the deprecated
+    # Node.js 20 runtime.
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       name: Setup pnpm cache
       with:
         path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}

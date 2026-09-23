@@ -11,7 +11,11 @@ updates:
         patterns:
           - "*"
   - package-ecosystem: "github-actions"
-    directory: "/"
+    # "/" only covers .github/workflows and a root action.yml, so list the
+    # composite actions' directories too.
+    directories:
+      - "/"
+      - "/.github/actions/*"
     schedule:
       interval: "weekly"
     groups:
