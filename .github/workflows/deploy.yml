@@ -50,15 +50,12 @@ jobs:
           # actually verified instead.
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      # Synth and deploy skip checkov and `nx affected`, so neither uv nor
+      # NX_BASE/NX_HEAD is needed.
+      - uses: ./.github/actions/init-monorepo
         with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+          setup-uv: "false"
+          set-nx-shas: "false"
 
       # Fail before touching AWS if the stage doesn't exist, rather than with a
       # confusing credentials error from an unconfigured GitHub environment.
