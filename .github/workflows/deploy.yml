@@ -6,9 +6,10 @@ name: Deploy
 # variable AUTO_DEPLOY_STAGE also deploys that stage whenever CI passes on main;
 # leave it unset (the default in a fresh fork) to only deploy manually.
 #
-# Each stage deploys from the GitHub environment of the same name, whose
-# AWS_REGION / AWS_DEPLOY_ROLE_ARN / AWS_EXECUTION_ROLE_ARN variables are
-# printed by scripts/setup-github-oidc.sh.
+# Each stage deploys from the GitHub environment of the same name. Run
+# scripts/setup-github-oidc.sh once per stage to create its AWS roles and that
+# environment's AWS_REGION / AWS_DEPLOY_ROLE_ARN / AWS_EXECUTION_ROLE_ARN
+# variables (and optionally AUTO_DEPLOY_STAGE).
 on:
   workflow_run:
     workflows: [CI]
