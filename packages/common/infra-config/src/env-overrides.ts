@@ -30,11 +30,15 @@ const COMPONENT_FIELDS: Record<
     enableWaf: 'boolean',
     enableKmsEncryption: 'boolean',
     enableKeyRotation: 'boolean',
+    domainName: 'string',
+    certificateArn: 'string',
   },
   instructorApi: {
     enableWaf: 'boolean',
     enableKmsEncryption: 'boolean',
     enableKeyRotation: 'boolean',
+    domainName: 'string',
+    certificateArn: 'string',
   },
   coreTable: {
     enableKmsEncryption: 'boolean',
@@ -52,17 +56,23 @@ const COMPONENT_FIELDS: Record<
     enableWaf: 'boolean',
     enableKmsEncryption: 'boolean',
     enableKeyRotation: 'boolean',
+    domainNames: 'string[]',
+    certificateArn: 'string',
   },
   adminPortal: {
     enableWaf: 'boolean',
     enableKmsEncryption: 'boolean',
     enableKeyRotation: 'boolean',
+    domainNames: 'string[]',
+    certificateArn: 'string',
   },
   lessonMedia: {
     enableWaf: 'boolean',
     enableKmsEncryption: 'boolean',
     enableKeyRotation: 'boolean',
     retainOnDelete: 'boolean',
+    domainNames: 'string[]',
+    certificateArn: 'string',
   },
 };
 

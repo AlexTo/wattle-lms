@@ -11,6 +11,7 @@ import {
   LambdaIntegration,
   ResponseTransferMode,
 } from 'aws-cdk-lib/aws-apigateway';
+import { ICertificate } from 'aws-cdk-lib/aws-certificatemanager';
 import { Distribution } from 'aws-cdk-lib/aws-cloudfront';
 import { IUserPool } from 'aws-cdk-lib/aws-cognito';
 import {
@@ -80,6 +81,14 @@ export interface InstructorApiProps<
    * @default true
    */
   enableKeyRotation?: boolean;
+  /**
+   * Custom domain name for the API Gateway REST API. Requires `certificate`.
+   */
+  domainName?: string;
+  /**
+   * ACM certificate for the custom domain name. Must be in the same region as the API.
+   */
+  certificate?: ICertificate;
 }
 
 /**
@@ -139,10 +148,13 @@ export class InstructorApi<
   constructor(
     scope: Construct,
     id: string,
-    props: InstructorApiProps<TIntegrations>,
+    { domainName, certificate, ...props }: InstructorApiProps<TIntegrations>,
   ) {
     super(scope, id, {
       apiName: 'InstructorApi',
+      ...(domainName && certificate
+        ? { domainName: { domainName, certificate } }
+        : {}),
       defaultMethodOptions: {
         authorizationType: AuthorizationType.COGNITO,
         authorizer: new CognitoUserPoolsAuthorizer(

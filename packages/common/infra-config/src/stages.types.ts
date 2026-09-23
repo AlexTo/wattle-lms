@@ -49,6 +49,10 @@ export type CoreApiComponentConfig = {
   enableKmsEncryption?: boolean;
   /** Enable automatic key rotation on the access log group's KMS key. Only used when `enableKmsEncryption` is true */
   enableKeyRotation?: boolean;
+  /** Custom domain name for the API Gateway REST API. Requires `certificateArn`. */
+  domainName?: string;
+  /** ACM certificate ARN for the custom domain name. Must be in the same region as the API. */
+  certificateArn?: string;
 };
 
 /**
@@ -61,6 +65,10 @@ export type InstructorApiComponentConfig = {
   enableKmsEncryption?: boolean;
   /** Enable automatic key rotation on the access log group's KMS key. Only used when `enableKmsEncryption` is true */
   enableKeyRotation?: boolean;
+  /** Custom domain name for the API Gateway REST API. Requires `certificateArn`. */
+  domainName?: string;
+  /** ACM certificate ARN for the custom domain name. Must be in the same region as the API. */
+  certificateArn?: string;
 };
 
 /**
@@ -101,6 +109,10 @@ export type InstructorPortalComponentConfig = {
   enableKmsEncryption?: boolean;
   /** Enable automatic key rotation on the website bucket's KMS key. Only used when `enableKmsEncryption` is true */
   enableKeyRotation?: boolean;
+  /** Custom domain names for the CloudFront distribution. Requires `certificateArn`. */
+  domainNames?: string[];
+  /** ACM certificate ARN for the custom domain names. Must be in us-east-1. */
+  certificateArn?: string;
 };
 
 /**
@@ -113,6 +125,10 @@ export type AdminPortalComponentConfig = {
   enableKmsEncryption?: boolean;
   /** Enable automatic key rotation on the website bucket's KMS key. Only used when `enableKmsEncryption` is true */
   enableKeyRotation?: boolean;
+  /** Custom domain names for the CloudFront distribution. Requires `certificateArn`. */
+  domainNames?: string[];
+  /** ACM certificate ARN for the custom domain names. Must be in us-east-1. */
+  certificateArn?: string;
 };
 
 /**
@@ -138,6 +154,14 @@ export type LessonMediaComponentConfig = {
    * @default false
    */
   retainOnDelete?: boolean;
+  /**
+   * Custom domain names for the CloudFront distribution in front of the
+   * CloudFront-served bucket. Requires `certificateArn`. Not applicable to
+   * the raw-upload bucket, which has no CloudFront distribution.
+   */
+  domainNames?: string[];
+  /** ACM certificate ARN for the custom domain names. Must be in us-east-1. */
+  certificateArn?: string;
 };
 
 /**

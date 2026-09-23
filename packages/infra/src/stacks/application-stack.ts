@@ -194,6 +194,13 @@ export class ApplicationStack extends Stack {
   ) {
     const coreApiKmsEnabled = coreApiConfig?.enableKmsEncryption ?? true;
     const integrations = CoreApi.defaultIntegrations(this).build();
+    const coreApiCertificate = coreApiConfig?.certificateArn
+      ? Certificate.fromCertificateArn(
+          this,
+          'CoreApiCertificate',
+          coreApiConfig.certificateArn,
+        )
+      : undefined;
 
     const coreApi = new CoreApi(this, 'CoreApi', {
       integrations,
@@ -201,6 +208,8 @@ export class ApplicationStack extends Stack {
       enableWaf: coreApiConfig?.enableWaf ?? true,
       enableKmsEncryption: coreApiKmsEnabled,
       enableKeyRotation: coreApiConfig?.enableKeyRotation ?? true,
+      domainName: coreApiConfig?.domainName,
+      certificate: coreApiCertificate,
     });
     if (!coreApiKmsEnabled) {
       suppressRules(
@@ -230,6 +239,13 @@ export class ApplicationStack extends Stack {
     const instructorApiKmsEnabled =
       instructorApiConfig?.enableKmsEncryption ?? true;
     const integrations = InstructorApi.defaultIntegrations(this).build();
+    const instructorApiCertificate = instructorApiConfig?.certificateArn
+      ? Certificate.fromCertificateArn(
+          this,
+          'InstructorApiCertificate',
+          instructorApiConfig.certificateArn,
+        )
+      : undefined;
 
     const instructorApi = new InstructorApi(this, 'InstructorApi', {
       integrations,
@@ -237,6 +253,8 @@ export class ApplicationStack extends Stack {
       enableWaf: instructorApiWafEnabled,
       enableKmsEncryption: instructorApiKmsEnabled,
       enableKeyRotation: instructorApiConfig?.enableKeyRotation ?? true,
+      domainName: instructorApiConfig?.domainName,
+      certificate: instructorApiCertificate,
     });
     if (!instructorApiKmsEnabled) {
       suppressRules(
@@ -264,6 +282,13 @@ export class ApplicationStack extends Stack {
     const lessonMediaKmsEnabled =
       lessonMediaConfig?.enableKmsEncryption ?? true;
     const lessonMediaWafEnabled = lessonMediaConfig?.enableWaf ?? true;
+    const lessonMediaCertificate = lessonMediaConfig?.certificateArn
+      ? Certificate.fromCertificateArn(
+          this,
+          'LessonMediaCertificate',
+          lessonMediaConfig.certificateArn,
+        )
+      : undefined;
     const lessonMediaBucket = new LessonMediaBucket(this, 'LessonMediaBucket', {
       enableWaf: lessonMediaWafEnabled,
       enableKmsEncryption: lessonMediaKmsEnabled,
@@ -271,6 +296,8 @@ export class ApplicationStack extends Stack {
       removalPolicy: lessonMediaConfig?.retainOnDelete
         ? RemovalPolicy.RETAIN
         : RemovalPolicy.DESTROY,
+      domainNames: lessonMediaConfig?.domainNames,
+      certificate: lessonMediaCertificate,
     });
     if (!lessonMediaKmsEnabled) {
       suppressRules(
@@ -658,10 +685,19 @@ export class ApplicationStack extends Stack {
       instructorPortalConfig?.enableWaf ?? true;
     const instructorPortalKmsEnabled =
       instructorPortalConfig?.enableKmsEncryption ?? true;
+    const instructorPortalCertificate = instructorPortalConfig?.certificateArn
+      ? Certificate.fromCertificateArn(
+          this,
+          'InstructorPortalCertificate',
+          instructorPortalConfig.certificateArn,
+        )
+      : undefined;
 
     const instructorPortal = new InstructorPortal(this, 'InstructorPortal', {
       enableWaf: instructorPortalWafEnabled,
       enableKeyRotation: instructorPortalConfig?.enableKeyRotation ?? true,
+      domainNames: instructorPortalConfig?.domainNames,
+      certificate: instructorPortalCertificate,
       ...(instructorPortalKmsEnabled
         ? {}
         : { encryption: BucketEncryption.S3_MANAGED }),
@@ -692,10 +728,19 @@ export class ApplicationStack extends Stack {
     const adminPortalWafEnabled = adminPortalConfig?.enableWaf ?? true;
     const adminPortalKmsEnabled =
       adminPortalConfig?.enableKmsEncryption ?? true;
+    const adminPortalCertificate = adminPortalConfig?.certificateArn
+      ? Certificate.fromCertificateArn(
+          this,
+          'AdminPortalCertificate',
+          adminPortalConfig.certificateArn,
+        )
+      : undefined;
 
     const adminPortal = new AdminPortal(this, 'AdminPortal', {
       enableWaf: adminPortalWafEnabled,
       enableKeyRotation: adminPortalConfig?.enableKeyRotation ?? true,
+      domainNames: adminPortalConfig?.domainNames,
+      certificate: adminPortalCertificate,
       ...(adminPortalKmsEnabled
         ? {}
         : { encryption: BucketEncryption.S3_MANAGED }),
