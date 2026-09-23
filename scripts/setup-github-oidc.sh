@@ -39,6 +39,10 @@ set -euo pipefail
 # Defaults can be preset with environment variables:
 #   GITHUB_REPOSITORY    owner/repo trusted by the deploy role (otherwise
 #                        parsed from the `origin` remote)
+#   GITHUB_OIDC_SUBJECT_PREFIX
+#                        the repo's OIDC subject before ':environment:'
+#                        (otherwise read from GitHub via gh, falling back to
+#                        repo:<owner>/<repo>)
 #   AWS_PROFILE          AWS CLI profile (otherwise the stage's configured
 #                        profile, then the default credential chain)
 #   AWS_REGION           used when the stage config sets no region
@@ -187,6 +191,49 @@ github_cli_ready() {
   command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1
 }
 
+# GitHub sets a job's OIDC token subject to `<prefix>:environment:<name>` when
+# it runs in an environment. The prefix is `repo:<owner>/<repo>` by default,
+# but repositories using immutable subject claims embed the owner and repo IDs
+# (`repo:<owner>@<id>/<repo>@<id>`), so ask GitHub rather than assume.
+resolve_oidc_subject_prefix() {
+  if [[ -n "${GITHUB_OIDC_SUBJECT_PREFIX:-}" ]]; then
+    echo "$GITHUB_OIDC_SUBJECT_PREFIX"
+    return
+  fi
+
+  if ! github_cli_ready; then
+    echo "Couldn't read $GITHUB_REPOSITORY's OIDC subject settings (needs an authenticated gh CLI); assuming the default prefix repo:$GITHUB_REPOSITORY." >&2
+    echo "If the repository uses immutable subject claims, set GITHUB_OIDC_SUBJECT_PREFIX instead." >&2
+    echo "repo:$GITHUB_REPOSITORY"
+    return
+  fi
+
+  # One request for both fields. errexit doesn't apply inside the command
+  # substitution this runs in, so failures are handled explicitly: guessing
+  # the prefix here would write a trust policy the repository can't satisfy.
+  local settings use_default prefix
+  if ! settings="$(gh api "repos/$GITHUB_REPOSITORY/actions/oidc/customization/sub" \
+    --jq '"\(.use_default)\t\(.sub_claim_prefix // "")"')"; then
+    echo "Couldn't read $GITHUB_REPOSITORY's OIDC subject settings from GitHub." >&2
+    echo "Re-run, or set GITHUB_OIDC_SUBJECT_PREFIX to the part of the subject before ':environment:'." >&2
+    return 1
+  fi
+  IFS=$'\t' read -r use_default prefix <<<"$settings"
+
+  case "$use_default" in
+    true) echo "${prefix:-repo:$GITHUB_REPOSITORY}" ;;
+    false)
+      echo "$GITHUB_REPOSITORY uses a custom OIDC subject claim template, so its tokens' subject can't be predicted here." >&2
+      echo "Set GITHUB_OIDC_SUBJECT_PREFIX to the part of the subject before ':environment:' and re-run." >&2
+      return 1
+      ;;
+    *)
+      echo "Unexpected OIDC subject settings from GitHub: $settings" >&2
+      return 1
+      ;;
+  esac
+}
+
 echo "============================================"
 echo "GitHub Actions OIDC Setup"
 echo "============================================"
@@ -240,6 +287,11 @@ while true; do
   GITHUB_REPOSITORY=""
 done
 readonly GITHUB_REPOSITORY
+if ! OIDC_SUBJECT_PREFIX="$(resolve_oidc_subject_prefix)"; then
+  exit 1
+fi
+readonly OIDC_SUBJECT_PREFIX
+echo "OIDC subject: $OIDC_SUBJECT_PREFIX:environment:$TARGET_STAGE"
 
 section "AWS credentials"
 available_profiles="$(aws configure list-profiles 2>/dev/null | paste -sd' ' - || true)"
@@ -414,7 +466,7 @@ create_policy_files() {
       "Condition": {
         "StringEquals": {
           "$OIDC_PROVIDER_HOST:aud": "sts.amazonaws.com",
-          "$OIDC_PROVIDER_HOST:sub": "repo:$GITHUB_REPOSITORY:environment:$TARGET_STAGE"
+          "$OIDC_PROVIDER_HOST:sub": "$OIDC_SUBJECT_PREFIX:environment:$TARGET_STAGE"
         }
       }
     }
