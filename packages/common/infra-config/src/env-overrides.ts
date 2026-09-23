@@ -115,6 +115,11 @@ function parseEnvValue(
  * Overrides `base` with any matching `<STAGE>_<COMPONENT>_<FIELD>` (or
  * `<STAGE>_REGION` / `<STAGE>_ACCOUNT`) environment variables, each segment
  * SCREAMING_SNAKE_CASE. Env overrides take priority over `base`.
+ *
+ * `@wattle/infra`'s `synth` target (packages/infra/project.json) hashes
+ * matching env vars into its cache key so a changed override busts the
+ * cache -- its grep pattern lists stage names by hand and needs updating
+ * alongside any new entry in stages.config.ts.
  */
 export function applyEnvOverrides(
   stageName: string,

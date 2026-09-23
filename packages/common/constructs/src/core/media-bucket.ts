@@ -195,7 +195,11 @@ export class MediaBucket extends Construct {
 
     RuntimeConfig.ensure(this).set('s3', runtimeConfigKey, {
       bucketName: this.bucket.bucketName,
-      cloudFrontDomainName: this.cloudFrontDistribution.domainName,
+      // Prefer the configured custom domain (its first alias, if there are
+      // several) over the generated *.cloudfront.net hostname, so signed
+      // URLs built from this value use it instead.
+      cloudFrontDomainName:
+        domainNames?.[0] ?? this.cloudFrontDistribution.domainName,
       cloudFrontKeyPairId: signingPublicKey.publicKeyId,
       cloudFrontPrivateKeySecretArn: this.signingKeyPairSecret.secretArn,
     });
