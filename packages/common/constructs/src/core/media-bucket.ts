@@ -2,7 +2,7 @@
  * Copyright Wattle LMS Contributors. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
-import { Lazy, RemovalPolicy, Stack } from 'aws-cdk-lib';
+import { Lazy, RemovalPolicy } from 'aws-cdk-lib';
 import {
   Distribution,
   KeyGroup,
@@ -10,13 +10,7 @@ import {
   ViewerProtocolPolicy,
 } from 'aws-cdk-lib/aws-cloudfront';
 import { S3BucketOrigin } from 'aws-cdk-lib/aws-cloudfront-origins';
-import {
-  Effect,
-  Grant,
-  IGrantable,
-  PolicyStatement,
-  ServicePrincipal,
-} from 'aws-cdk-lib/aws-iam';
+import { Grant, IGrantable } from 'aws-cdk-lib/aws-iam';
 import { IKey, Key } from 'aws-cdk-lib/aws-kms';
 import {
   BlockPublicAccess,
@@ -155,31 +149,16 @@ export class MediaBucket extends Construct {
         trustedKeyGroups: [signingKeyGroup],
       },
     });
-    // Granting the bucket policy s3:GetObject to CloudFront's OAC principal
-    // isn't sufficient on its own for SSE-KMS objects: CloudFront also needs
-    // kms:Decrypt on the key it's reading through, or S3 returns
-    // AccessDenied even though the CloudFront signature check passed.
+    // For SSE-KMS objects CloudFront also needs kms:Decrypt on the bucket's
+    // key, or S3 returns AccessDenied even though the signature check passed.
+    // withOriginAccessControl adds that grant to the key policy itself,
+    // conditioned on any distribution in this account rather than this one:
+    // naming this distribution there would make the key depend on the
+    // distribution, which depends on the bucket, which depends on the key.
+    // Reads stay limited to this distribution by the bucket policy's
+    // s3:GetObject grant, which does name it.
     // See https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-s3.html#private-content-kms
-    if (key) {
-      key.addToResourcePolicy(
-        new PolicyStatement({
-          effect: Effect.ALLOW,
-          principals: [new ServicePrincipal('cloudfront.amazonaws.com')],
-          actions: ['kms:Decrypt'],
-          resources: ['*'],
-          conditions: {
-            StringEquals: {
-              'AWS:SourceArn': Stack.of(this).formatArn({
-                service: 'cloudfront',
-                region: '',
-                resource: 'distribution',
-                resourceName: this.cloudFrontDistribution.distributionId,
-              }),
-            },
-          },
-        }),
-      );
-    }
+
     // See https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/DownloadDistValuesGeneral.html
     suppressRules(
       this.cloudFrontDistribution,

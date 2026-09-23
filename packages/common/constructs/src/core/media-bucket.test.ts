@@ -1,0 +1,138 @@
+/**
+ * Copyright Wattle LMS Contributors. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+// @vitest-environment node
+// (CDK resolves asset paths from import.meta.url, which jsdom doesn't provide.)
+import { App, Stack } from 'aws-cdk-lib';
+import { Template } from 'aws-cdk-lib/assertions';
+import { describe, expect, it } from 'vitest';
+import { MediaBucket } from './media-bucket.js';
+
+type Resources = Record<
+  string,
+  { Type: string; Properties?: unknown; DependsOn?: string | string[] }
+>;
+
+/** Logical IDs a resource refers to via Ref, Fn::GetAtt, Fn::Sub or DependsOn. */
+const dependenciesOf = (
+  id: string,
+  resource: Resources[string],
+  resources: Resources,
+): Set<string> => {
+  const found = new Set<string>([resource.DependsOn ?? []].flat());
+  const walk = (node: unknown): void => {
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+    } else if (node && typeof node === 'object') {
+      for (const [key, value] of Object.entries(node)) {
+        if (key === 'Ref' && typeof value === 'string') {
+          found.add(value);
+        } else if (key === 'Fn::GetAtt') {
+          found.add(
+            Array.isArray(value) ? value[0] : String(value).split('.')[0],
+          );
+        } else if (key === 'Fn::Sub') {
+          const template = Array.isArray(value) ? value[0] : value;
+          for (const [, ref] of String(template).matchAll(/\$\{([\w]+)/g)) {
+            found.add(ref);
+          }
+          walk(value);
+        } else {
+          walk(value);
+        }
+      }
+    }
+  };
+  walk(resource.Properties);
+  found.delete(id);
+  return new Set([...found].filter((dep) => dep in resources));
+};
+
+/** Every dependency cycle among a template's resources, as logical ID paths. */
+const findCycles = (resources: Resources): string[][] => {
+  const deps = Object.fromEntries(
+    Object.entries(resources).map(([id, r]) => [
+      id,
+      dependenciesOf(id, r, resources),
+    ]),
+  );
+  const state: Record<string, 'visiting' | 'done'> = {};
+  const path: string[] = [];
+  const cycles: string[][] = [];
+  const visit = (id: string): void => {
+    state[id] = 'visiting';
+    path.push(id);
+    for (const dep of deps[id]) {
+      if (state[dep] === 'visiting') {
+        cycles.push([...path.slice(path.indexOf(dep)), dep]);
+      } else if (!state[dep]) {
+        visit(dep);
+      }
+    }
+    path.pop();
+    state[id] = 'done';
+  };
+  for (const id of Object.keys(resources)) {
+    if (!state[id]) visit(id);
+  }
+  return cycles;
+};
+
+const synthesize = (enableKmsEncryption: boolean) => {
+  const stack = new Stack(new App(), 'Stack', {
+    env: { account: 'test-account', region: 'ap-southeast-2' },
+  });
+  new MediaBucket(stack, 'Media', {
+    runtimeConfigKey: 'media',
+    enableKmsEncryption,
+    enableWaf: false,
+  });
+  return Template.fromStack(stack);
+};
+
+const cloudFrontStatements = (template: Template, type: string) =>
+  Object.values(template.findResources(type)).flatMap((resource) => {
+    const document =
+      resource.Properties.PolicyDocument ?? resource.Properties.KeyPolicy;
+    return document.Statement.filter((statement: { Principal?: unknown }) =>
+      JSON.stringify(statement.Principal ?? '').includes(
+        'cloudfront.amazonaws.com',
+      ),
+    );
+  });
+
+describe('MediaBucket', () => {
+  it.each([true, false])(
+    'has no resource dependency cycle (KMS encryption: %s)',
+    (enableKmsEncryption) => {
+      const resources = synthesize(enableKmsEncryption).toJSON()
+        .Resources as Resources;
+
+      expect(findCycles(resources)).toEqual([]);
+    },
+  );
+
+  it('lets CloudFront decrypt objects encrypted with the bucket key', () => {
+    const statements = cloudFrontStatements(synthesize(true), 'AWS::KMS::Key');
+
+    expect(statements).toEqual([
+      expect.objectContaining({ Effect: 'Allow', Action: 'kms:Decrypt' }),
+    ]);
+  });
+
+  it('only lets this distribution read objects', () => {
+    const template = synthesize(true);
+    const [distributionId] = Object.keys(
+      template.findResources('AWS::CloudFront::Distribution'),
+    );
+    const statements = cloudFrontStatements(template, 'AWS::S3::BucketPolicy');
+
+    expect(statements).toEqual([
+      expect.objectContaining({ Effect: 'Allow', Action: 's3:GetObject' }),
+    ]);
+    expect(
+      JSON.stringify(statements[0].Condition.StringEquals['AWS:SourceArn']),
+    ).toContain(`{"Ref":"${distributionId}"}`);
+  });
+});

@@ -1,0 +1,117 @@
+name: Deploy
+
+# Any stage in packages/common/infra-config/src/stages.config.ts can be
+# deployed manually via workflow_dispatch; gate production-like stages with
+# required reviewers on their GitHub environment. Setting the repository
+# variable AUTO_DEPLOY_STAGE also deploys that stage whenever CI passes on main;
+# leave it unset (the default in a fresh fork) to only deploy manually.
+#
+# Each stage deploys from the GitHub environment of the same name. Run
+# scripts/setup-github-oidc.sh once per stage to create its AWS roles and that
+# environment's AWS_REGION / AWS_DEPLOY_ROLE_ARN / AWS_EXECUTION_ROLE_ARN
+# variables (and optionally AUTO_DEPLOY_STAGE).
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: Stage to deploy (a stage name from stages.config.ts)
+        type: string
+        required: true
+        default: wattle-development
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  CI: "true"
+  NX_DAEMON: "false"
+
+jobs:
+  deploy:
+    name: Deploy (${{ inputs.stage || vars.AUTO_DEPLOY_STAGE }})
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && vars.AUTO_DEPLOY_STAGE != '') }}
+    environment: ${{ inputs.stage || vars.AUTO_DEPLOY_STAGE }}
+    concurrency:
+      group: deploy-${{ inputs.stage || vars.AUTO_DEPLOY_STAGE }}
+      cancel-in-progress: false
+    env:
+      STAGE: ${{ inputs.stage || vars.AUTO_DEPLOY_STAGE }}
+      AWS_EXECUTION_ROLE_ARN: ${{ vars.AWS_EXECUTION_ROLE_ARN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # workflow_run runs on main's latest commit; deploy the commit CI
+          # actually verified instead.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      # Synth and deploy skip checkov and `nx affected`, so neither uv nor
+      # NX_BASE/NX_HEAD is needed.
+      - uses: ./.github/actions/init-monorepo
+        with:
+          setup-uv: "false"
+          set-nx-shas: "false"
+
+      # Fail before touching AWS if the stage doesn't exist, rather than with a
+      # confusing credentials error from an unconfigured GitHub environment.
+      - name: Check stage exists
+        run: |
+          pnpm exec tsx --eval "
+            import('./packages/common/infra-config/src/index.ts').then((m) => {
+              const stages = m.listStageNames('packages/infra');
+              if (!stages.includes(process.env.STAGE)) {
+                console.error('Unknown stage \"' + process.env.STAGE + '\". Configured stages: ' + stages.join(', '));
+                process.exit(1);
+              }
+            });
+          "
+
+      # Don't release with a known HIGH/CRITICAL vulnerability (that has a fix)
+      # in the dependency tree, or with a committed secret. Accepted findings go
+      # in .trivyignore.
+      - name: Scan for vulnerabilities and secrets
+        run: pnpm trivy
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # Synth must run after credentials are configured: stacks take their
+      # account from CDK_DEFAULT_ACCOUNT, which the CDK CLI resolves from the
+      # active credentials. Nx's cache key doesn't cover that, so skip it to
+      # avoid reusing an assembly synthesized without an account.
+      # The execution role can only create roles carrying the stage's
+      # permissions boundary, so synthesize with it applied.
+      - name: Synthesize
+        run: pnpm nx run @wattle/infra:synth --skip-nx-cache --context wattle:stagePermissionsBoundary=true
+
+      # A rerun of CI for an older commit (or a run that waited behind a newer
+      # deploy) would otherwise redeploy stale code. Checked here, inside the
+      # job's concurrency slot, so it reflects main right before deploying.
+      # Manual runs deploy whatever they're given, e.g. to roll back.
+      - name: Check commit is still main's latest
+        id: freshness
+        if: ${{ github.event_name == 'workflow_run' }}
+        run: |
+          main_sha="$(git ls-remote --exit-code origin refs/heads/main | cut -f1)"
+          head_sha="$(git rev-parse HEAD)"
+          if [[ -n "$main_sha" && "$main_sha" == "$head_sha" ]]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Skipping deploy: $head_sha is no longer main's latest commit ($main_sha)."
+            echo "current=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # CDK first tries its bootstrap roles, which the deploy role can't
+      # assume, and falls back to the deploy role's own credentials (logging a
+      # warning); --role-arn hands CloudFormation the scoped execution role.
+      - name: Deploy
+        if: ${{ github.event_name != 'workflow_run' || steps.freshness.outputs.current == 'true' }}
+        run: pnpm nx run @wattle/infra:deploy-ci "$STAGE/*" --role-arn "$AWS_EXECUTION_ROLE_ARN"
