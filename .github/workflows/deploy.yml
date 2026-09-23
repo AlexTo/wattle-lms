@@ -1,0 +1,79 @@
+name: Deploy
+
+# wattle-development deploys automatically once CI passes on main. Any stage
+# (including wattle-production) can be deployed manually via workflow_dispatch;
+# gate production with required reviewers on its GitHub environment.
+#
+# Each stage deploys from the GitHub environment of the same name, whose
+# AWS_REGION / AWS_DEPLOY_ROLE_ARN / AWS_EXECUTION_ROLE_ARN variables are
+# printed by scripts/setup-github-oidc.sh.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: Stage to deploy
+        type: choice
+        options:
+          - wattle-development
+          - wattle-production
+        default: wattle-development
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  CI: "true"
+  NX_DAEMON: "false"
+
+jobs:
+  deploy:
+    name: Deploy (${{ inputs.stage || 'wattle-development' }})
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    environment: ${{ inputs.stage || 'wattle-development' }}
+    concurrency:
+      group: deploy-${{ inputs.stage || 'wattle-development' }}
+      cancel-in-progress: false
+    env:
+      STAGE: ${{ inputs.stage || 'wattle-development' }}
+      AWS_EXECUTION_ROLE_ARN: ${{ vars.AWS_EXECUTION_ROLE_ARN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # workflow_run runs on main's latest commit; deploy the commit CI
+          # actually verified instead.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # Synth must run after credentials are configured: stacks take their
+      # account from CDK_DEFAULT_ACCOUNT, which the CDK CLI resolves from the
+      # active credentials. Nx's cache key doesn't cover that, so skip it to
+      # avoid reusing an assembly synthesized without an account.
+      - name: Synthesize
+        run: pnpm nx run @wattle/infra:synth --skip-nx-cache
+
+      # CDK first tries its bootstrap roles, which the deploy role can't
+      # assume, and falls back to the deploy role's own credentials (logging a
+      # warning); --role-arn hands CloudFormation the scoped execution role.
+      - name: Deploy
+        run: pnpm nx run @wattle/infra:deploy-ci "$STAGE/*" --role-arn "$AWS_EXECUTION_ROLE_ARN"
