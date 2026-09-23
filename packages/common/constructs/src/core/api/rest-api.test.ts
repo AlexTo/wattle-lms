@@ -69,4 +69,33 @@ describe('RestApi', () => {
 
     expect(publishedUrl).toEqual(stack.resolve(api.api.url));
   });
+
+  it('includes the base path mapping in the custom domain URL when configured', () => {
+    const stack = new Stack(new App(), 'Stack', {
+      env: { account: 'test-account', region: 'ap-southeast-2' },
+    });
+    new RestApi<Operations, ReturnType<typeof buildIntegrations>>(
+      stack,
+      'Api',
+      {
+        apiName: 'TestApi',
+        operations: { ping: { path: '/ping', method: 'GET' } },
+        integrations: buildIntegrations(),
+        enableWaf: false,
+        domainName: {
+          domainName: 'api.example.com',
+          basePath: 'v1',
+          certificate: Certificate.fromCertificateArn(
+            stack,
+            'Cert',
+            'arn:aws:acm:ap-southeast-2:123456789012:certificate/abc',
+          ),
+        },
+      },
+    );
+
+    expect(RuntimeConfig.of(stack)?.get('connection').apis).toEqual({
+      TestApi: 'https://api.example.com/v1/',
+    });
+  });
 });
