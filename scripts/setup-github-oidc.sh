@@ -306,7 +306,12 @@ if ! github_cli_ready; then
   echo "The gh CLI isn't installed or logged in, so the GitHub environment will be listed for you to set up by hand."
 elif ask_yes_no "Create the '$TARGET_STAGE' environment in $GITHUB_REPOSITORY and set its variables with gh?" y; then
   CONFIGURE_GITHUB=true
-  current_auto_deploy="$(gh api "repos/$GITHUB_REPOSITORY/actions/variables/AUTO_DEPLOY_STAGE" --jq .value 2>/dev/null || true)"
+  # gh prints the error body to stdout on a 404 (variable not set yet), so
+  # only keep the output when the call succeeds.
+  current_auto_deploy=""
+  if auto_deploy_value="$(gh api "repos/$GITHUB_REPOSITORY/actions/variables/AUTO_DEPLOY_STAGE" --jq .value 2>/dev/null)"; then
+    current_auto_deploy="$auto_deploy_value"
+  fi
   if [[ "$current_auto_deploy" == "$TARGET_STAGE" ]]; then
     echo "$TARGET_STAGE already deploys automatically when CI passes on main."
   elif ask_yes_no "Deploy $TARGET_STAGE automatically whenever CI passes on main?${current_auto_deploy:+ (replaces $current_auto_deploy)}" n; then
