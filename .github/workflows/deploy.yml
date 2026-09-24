@@ -7,7 +7,7 @@ name: Deploy
 # leave it unset (the default in a fresh fork) to only deploy manually.
 #
 # Each stage deploys from the GitHub environment of the same name. Run
-# scripts/setup-github-oidc.sh once per stage to create its AWS roles and that
+# scripts/setup-stage.sh once per stage to create its AWS roles and that
 # environment's AWS_REGION / AWS_DEPLOY_ROLE_ARN / AWS_EXECUTION_ROLE_ARN
 # variables (and optionally AUTO_DEPLOY_STAGE).
 on:
@@ -70,6 +70,30 @@ jobs:
               }
             });
           "
+
+      # stages.config.ts values can be overridden per stage by
+      # <STAGE>_<COMPONENT>_<FIELD> env vars (see
+      # packages/common/infra-config/src/env-overrides.ts), e.g. custom domains
+      # and ACM certificate ARNs that shouldn't be committed. Forward every
+      # variable on this stage's GitHub environment (or the repo) whose name
+      # starts with the stage's prefix, e.g. WATTLE_DEVELOPMENT_ for
+      # wattle-development, into the environment synth runs in.
+      - name: Forward stage config overrides
+        env:
+          VARS_JSON: ${{ toJSON(vars) }}
+        run: |
+          prefix="$(printf '%s' "$STAGE" | sed -E 's/[^a-zA-Z0-9]+/_/g; s/([a-z0-9])([A-Z])/\1_\2/g' | tr '[:lower:]' '[:upper:]')_"
+          overrides="$(printf '%s' "$VARS_JSON" | jq -r --arg prefix "$prefix" '
+            to_entries[]
+            | select(.key | startswith($prefix))
+            | if (.value | test("\n")) then error("\(.key) must be a single line") else "\(.key)=\(.value)" end
+          ')"
+          if [[ -n "$overrides" ]]; then
+            printf '%s\n' "$overrides" >> "$GITHUB_ENV"
+            cut -d= -f1 <<< "$overrides" | sed 's/^/Forwarding /'
+          else
+            echo "No ${prefix}* variables set; using stages.config.ts as-is."
+          fi
 
       # Don't release with a known HIGH/CRITICAL vulnerability (that has a fix)
       # in the dependency tree, or with a committed secret. Accepted findings go

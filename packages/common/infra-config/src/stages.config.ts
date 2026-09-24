@@ -4,6 +4,27 @@
  */
 import type { StagesConfig } from './stages.types.js';
 
+// Custom domains and their ACM certificates are account-specific, so they
+// aren't committed here. Set them as <STAGE>_<COMPONENT>_<FIELD> env vars
+// instead (see env-overrides.ts); deploy.yml forwards any such variable set
+// on the stage's GitHub environment, and scripts/setup-stage.sh prompts for
+// them and sets them there. For wattle-development, each component
+// takes a WATTLE_DEVELOPMENT_<COMPONENT>_CERTIFICATE_ARN plus:
+//
+//   APIs (API Gateway; certificate in the stage's region), one domain each:
+//     WATTLE_DEVELOPMENT_CORE_API_DOMAIN_NAME            api.example.com
+//     WATTLE_DEVELOPMENT_INSTRUCTOR_API_DOMAIN_NAME      instructor-api.example.com
+//
+//   CloudFront (certificate in us-east-1), comma-separated domains:
+//     WATTLE_DEVELOPMENT_STUDENT_PORTAL_DOMAIN_NAMES     example.com,www.example.com
+//     WATTLE_DEVELOPMENT_INSTRUCTOR_PORTAL_DOMAIN_NAMES  instructor.example.com
+//     WATTLE_DEVELOPMENT_ADMIN_PORTAL_DOMAIN_NAMES       admin.example.com
+//     WATTLE_DEVELOPMENT_LESSON_MEDIA_DOMAIN_NAMES       media.example.com
+//
+// A domain is only applied when its certificate ARN is also set. Portal
+// domains are picked up automatically as API CORS origins and Cognito
+// callback/logout URLs. DNS records pointing each domain at its API Gateway /
+// CloudFront target aren't managed by the stack and need creating separately.
 export default {
   projects: {
     'packages/infra': {

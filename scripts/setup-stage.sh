@@ -6,7 +6,7 @@
 #
 set -euo pipefail
 
-# Guided GitHub Actions OIDC setup for Wattle LMS.
+# Guided deployment setup for a Wattle LMS stage.
 #
 # Run this once per deployment stage (as defined in
 # packages/common/infra-config/src/stages.config.ts), from a clone of the
@@ -22,6 +22,11 @@ set -euo pipefail
 # - optionally bootstraps CDK in the regions the stage deploys to
 # - optionally creates the matching GitHub environment and sets its variables
 #   (requires an authenticated `gh` CLI)
+# - optionally configures custom domains and their ACM certificates for the
+#   APIs, portals and lesson media, stored as <STAGE>_<COMPONENT>_* variables
+#   on that GitHub environment (see
+#   packages/common/infra-config/src/env-overrides.ts), which the deploy
+#   workflow forwards to synth
 #
 # Stages may share an AWS account, so each stage gets its own pair of roles,
 # and the deploy role trusts only the GitHub environment of the same name.
@@ -32,7 +37,7 @@ set -euo pipefail
 #
 # Usage:
 #   pnpm install   # the stage list and settings are read from stages.config.ts
-#   ./scripts/setup-github-oidc.sh [--yes] [stage]
+#   ./scripts/setup-stage.sh [--yes] [stage]
 #
 #   --yes   accept every default without prompting (for scripted runs)
 #
@@ -46,6 +51,11 @@ set -euo pipefail
 #   AWS_PROFILE          AWS CLI profile (otherwise the stage's configured
 #                        profile, then the default credential chain)
 #   AWS_REGION           used when the stage config sets no region
+#   <STAGE>_<COMPONENT>_DOMAIN_NAME(S), <STAGE>_<COMPONENT>_CERTIFICATE_ARN
+#                        custom domain defaults, e.g.
+#                        WATTLE_DEVELOPMENT_CORE_API_DOMAIN_NAME (otherwise
+#                        the stage's config, then the GitHub environment's
+#                        current variables)
 #   DEPLOY_ROLE_NAME, EXECUTION_ROLE_NAME
 #
 # This script is designed to be idempotent and safe to run multiple times.
@@ -168,6 +178,11 @@ read_stages_config() {
         console.log('account=' + (config.account ?? ''));
         console.log('profile=' + (config.credentials?.type === 'profile' ? config.credentials.profile : ''));
         console.log('cloudFrontWaf=' + cloudFrontWaf);
+        for (const name of ['coreApi', 'instructorApi', 'studentPortal', 'instructorPortal', 'adminPortal', 'lessonMedia']) {
+          const component = c[name] ?? {};
+          console.log('domains.' + name + '=' + [component.domainName ?? component.domainNames ?? []].flat().join(','));
+          console.log('certificate.' + name + '=' + (component.certificateArn ?? ''));
+        }
       });
     " "$@"
   )
@@ -189,6 +204,63 @@ bootstrap_missing() {
 
 github_cli_ready() {
   command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1
+}
+
+# SCREAMING_SNAKE_CASE segment used in stage config override variable names,
+# e.g. wattle-development -> WATTLE_DEVELOPMENT. Must match toEnvSegment() in
+# packages/common/infra-config/src/env-overrides.ts.
+to_env_segment() {
+  printf '%s' "$1" | sed -E 's/[^a-zA-Z0-9]+/_/g; s/([a-z0-9])([A-Z])/\1_\2/g' | tr '[:lower:]' '[:upper:]'
+}
+
+# Prints a variable's value on the stage's GitHub environment, or nothing if
+# it (or the environment) doesn't exist yet. gh prints the error body to
+# stdout on a 404, so only keep the output when the call succeeds.
+github_environment_variable() {
+  local value
+  if value="$(gh api "repos/$GITHUB_REPOSITORY/environments/$TARGET_STAGE/variables/$1" --jq .value 2>/dev/null)"; then
+    echo "$value"
+  fi
+}
+
+# certificate_covers <comma-separated names> <domain>: whether a certificate
+# with those subject alternative names is valid for the domain. A wildcard
+# covers exactly one label.
+certificate_covers() {
+  local names=",${1,,}," domain="${2,,}"
+  [[ "$names" == *",$domain,"* ]] && return 0
+  [[ "${domain#*.}" == *.* && "$names" == *",*.${domain#*.},"* ]]
+}
+
+# certificate_covers_all <comma-separated names> <comma-separated domains>
+certificate_covers_all() {
+  local names="$1" domain
+  local -a domains
+  IFS=',' read -r -a domains <<<"$2"
+  for domain in "${domains[@]}"; do
+    certificate_covers "$names" "$domain" || return 1
+  done
+}
+
+# find_certificate <region> <comma-separated domains> <comma-separated key
+# types>: prints the ARN of the first issued ACM certificate in the region
+# with one of the key types and covering every domain. The key types are
+# passed explicitly because ACM otherwise only lists RSA_1024/RSA_2048
+# certificates, silently skipping ECDSA and larger RSA ones.
+find_certificate() {
+  local region="$1" domains="$2" key_types="$3" arn names
+  while IFS=$'\t' read -r arn names; do
+    [[ -n "$arn" ]] || continue
+    if certificate_covers_all "$names" "$domains"; then
+      echo "$arn"
+      return
+    fi
+  done < <(aws acm list-certificates \
+    --region "$region" \
+    --certificate-statuses ISSUED \
+    --includes "keyTypes=$key_types" \
+    --query 'CertificateSummaryList[].[CertificateArn, join(`,`, SubjectAlternativeNameSummaries || [DomainName])]' \
+    --output text 2>/dev/null || true)
 }
 
 # GitHub sets a job's OIDC token subject to `<prefix>:environment:<name>` when
@@ -235,7 +307,7 @@ resolve_oidc_subject_prefix() {
 }
 
 echo "============================================"
-echo "GitHub Actions OIDC Setup"
+echo "Stage Deployment Setup"
 echo "============================================"
 
 section "Stage"
@@ -268,12 +340,17 @@ STAGE_REGION=""
 STAGE_ACCOUNT=""
 STAGE_PROFILE=""
 STAGE_CLOUDFRONT_WAF=""
+# Keyed by component name, e.g. coreApi. Already include any
+# <STAGE>_<COMPONENT>_* overrides set in this shell (resolveStage applies them).
+declare -A STAGE_DOMAINS=() STAGE_CERTIFICATES=()
 while IFS='=' read -r key value; do
   case "$key" in
     region) STAGE_REGION="$value" ;;
     account) STAGE_ACCOUNT="$value" ;;
     profile) STAGE_PROFILE="$value" ;;
     cloudFrontWaf) STAGE_CLOUDFRONT_WAF="$value" ;;
+    domains.*) STAGE_DOMAINS["${key#domains.}"]="$value" ;;
+    certificate.*) STAGE_CERTIFICATES["${key#certificate.}"]="$value" ;;
   esac
 done < <(read_stages_config "$INFRA_PROJECT_PATH" "$TARGET_STAGE")
 
@@ -394,6 +471,122 @@ elif ask_yes_no "Create the '$TARGET_STAGE' environment in $GITHUB_REPOSITORY an
   fi
 fi
 
+section "Custom domains"
+STAGE_ENV_PREFIX="$(to_env_segment "$TARGET_STAGE")_"
+readonly STAGE_ENV_PREFIX
+READ_GITHUB_VARIABLES=false
+if github_cli_ready; then
+  READ_GITHUB_VARIABLES=true
+fi
+# NAME=value pairs to set, and names to remove, on the GitHub environment.
+DOMAIN_VARIABLES=()
+DOMAIN_VARIABLES_TO_DELETE=()
+echo "Each component can be served from a custom domain instead of its generated"
+echo "*.execute-api.amazonaws.com / *.cloudfront.net hostname (leave blank for none)."
+echo "API certificates must be in $AWS_REGION; portal and media certificates, served"
+echo "by CloudFront, in $GLOBAL_REGION. DNS records aren't created for you."
+for spec in \
+  "coreApi|CORE_API|Core API|api" \
+  "instructorApi|INSTRUCTOR_API|Instructor API|api" \
+  "studentPortal|STUDENT_PORTAL|Student portal|cloudfront" \
+  "instructorPortal|INSTRUCTOR_PORTAL|Instructor portal|cloudfront" \
+  "adminPortal|ADMIN_PORTAL|Admin portal|cloudfront" \
+  "lessonMedia|LESSON_MEDIA|Lesson media|cloudfront"; do
+  IFS='|' read -r component segment label kind <<<"$spec"
+  if [[ "$kind" == api ]]; then
+    # API Gateway custom domains take a single name.
+    domain_variable="$STAGE_ENV_PREFIX${segment}_DOMAIN_NAME"
+    domain_question="$label domain"
+    certificate_region="$AWS_REGION"
+    # Regional custom domains accept RSA public keys of at most 2048 bits.
+    certificate_key_types="RSA_1024,RSA_2048,EC_prime256v1,EC_secp384r1"
+  else
+    domain_variable="$STAGE_ENV_PREFIX${segment}_DOMAIN_NAMES"
+    domain_question="$label domains (comma-separated)"
+    certificate_region="$GLOBAL_REGION"
+    certificate_key_types="RSA_1024,RSA_2048,RSA_3072,RSA_4096,EC_prime256v1,EC_secp384r1"
+  fi
+  certificate_variable="$STAGE_ENV_PREFIX${segment}_CERTIFICATE_ARN"
+
+  current_domains=""
+  current_certificate=""
+  if [[ "$READ_GITHUB_VARIABLES" == true ]]; then
+    current_domains="$(github_environment_variable "$domain_variable")"
+    current_certificate="$(github_environment_variable "$certificate_variable")"
+  fi
+
+  while true; do
+    ask_optional domains "$domain_question" "${STAGE_DOMAINS[$component]:-$current_domains}"
+    domains="${domains// /}"
+    domains="${domains,,}"
+    domain_error=""
+    if [[ "$kind" == api && "$domains" == *,* ]]; then
+      domain_error="$label takes a single domain, got: $domains"
+    else
+      IFS=',' read -r -a domain_list <<<"$domains"
+      for domain in "${domain_list[@]}"; do
+        if [[ ! "$domain" =~ ^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$ ]]; then
+          domain_error="Not a valid domain name: $domain"
+          break
+        fi
+      done
+    fi
+    [[ -n "$domain_error" ]] || break
+    echo "$domain_error" >&2
+    [[ "$ASSUME_YES" == false ]] || exit 1
+  done
+
+  if [[ -z "$domains" ]]; then
+    [[ -z "$current_domains" ]] || DOMAIN_VARIABLES_TO_DELETE+=("$domain_variable")
+    [[ -z "$current_certificate" ]] || DOMAIN_VARIABLES_TO_DELETE+=("$certificate_variable")
+    continue
+  fi
+
+  certificate_default="${STAGE_CERTIFICATES[$component]:-$current_certificate}"
+  if [[ -z "$certificate_default" ]]; then
+    certificate_default="$(find_certificate "$certificate_region" "$domains" "$certificate_key_types")"
+    if [[ -n "$certificate_default" ]]; then
+      echo "Found an issued certificate in $certificate_region covering $domains."
+    else
+      echo "No issued certificate in $certificate_region covers $domains; request one in ACM first." >&2
+    fi
+  fi
+
+  while true; do
+    ask certificate "ACM certificate ARN for $domains" "$certificate_default"
+    certificate_error=""
+    if [[ ! "$certificate" =~ ^arn:[a-z-]+:acm:([a-z0-9-]+):([0-9]{12}):certificate/[A-Za-z0-9-]+$ ]]; then
+      certificate_error="Not an ACM certificate ARN: $certificate"
+    elif [[ "${BASH_REMATCH[1]}" != "$certificate_region" ]]; then
+      certificate_error="$label's certificate must be in $certificate_region, not ${BASH_REMATCH[1]}."
+    elif [[ "${BASH_REMATCH[2]}" != "$ACCOUNT_ID" ]]; then
+      certificate_error="$label's certificate must be in account $ACCOUNT_ID, not ${BASH_REMATCH[2]}."
+    elif ! certificate_details="$(aws acm describe-certificate \
+      --certificate-arn "$certificate" \
+      --region "$certificate_region" \
+      --query 'Certificate.[Status, KeyAlgorithm, join(`,`, SubjectAlternativeNames)]' \
+      --output text 2>&1)"; then
+      certificate_error="Couldn't read $certificate: $certificate_details"
+    else
+      IFS=$'\t' read -r certificate_status certificate_key_algorithm certificate_names <<<"$certificate_details"
+      # describe-certificate spells key algorithms with hyphens (RSA-2048),
+      # list-certificates' key types with underscores (RSA_2048).
+      if [[ "$certificate_status" != ISSUED ]]; then
+        certificate_error="$certificate is $certificate_status, not ISSUED."
+      elif [[ ",$certificate_key_types," != *",${certificate_key_algorithm//-/_},"* ]]; then
+        certificate_error="$label doesn't support $certificate's $certificate_key_algorithm key; use one of $certificate_key_types."
+      elif ! certificate_covers_all "$certificate_names" "$domains"; then
+        certificate_error="$certificate ($certificate_names) doesn't cover all of $domains."
+      fi
+    fi
+    [[ -n "$certificate_error" ]] || break
+    echo "$certificate_error" >&2
+    [[ "$ASSUME_YES" == false ]] || exit 1
+  done
+
+  DOMAIN_VARIABLES+=("$domain_variable=$domains" "$certificate_variable=$certificate")
+done
+
 cleanup() {
   rm -f "${DEPLOY_TRUST_POLICY_FILE:-}" \
     "${DEPLOY_POLICY_FILE:-}" \
@@ -425,6 +618,15 @@ confirm() {
   fi
   if [[ "$SET_AUTO_DEPLOY" == true ]]; then
     echo "  - GitHub var:    AUTO_DEPLOY_STAGE=$TARGET_STAGE"
+  fi
+  if [[ "$CONFIGURE_GITHUB" == true ]]; then
+    local variable
+    for variable in "${DOMAIN_VARIABLES[@]}"; do
+      echo "  - GitHub var:    $variable"
+    done
+    for variable in "${DOMAIN_VARIABLES_TO_DELETE[@]}"; do
+      echo "  - Remove var:    $variable"
+    done
   fi
   echo "============================================"
   if ! ask_yes_no "Continue?" y; then
@@ -592,7 +794,7 @@ upsert_role() {
       --description "$description" \
       --tags \
         Key=Project,Value=wattle-lms \
-        Key=ManagedBy,Value=setup-github-oidc.sh \
+        Key=ManagedBy,Value=setup-stage.sh \
         Key=Stage,Value="$TARGET_STAGE" >/dev/null
   fi
 }
@@ -1232,7 +1434,7 @@ EOF
       --description "Permissions boundary for $TARGET_STAGE's IAM roles" \
       --tags \
         Key=Project,Value=wattle-lms \
-        Key=ManagedBy,Value=setup-github-oidc.sh \
+        Key=ManagedBy,Value=setup-stage.sh \
         Key=Stage,Value="$TARGET_STAGE" >/dev/null
   fi
 }
@@ -1262,6 +1464,14 @@ configure_github_environment() {
   if [[ "$SET_AUTO_DEPLOY" == true ]]; then
     gh variable set AUTO_DEPLOY_STAGE --repo "$GITHUB_REPOSITORY" --body "$TARGET_STAGE"
   fi
+
+  local variable
+  for variable in "${DOMAIN_VARIABLES[@]}"; do
+    gh variable set "${variable%%=*}" --repo "$GITHUB_REPOSITORY" --env "$TARGET_STAGE" --body "${variable#*=}"
+  done
+  for variable in "${DOMAIN_VARIABLES_TO_DELETE[@]}"; do
+    gh variable delete "$variable" --repo "$GITHUB_REPOSITORY" --env "$TARGET_STAGE"
+  done
 }
 
 print_next_steps() {
@@ -1272,8 +1482,21 @@ print_next_steps() {
     echo "  Variable:   AWS_REGION=$AWS_REGION"
     echo "  Variable:   AWS_DEPLOY_ROLE_ARN=$DEPLOY_ROLE_ARN"
     echo "  Variable:   AWS_EXECUTION_ROLE_ARN=$EXECUTION_ROLE_ARN"
+    local variable
+    for variable in "${DOMAIN_VARIABLES[@]}"; do
+      echo "  Variable:   $variable"
+    done
+    for variable in "${DOMAIN_VARIABLES_TO_DELETE[@]}"; do
+      echo "  Remove:     $variable"
+    done
     echo "To deploy it automatically whenever CI passes on main, also set the"
     echo "repository variable AUTO_DEPLOY_STAGE=$TARGET_STAGE."
+    echo ""
+  fi
+  if [[ ${#DOMAIN_VARIABLES[@]} -gt 0 ]]; then
+    echo "After the next deploy, point each custom domain's DNS record at its API"
+    echo "Gateway custom domain or CloudFront distribution; until then the domains"
+    echo "won't resolve, although the portals and signed media URLs already use them."
     echo ""
   fi
   echo "Anyone who can run workflows can deploy this stage. For production-like"

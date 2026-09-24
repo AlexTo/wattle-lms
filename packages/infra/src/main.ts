@@ -12,7 +12,7 @@ import { ApplicationStage } from './stages/application-stage.js';
 
 // Per-stage asset prefixes and (in CI) permissions boundaries keep stages that
 // share an AWS account from reaching each other's assets and resources; see
-// scripts/setup-github-oidc.sh.
+// scripts/setup-stage.sh.
 const app = new App({
   defaultStackSynthesizer: new StageIsolationSynthesizer(),
 });

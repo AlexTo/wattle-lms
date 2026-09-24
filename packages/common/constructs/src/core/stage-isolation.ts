@@ -17,14 +17,14 @@ import type { IConstruct } from 'constructs';
  * Context key which, when `true`, applies each stage's permissions boundary
  * (see {@link stagePermissionsBoundary}) to every IAM role it creates. The
  * deploy workflow sets it; the boundary policies themselves are created by
- * scripts/setup-github-oidc.sh, so local deploys that haven't run it leave it
+ * scripts/setup-stage.sh, so local deploys that haven't run it leave it
  * unset.
  */
 export const STAGE_PERMISSIONS_BOUNDARY_CONTEXT_KEY =
   'wattle:stagePermissionsBoundary';
 
 /**
- * Name of the managed policy scripts/setup-github-oidc.sh creates as the
+ * Name of the managed policy scripts/setup-stage.sh creates as the
  * permissions boundary for a stage's IAM roles.
  */
 export const stagePermissionsBoundaryName = (stageName: string): string =>
