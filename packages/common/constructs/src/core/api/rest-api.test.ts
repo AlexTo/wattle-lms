@@ -52,31 +52,37 @@ const buildApi = (domainName?: string) => {
   return { stack, api };
 };
 
-/** The stack's outputs whose logical ID mentions CustomDomainAliasTarget. */
-const aliasTargetOutputs = (stack: Stack) =>
-  Object.entries(Template.fromStack(stack).findOutputs('*'))
-    .filter(([id]) => id.includes('CustomDomainAliasTarget'))
-    .map(([, output]) => output);
+/** The stack's custom domain alias outputs, keyed by logical ID. */
+const aliasOutputs = (stack: Stack) =>
+  Object.fromEntries(
+    Object.entries(Template.fromStack(stack).findOutputs('*')).filter(([id]) =>
+      id.includes('DomainNameAlias'),
+    ),
+  );
 
 describe('RestApi', () => {
   it("outputs the custom domain's API Gateway alias target when configured", () => {
     const { stack } = buildApi('api.example.com');
-    const template = Template.fromStack(stack);
     const [domainNameId] = Object.keys(
-      template.findResources('AWS::ApiGateway::DomainName'),
+      Template.fromStack(stack).findResources('AWS::ApiGateway::DomainName'),
     );
 
-    expect(aliasTargetOutputs(stack)).toEqual([
-      expect.objectContaining({
-        Value: { 'Fn::GetAtt': [domainNameId, 'RegionalDomainName'] },
-      }),
-    ]);
+    expect(Object.values(aliasOutputs(stack))).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          Value: { 'Fn::GetAtt': [domainNameId, 'RegionalDomainName'] },
+        }),
+        expect.objectContaining({
+          Value: { 'Fn::GetAtt': [domainNameId, 'RegionalHostedZoneId'] },
+        }),
+      ]),
+    );
   });
 
   it('outputs no alias target when no custom domain is configured', () => {
     const { stack } = buildApi();
 
-    expect(aliasTargetOutputs(stack)).toEqual([]);
+    expect(aliasOutputs(stack)).toEqual({});
   });
 
   it('publishes the custom domain URL in runtime config when configured', () => {
