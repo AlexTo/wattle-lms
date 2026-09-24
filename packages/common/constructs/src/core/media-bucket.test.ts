@@ -5,9 +5,11 @@
 // @vitest-environment node
 // (CDK resolves asset paths from import.meta.url, which jsdom doesn't provide.)
 import { App, Stack } from 'aws-cdk-lib';
-import { Template } from 'aws-cdk-lib/assertions';
+import { Match, Template } from 'aws-cdk-lib/assertions';
+import { Certificate } from 'aws-cdk-lib/aws-certificatemanager';
 import { describe, expect, it } from 'vitest';
 import { MediaBucket } from './media-bucket.js';
+import { RuntimeConfig } from './runtime-config.js';
 
 type Resources = Record<
   string,
@@ -136,5 +138,68 @@ describe('MediaBucket', { timeout: 30_000 }, () => {
     expect(
       JSON.stringify(statements[0].Condition.StringEquals['AWS:SourceArn']),
     ).toContain(`{"Ref":"${distributionId}"}`);
+  });
+
+  it('publishes the custom domain as cloudFrontDomainName when configured', () => {
+    const stack = new Stack(new App(), 'Stack', {
+      env: { account: 'test-account', region: 'ap-southeast-2' },
+    });
+    new MediaBucket(stack, 'Media', {
+      runtimeConfigKey: 'media',
+      enableWaf: false,
+      domainNames: ['media.example.com'],
+      certificate: Certificate.fromCertificateArn(
+        stack,
+        'Cert',
+        'arn:aws:acm:us-east-1:123456789012:certificate/abc',
+      ),
+    });
+
+    expect(RuntimeConfig.of(stack)?.get('s3').media.cloudFrontDomainName).toBe(
+      'media.example.com',
+    );
+  });
+
+  it('falls back to the generated CloudFront domain when no custom domain is configured', () => {
+    const stack = new Stack(new App(), 'Stack', {
+      env: { account: 'test-account', region: 'ap-southeast-2' },
+    });
+    const media = new MediaBucket(stack, 'Media', {
+      runtimeConfigKey: 'media',
+      enableWaf: false,
+    });
+
+    const published = stack.resolve(
+      RuntimeConfig.of(stack)?.get('s3').media.cloudFrontDomainName,
+    );
+
+    expect(published).toEqual(
+      stack.resolve(media.cloudFrontDistribution.domainName),
+    );
+  });
+
+  it('falls back to the generated CloudFront domain when domainNames is set without a certificate', () => {
+    const stack = new Stack(new App(), 'Stack', {
+      env: { account: 'test-account', region: 'ap-southeast-2' },
+    });
+    const media = new MediaBucket(stack, 'Media', {
+      runtimeConfigKey: 'media',
+      enableWaf: false,
+      domainNames: ['media.example.com'],
+    });
+    const template = Template.fromStack(stack);
+
+    // domainNames alone never reaches the Distribution as an alias.
+    template.hasResourceProperties('AWS::CloudFront::Distribution', {
+      DistributionConfig: Match.not(
+        Match.objectLike({ Aliases: Match.anyValue() }),
+      ),
+    });
+    const published = stack.resolve(
+      RuntimeConfig.of(stack)?.get('s3').media.cloudFrontDomainName,
+    );
+    expect(published).toEqual(
+      stack.resolve(media.cloudFrontDistribution.domainName),
+    );
   });
 });

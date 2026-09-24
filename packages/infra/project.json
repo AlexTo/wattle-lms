@@ -124,7 +124,12 @@
     "synth": {
       "cache": true,
       "executor": "nx:run-commands",
-      "inputs": ["default"],
+      "inputs": [
+        "default",
+        {
+          "runtime": "env | grep -E '^WATTLE_(DEVELOPMENT|PRODUCTION)_' | sort"
+        }
+      ],
       "outputs": ["{workspaceRoot}/dist/{projectRoot}/cdk.out"],
       "dependsOn": ["^assemble", "compile"],
       "options": {

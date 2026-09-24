@@ -3,10 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 import { Lazy, RemovalPolicy } from 'aws-cdk-lib';
+import { ICertificate } from 'aws-cdk-lib/aws-certificatemanager';
 import {
   Distribution,
   KeyGroup,
   PublicKey,
+  SecurityPolicyProtocol,
   ViewerProtocolPolicy,
 } from 'aws-cdk-lib/aws-cloudfront';
 import { S3BucketOrigin } from 'aws-cdk-lib/aws-cloudfront-origins';
@@ -65,6 +67,15 @@ export interface MediaBucketProps {
    * @default RemovalPolicy.RETAIN
    */
   readonly removalPolicy?: RemovalPolicy;
+  /**
+   * Custom domain names for the CloudFront distribution. Requires `certificate`.
+   */
+  readonly domainNames?: string[];
+  /**
+   * ACM certificate for the custom domain names. Must be in us-east-1.
+   * When provided, viewers are required to use TLS 1.2 or later.
+   */
+  readonly certificate?: ICertificate;
 }
 
 /**
@@ -90,6 +101,8 @@ export class MediaBucket extends Construct {
       enableKeyRotation = true,
       enableWaf = true,
       removalPolicy = RemovalPolicy.RETAIN,
+      domainNames,
+      certificate,
     }: MediaBucketProps,
   ) {
     super(scope, id);
@@ -143,6 +156,13 @@ export class MediaBucket extends Construct {
 
     this.cloudFrontDistribution = new Distribution(this, 'Distribution', {
       webAclId: wafStack?.wafArn,
+      ...(certificate
+        ? {
+            certificate,
+            domainNames,
+            minimumProtocolVersion: SecurityPolicyProtocol.TLS_V1_2_2021,
+          }
+        : {}),
       defaultBehavior: {
         origin: S3BucketOrigin.withOriginAccessControl(this.bucket),
         viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
@@ -159,12 +179,14 @@ export class MediaBucket extends Construct {
     // s3:GetObject grant, which does name it.
     // See https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-s3.html#private-content-kms
 
-    // See https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/DownloadDistValuesGeneral.html
-    suppressRules(
-      this.cloudFrontDistribution,
-      ['CKV_AWS_174'],
-      'Cloudfront default certificate does not use TLS 1.2',
-    );
+    if (!certificate) {
+      // See https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/DownloadDistValuesGeneral.html
+      suppressRules(
+        this.cloudFrontDistribution,
+        ['CKV_AWS_174'],
+        'Cloudfront default certificate does not use TLS 1.2',
+      );
+    }
     suppressRules(
       this.cloudFrontDistribution,
       ['CKV_AWS_86'],
@@ -173,7 +195,17 @@ export class MediaBucket extends Construct {
 
     RuntimeConfig.ensure(this).set('s3', runtimeConfigKey, {
       bucketName: this.bucket.bucketName,
-      cloudFrontDomainName: this.cloudFrontDistribution.domainName,
+      // Prefer the configured custom domain (its first alias, if there are
+      // several) over the generated *.cloudfront.net hostname, so signed
+      // URLs built from this value use it instead. Only when `certificate`
+      // is also set, matching the Distribution's own condition above --
+      // `domainNames` alone never reaches the distribution as an alias, so
+      // publishing it here without a certificate would point signed URLs
+      // at a hostname CloudFront doesn't actually recognize.
+      cloudFrontDomainName:
+        certificate && domainNames?.[0]
+          ? domainNames[0]
+          : this.cloudFrontDistribution.domainName,
       cloudFrontKeyPairId: signingPublicKey.publicKeyId,
       cloudFrontPrivateKeySecretArn: this.signingKeyPairSecret.secretArn,
     });

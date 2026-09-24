@@ -1,0 +1,42 @@
+/**
+ * Copyright Wattle LMS Contributors. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+import { afterEach, describe, expect, it } from 'vitest';
+import { listStageNames, resolveStage } from './resolve-stage.js';
+
+const PROJECT_PATH = 'packages/infra';
+const STAGE = 'wattle-development';
+const ENV_KEY = 'WATTLE_DEVELOPMENT_STUDENT_PORTAL_DOMAIN_NAMES';
+
+afterEach(() => {
+  delete process.env[ENV_KEY];
+});
+
+describe('resolveStage', () => {
+  it('lists the configured stage names for the infra project', () => {
+    expect(listStageNames(PROJECT_PATH)).toEqual(
+      expect.arrayContaining([STAGE, 'wattle-production']),
+    );
+  });
+
+  it('applies an env var override on top of the static stages.config.ts entry', () => {
+    const withoutOverride = resolveStage(PROJECT_PATH, STAGE);
+    expect(
+      withoutOverride?.components?.studentPortal?.domainNames,
+    ).toBeUndefined();
+
+    process.env[ENV_KEY] = 'learn.example.com';
+    const withOverride = resolveStage(PROJECT_PATH, STAGE);
+
+    expect(withOverride?.components?.studentPortal?.domainNames).toEqual([
+      'learn.example.com',
+    ]);
+    // Unrelated static config for the stage is preserved.
+    expect(withOverride?.components?.studentPortal?.enableWaf).toBe(false);
+  });
+
+  it('returns undefined for a stage with no configuration at all', () => {
+    expect(resolveStage(PROJECT_PATH, 'does-not-exist')).toBeUndefined();
+  });
+});

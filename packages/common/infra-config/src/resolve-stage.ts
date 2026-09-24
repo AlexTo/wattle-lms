@@ -2,6 +2,7 @@
  * Copyright Wattle LMS Contributors. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
+import { applyEnvOverrides } from './env-overrides.js';
 import stagesConfig from './stages.config.js';
 import type { StageConfig, StagesConfig } from './stages.types.js';
 
@@ -10,7 +11,10 @@ const config: StagesConfig = stagesConfig;
 
 /**
  * Resolves stage config for a given project and stage name.
- * Project-specific fields take priority over shared ones.
+ * Project-specific fields take priority over shared ones, and both are
+ * overridable per field by a `<STAGE>_<COMPONENT>_<FIELD>` (or
+ * `<STAGE>_REGION` / `<STAGE>_ACCOUNT`) environment variable -- see
+ * `applyEnvOverrides` in env-overrides.ts.
  *
  * @param projectPath - Project path relative to workspace root (e.g., 'packages/infra')
  * @param stageName - CDK stage name (e.g., 'my-app-dev')
@@ -23,7 +27,8 @@ export function resolveStage(
   const shared = config.shared?.stages?.[stageName];
   const project = config.projects?.[projectPath]?.stages?.[stageName];
   if (!shared && !project) return undefined;
-  return { ...shared, ...project } as StageConfig;
+  const merged = { ...shared, ...project } as StageConfig;
+  return applyEnvOverrides(stageName, merged);
 }
 
 /**

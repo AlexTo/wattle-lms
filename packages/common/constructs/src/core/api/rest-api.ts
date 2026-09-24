@@ -121,6 +121,7 @@ export class RestApi<
       throttle = { rateLimit: 10000, burstLimit: 5000 },
       enableKmsEncryption = true,
       enableKeyRotation = true,
+      domainName,
       ...props
     }: RestApiProps<TIntegrations, TOperation>,
   ) {
@@ -146,6 +147,7 @@ export class RestApi<
     // Create the API Gateway REST API
     this.api = new _RestApi(this, 'Api', {
       ...props,
+      domainName,
       deployOptions: {
         accessLogDestination: new LogGroupLogDestination(accessLogs),
         accessLogFormat: AccessLogFormat.jsonWithStandardFields(),
@@ -295,11 +297,17 @@ export class RestApi<
       },
     );
 
-    // Register the API URL in runtime configuration for client discovery
+    // Register the API URL in runtime configuration for client discovery.
+    // When a custom domain is configured, its base path mapping serves the
+    // API without the deployment stage's path prefix (e.g. /prod/), so
+    // clients should call the domain (plus configured base path, if any)
+    // directly rather than the generated execute-api URL.
     const rc = RuntimeConfig.ensure(this);
     rc.set('connection', 'apis', {
       ...rc.get('connection').apis,
-      [apiName]: this.api.url!,
+      [apiName]: domainName
+        ? `https://${domainName.domainName}/${domainName.basePath ? `${domainName.basePath}/` : ''}`
+        : this.api.url!,
     });
   }
 
