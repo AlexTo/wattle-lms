@@ -5,6 +5,7 @@
 // @vitest-environment node
 // (CDK resolves asset paths from import.meta.url, which jsdom doesn't provide.)
 import { App, Stack } from 'aws-cdk-lib';
+import { Template } from 'aws-cdk-lib/assertions';
 import { MockIntegration } from 'aws-cdk-lib/aws-apigateway';
 import { Certificate } from 'aws-cdk-lib/aws-certificatemanager';
 import { describe, expect, it } from 'vitest';
@@ -51,7 +52,39 @@ const buildApi = (domainName?: string) => {
   return { stack, api };
 };
 
+/** The stack's custom domain alias outputs, keyed by logical ID. */
+const aliasOutputs = (stack: Stack) =>
+  Object.fromEntries(
+    Object.entries(Template.fromStack(stack).findOutputs('*')).filter(([id]) =>
+      id.includes('DomainNameAlias'),
+    ),
+  );
+
 describe('RestApi', () => {
+  it("outputs the custom domain's API Gateway alias target when configured", () => {
+    const { stack } = buildApi('api.example.com');
+    const [domainNameId] = Object.keys(
+      Template.fromStack(stack).findResources('AWS::ApiGateway::DomainName'),
+    );
+
+    expect(Object.values(aliasOutputs(stack))).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          Value: { 'Fn::GetAtt': [domainNameId, 'RegionalDomainName'] },
+        }),
+        expect.objectContaining({
+          Value: { 'Fn::GetAtt': [domainNameId, 'RegionalHostedZoneId'] },
+        }),
+      ]),
+    );
+  });
+
+  it('outputs no alias target when no custom domain is configured', () => {
+    const { stack } = buildApi();
+
+    expect(aliasOutputs(stack)).toEqual({});
+  });
+
   it('publishes the custom domain URL in runtime config when configured', () => {
     const { stack } = buildApi('api.example.com');
 
