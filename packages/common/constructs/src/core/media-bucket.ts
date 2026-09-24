@@ -197,9 +197,15 @@ export class MediaBucket extends Construct {
       bucketName: this.bucket.bucketName,
       // Prefer the configured custom domain (its first alias, if there are
       // several) over the generated *.cloudfront.net hostname, so signed
-      // URLs built from this value use it instead.
+      // URLs built from this value use it instead. Only when `certificate`
+      // is also set, matching the Distribution's own condition above --
+      // `domainNames` alone never reaches the distribution as an alias, so
+      // publishing it here without a certificate would point signed URLs
+      // at a hostname CloudFront doesn't actually recognize.
       cloudFrontDomainName:
-        domainNames?.[0] ?? this.cloudFrontDistribution.domainName,
+        certificate && domainNames?.[0]
+          ? domainNames[0]
+          : this.cloudFrontDistribution.domainName,
       cloudFrontKeyPairId: signingPublicKey.publicKeyId,
       cloudFrontPrivateKeySecretArn: this.signingKeyPairSecret.secretArn,
     });

@@ -5,7 +5,7 @@
 // @vitest-environment node
 // (CDK resolves asset paths from import.meta.url, which jsdom doesn't provide.)
 import { App, Stack } from 'aws-cdk-lib';
-import { Template } from 'aws-cdk-lib/assertions';
+import { Match, Template } from 'aws-cdk-lib/assertions';
 import { Certificate } from 'aws-cdk-lib/aws-certificatemanager';
 import { describe, expect, it } from 'vitest';
 import { MediaBucket } from './media-bucket.js';
@@ -173,6 +173,31 @@ describe('MediaBucket', { timeout: 30_000 }, () => {
       RuntimeConfig.of(stack)?.get('s3').media.cloudFrontDomainName,
     );
 
+    expect(published).toEqual(
+      stack.resolve(media.cloudFrontDistribution.domainName),
+    );
+  });
+
+  it('falls back to the generated CloudFront domain when domainNames is set without a certificate', () => {
+    const stack = new Stack(new App(), 'Stack', {
+      env: { account: 'test-account', region: 'ap-southeast-2' },
+    });
+    const media = new MediaBucket(stack, 'Media', {
+      runtimeConfigKey: 'media',
+      enableWaf: false,
+      domainNames: ['media.example.com'],
+    });
+    const template = Template.fromStack(stack);
+
+    // domainNames alone never reaches the Distribution as an alias.
+    template.hasResourceProperties('AWS::CloudFront::Distribution', {
+      DistributionConfig: Match.not(
+        Match.objectLike({ Aliases: Match.anyValue() }),
+      ),
+    });
+    const published = stack.resolve(
+      RuntimeConfig.of(stack)?.get('s3').media.cloudFrontDomainName,
+    );
     expect(published).toEqual(
       stack.resolve(media.cloudFrontDistribution.domainName),
     );
