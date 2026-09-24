@@ -140,6 +140,30 @@ describe('MediaBucket', { timeout: 30_000 }, () => {
     ).toContain(`{"Ref":"${distributionId}"}`);
   });
 
+  it('outputs the generated CloudFront domain even with a custom domain configured', () => {
+    const stack = new Stack(new App(), 'Stack', {
+      env: { account: 'test-account', region: 'ap-southeast-2' },
+    });
+    const media = new MediaBucket(stack, 'Media', {
+      runtimeConfigKey: 'media',
+      enableWaf: false,
+      domainNames: ['media.example.com'],
+      certificate: Certificate.fromCertificateArn(
+        stack,
+        'Cert',
+        'arn:aws:acm:us-east-1:123456789012:certificate/abc',
+      ),
+    });
+
+    const outputs = Object.values(Template.fromStack(stack).findOutputs('*'));
+
+    expect(outputs).toContainEqual(
+      expect.objectContaining({
+        Value: stack.resolve(media.cloudFrontDistribution.domainName),
+      }),
+    );
+  });
+
   it('publishes the custom domain as cloudFrontDomainName when configured', () => {
     const stack = new Stack(new App(), 'Stack', {
       env: { account: 'test-account', region: 'ap-southeast-2' },

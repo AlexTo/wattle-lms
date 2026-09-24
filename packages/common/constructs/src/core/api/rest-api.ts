@@ -2,7 +2,13 @@
  * Copyright Wattle LMS Contributors. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
-import { Annotations, IAspect, RemovalPolicy, Stack } from 'aws-cdk-lib';
+import {
+  Annotations,
+  CfnOutput,
+  IAspect,
+  RemovalPolicy,
+  Stack,
+} from 'aws-cdk-lib';
 import {
   RestApi as _RestApi,
   RestApiProps as _RestApiProps,
@@ -309,6 +315,19 @@ export class RestApi<
         ? `https://${domainName.domainName}/${domainName.basePath ? `${domainName.basePath}/` : ''}`
         : this.api.url!,
     });
+
+    // The API Gateway hostname a custom domain's DNS record points at (a
+    // d-*.execute-api.<region>.amazonaws.com name), which differs from the
+    // execute-api URL in the Endpoint output RestApi adds by default.
+    // Target for the custom domain's DNS record
+    if (domainName) {
+      new CfnOutput(this, `${apiName}DomainNameAlias`, {
+        value: this.api.domainName!.domainNameAliasDomainName,
+      });
+      new CfnOutput(this, `${apiName}DomainNameAliasHostedZoneId`, {
+        value: this.api.domainName!.domainNameAliasHostedZoneId,
+      });
+    }
   }
 
   /**

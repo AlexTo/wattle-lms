@@ -2,7 +2,7 @@
  * Copyright Wattle LMS Contributors. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0
  */
-import { Lazy, RemovalPolicy } from 'aws-cdk-lib';
+import { CfnOutput, Lazy, RemovalPolicy } from 'aws-cdk-lib';
 import { ICertificate } from 'aws-cdk-lib/aws-certificatemanager';
 import {
   Distribution,
@@ -208,6 +208,13 @@ export class MediaBucket extends Construct {
           : this.cloudFrontDistribution.domainName,
       cloudFrontKeyPairId: signingPublicKey.publicKeyId,
       cloudFrontPrivateKeySecretArn: this.signingKeyPairSecret.secretArn,
+    });
+
+    // Always the generated *.cloudfront.net hostname, even with a custom
+    // domain configured: it's the target a custom domain's DNS record points
+    // at.
+    new CfnOutput(this, 'DistributionDomainName', {
+      value: this.cloudFrontDistribution.domainName,
     });
   }
 
