@@ -16,6 +16,7 @@
     "@wattle/common-shadcn": "workspace:*",
     "@wattle/instructor-api": "workspace:*",
     "event-source-polyfill": "catalog:",
+    "hls.js": "catalog:",
     "lucide-react": "catalog:",
     "oidc-client-ts": "catalog:",
     "react": "catalog:",

@@ -360,8 +360,9 @@ export class AddCorsPreflightAspect implements IAspect {
       const preflightMethod = node.addCorsPreflight({
         allowOrigins: [...this.getAllowedOrigins()],
         allowMethods: Cors.ALL_METHODS,
+        allowCredentials: true,
       });
-      // CORS preflight requests never carry credentials, so this method is
+      // The preflight *request* never carries credentials, so this method is
       // intentionally created with AuthorizationType.NONE while still
       // inheriting the resource's Cognito authorizationScopes default. That
       // combination is invalid, but harmless here since API Gateway never

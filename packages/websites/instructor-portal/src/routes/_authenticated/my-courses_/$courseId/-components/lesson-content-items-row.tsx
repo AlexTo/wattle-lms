@@ -28,6 +28,7 @@ export function LessonContentItemsRow({
     title: string;
     description?: string;
     body?: string;
+    status: string;
   }[];
 }) {
   return (
@@ -51,6 +52,7 @@ export function LessonContentItemsRow({
               contentItemId={item.contentItemId}
               title={item.title}
               description={item.description}
+              status={item.status}
               trigger={
                 <Button
                   variant="ghost"

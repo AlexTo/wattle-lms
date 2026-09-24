@@ -27,7 +27,8 @@ const {
   getSignedUrl,
   resolveLessonMediaUploadBucketName,
   bestEffortDeleteContentItemVideos,
-  getSignedCloudFrontUrl,
+  getSignedCloudFrontCookies,
+  getCloudFrontVideoUrl,
   submitTranscodeJob,
   bestEffortCancelTranscodeJob,
   bestEffortCancelTranscodeJobs,
@@ -47,7 +48,8 @@ const {
   getSignedUrl: vi.fn(),
   resolveLessonMediaUploadBucketName: vi.fn(),
   bestEffortDeleteContentItemVideos: vi.fn(),
-  getSignedCloudFrontUrl: vi.fn(),
+  getSignedCloudFrontCookies: vi.fn(),
+  getCloudFrontVideoUrl: vi.fn(),
   submitTranscodeJob: vi.fn(),
   bestEffortCancelTranscodeJob: vi.fn(),
   bestEffortCancelTranscodeJobs: vi.fn(),
@@ -103,11 +105,13 @@ vi.mock('../lib/s3-client.js', () => ({
   getVideoUploadETag,
 }));
 
-// getSignedCloudFrontUrl's own config-resolution/signing behavior is
-// covered directly in lib/cloudfront-client.test.ts; here it's just a mock
-// so these tests can assert createContentItemVideoUrl calls it correctly.
+// getSignedCloudFrontCookies/getCloudFrontVideoUrl's own config-resolution/
+// signing behavior is covered directly in lib/cloudfront-client.test.ts;
+// here they're just mocks so these tests can assert createContentItemVideoUrl
+// calls them correctly.
 vi.mock('../lib/cloudfront-client.js', () => ({
-  getSignedCloudFrontUrl,
+  getSignedCloudFrontCookies,
+  getCloudFrontVideoUrl,
 }));
 
 // submitTranscodeJob's own MediaConvert-request-shape behavior is covered
@@ -244,8 +248,11 @@ beforeEach(() => {
   getSignedUrl.mockResolvedValue('https://example.com/signed-url');
   resolveLessonMediaUploadBucketName.mockResolvedValue(BUCKET_NAME);
   bestEffortDeleteContentItemVideos.mockResolvedValue(undefined);
-  getSignedCloudFrontUrl.mockResolvedValue(
-    'https://example.cloudfront.net/signed-url',
+  getSignedCloudFrontCookies.mockResolvedValue([
+    'CloudFront-Policy=fake; Domain=example.com',
+  ]);
+  getCloudFrontVideoUrl.mockResolvedValue(
+    'https://example.cloudfront.net/plain-url',
   );
   submitTranscodeJob.mockResolvedValue('job-1');
   bestEffortCancelTranscodeJob.mockResolvedValue(undefined);
@@ -693,15 +700,28 @@ describe('createContentItemVideoUrl', () => {
     await expect(
       callAs().createContentItemVideoUrl(input),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
-    expect(getSignedCloudFrontUrl).not.toHaveBeenCalled();
+    expect(getSignedCloudFrontCookies).not.toHaveBeenCalled();
   });
 
-  it('returns a signed CloudFront playback URL for the content item', async () => {
-    const result = await callAs().createContentItemVideoUrl(input);
-    expect(getSignedCloudFrontUrl).toHaveBeenCalledWith(contentItem.s3Key);
-    expect(result).toEqual({
-      url: 'https://example.cloudfront.net/signed-url',
-    });
+  it('returns only a plain playback URL, with the signed cookies on the response context', async () => {
+    const responseCookies: string[] = [];
+    const result = await caller({
+      event: buildEvent(['instructor']),
+      context: {} as any,
+      info: {} as any,
+      responseCookies,
+    }).createContentItemVideoUrl(input);
+    const expectedPrefix = contentItem.s3Key.slice(
+      0,
+      contentItem.s3Key.lastIndexOf('/') + 1,
+    );
+    expect(getSignedCloudFrontCookies).toHaveBeenCalledWith(expectedPrefix);
+    expect(getCloudFrontVideoUrl).toHaveBeenCalledWith(contentItem.s3Key);
+    // The cookies are HttpOnly: they must never appear in the JSON body.
+    expect(result).toEqual({ url: 'https://example.cloudfront.net/plain-url' });
+    expect(responseCookies).toEqual([
+      'CloudFront-Policy=fake; Domain=example.com',
+    ]);
   });
 
   it.each(['pending', 'failed'] as const)(
@@ -714,7 +734,7 @@ describe('createContentItemVideoUrl', () => {
       await expect(
         callAs().createContentItemVideoUrl(input),
       ).rejects.toMatchObject({ code: 'NOT_FOUND' });
-      expect(getSignedCloudFrontUrl).not.toHaveBeenCalled();
+      expect(getSignedCloudFrontCookies).not.toHaveBeenCalled();
     },
   );
 });

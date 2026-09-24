@@ -4,7 +4,7 @@
  */
 import { getAppConfig } from '@aws-lambda-powertools/parameters/appconfig';
 import { getSecret } from '@aws-lambda-powertools/parameters/secrets';
-import { getSignedUrl } from '@aws-sdk/cloudfront-signer';
+import { getSignedCookies } from '@aws-sdk/cloudfront-signer';
 
 const runtimeConfigKey = 'LessonMediaBucket';
 
@@ -13,6 +13,7 @@ type S3Config = {
   cloudFrontDomainName: string;
   cloudFrontKeyPairId: string;
   cloudFrontPrivateKeySecretArn: string;
+  cookieDomain: string;
 };
 
 type CloudFrontConfig = Pick<
@@ -20,6 +21,7 @@ type CloudFrontConfig = Pick<
   | 'cloudFrontDomainName'
   | 'cloudFrontKeyPairId'
   | 'cloudFrontPrivateKeySecretArn'
+  | 'cookieDomain'
 >;
 
 let _config: CloudFrontConfig | undefined;
@@ -42,7 +44,8 @@ const resolveCloudFrontConfig = async (): Promise<CloudFrontConfig> => {
     if (
       !entry?.cloudFrontDomainName ||
       !entry?.cloudFrontKeyPairId ||
-      !entry?.cloudFrontPrivateKeySecretArn
+      !entry?.cloudFrontPrivateKeySecretArn ||
+      !entry?.cookieDomain
     ) {
       throw new Error(
         'Could not resolve CloudFront signing config from runtime config',
@@ -52,6 +55,7 @@ const resolveCloudFrontConfig = async (): Promise<CloudFrontConfig> => {
       cloudFrontDomainName: entry.cloudFrontDomainName,
       cloudFrontKeyPairId: entry.cloudFrontKeyPairId,
       cloudFrontPrivateKeySecretArn: entry.cloudFrontPrivateKeySecretArn,
+      cookieDomain: entry.cookieDomain,
     };
   }
   return _config;
@@ -70,27 +74,59 @@ const resolvePrivateKey = async (secretArn: string): Promise<string> => {
   return _privateKey;
 };
 
-const DOWNLOAD_URL_EXPIRY_SECONDS = 5 * 60;
+// With a signed URL, expiry only gated the single already-generated URL.
+// With cookies, the same expiry gates every request for the rest of the
+// viewing session (manifest, renditions, every segment), so this needs to
+// comfortably outlast one sitting rather than one request.
+const COOKIE_EXPIRY_SECONDS = 4 * 60 * 60;
 
 /**
- * Signs a CloudFront URL for the given lesson media object key, valid for
- * `DOWNLOAD_URL_EXPIRY_SECONDS`. Replaces the presigned-S3-GET approach:
- * the bucket stays private and playback goes through CloudFront instead.
+ * Signs CloudFront cookies via a custom policy whose wildcard resource
+ * covers every object under `prefixKey` -- HLS needs the manifest plus
+ * separate rendition/segment files, all distinct S3 objects, and a signed
+ * URL can't authorize them: hls.js/native players resolve those as
+ * relative URIs without propagating a parent request's query string, so
+ * only cookies (attached automatically to every request for the domain)
+ * authorize the whole set uniformly.
  */
-export const getSignedCloudFrontUrl = async (
-  objectKey: string,
-): Promise<string> => {
+export const getSignedCloudFrontCookies = async (
+  prefixKey: string,
+): Promise<string[]> => {
   const {
     cloudFrontDomainName,
     cloudFrontKeyPairId,
     cloudFrontPrivateKeySecretArn,
+    cookieDomain,
   } = await resolveCloudFrontConfig();
   const privateKey = await resolvePrivateKey(cloudFrontPrivateKeySecretArn);
+  const expiresAt = Date.now() + COOKIE_EXPIRY_SECONDS * 1000;
 
-  return getSignedUrl({
-    url: `https://${cloudFrontDomainName}/${objectKey}`,
+  const policy = JSON.stringify({
+    Statement: [
+      {
+        Resource: `https://${cloudFrontDomainName}/${prefixKey}*`,
+        Condition: {
+          DateLessThan: { 'AWS:EpochTime': Math.floor(expiresAt / 1000) },
+        },
+      },
+    ],
+  });
+
+  const signedCookies = getSignedCookies({
+    policy,
     keyPairId: cloudFrontKeyPairId,
     privateKey,
-    dateLessThan: new Date(Date.now() + DOWNLOAD_URL_EXPIRY_SECONDS * 1000),
   });
+
+  const attributes = `Domain=${cookieDomain}; Path=/${prefixKey}; Secure; HttpOnly; SameSite=None; Max-Age=${COOKIE_EXPIRY_SECONDS}`;
+  return Object.entries(signedCookies).map(
+    ([name, value]) => `${name}=${value}; ${attributes}`,
+  );
+};
+
+export const getCloudFrontVideoUrl = async (
+  objectKey: string,
+): Promise<string> => {
+  const { cloudFrontDomainName } = await resolveCloudFrontConfig();
+  return `https://${cloudFrontDomainName}/${objectKey}`;
 };

@@ -23,8 +23,9 @@ set -euo pipefail
 # - optionally creates the matching GitHub environment and sets its variables
 #   (requires an authenticated `gh` CLI)
 # - optionally configures custom domains and their ACM certificates for the
-#   APIs, portals and lesson media, stored as <STAGE>_<COMPONENT>_* variables
-#   on that GitHub environment (see
+#   APIs, portals and lesson media, plus (when lesson media has a domain) the
+#   shared parent domain HLS playback's signed cookies need, stored as
+#   <STAGE>_<COMPONENT>_* variables on that GitHub environment (see
 #   packages/common/infra-config/src/env-overrides.ts), which the deploy
 #   workflow forwards to synth
 #
@@ -56,6 +57,9 @@ set -euo pipefail
 #                        WATTLE_DEVELOPMENT_CORE_API_DOMAIN_NAME (otherwise
 #                        the stage's config, then the GitHub environment's
 #                        current variables)
+#   <STAGE>_LESSON_MEDIA_COOKIE_DOMAIN
+#                        shared cookie domain default for HLS playback (same
+#                        fallback order as above)
 #   DEPLOY_ROLE_NAME, EXECUTION_ROLE_NAME
 #
 # This script is designed to be idempotent and safe to run multiple times.
@@ -183,6 +187,7 @@ read_stages_config() {
           console.log('domains.' + name + '=' + [component.domainName ?? component.domainNames ?? []].flat().join(','));
           console.log('certificate.' + name + '=' + (component.certificateArn ?? ''));
         }
+        console.log('cookieDomain=' + (c.lessonMedia?.cookieDomain ?? ''));
       });
     " "$@"
   )
@@ -230,6 +235,27 @@ certificate_covers() {
   local names=",${1,,}," domain="${2,,}"
   [[ "$names" == *",$domain,"* ]] && return 0
   [[ "${domain#*.}" == *.* && "$names" == *",*.${domain#*.},"* ]]
+}
+
+# common_domain_suffix <domain> <domain>: prints the longest shared
+# dot-separated suffix, e.g. instructor-api.example.com and
+# lesson-media.example.com -> example.com. Empty if they share none.
+common_domain_suffix() {
+  local -a a_labels b_labels
+  IFS='.' read -r -a a_labels <<<"$1"
+  IFS='.' read -r -a b_labels <<<"$2"
+  local ai=$((${#a_labels[@]} - 1)) bi=$((${#b_labels[@]} - 1))
+  local -a common=()
+  while [[ $ai -ge 0 && $bi -ge 0 && "${a_labels[$ai]}" == "${b_labels[$bi]}" ]]; do
+    common=("${a_labels[$ai]}" "${common[@]}")
+    ((ai--))
+    ((bi--))
+  done
+  local result="" label
+  for label in "${common[@]}"; do
+    result="${result:+$result.}$label"
+  done
+  echo "$result"
 }
 
 # certificate_covers_all <comma-separated names> <comma-separated domains>
@@ -340,6 +366,7 @@ STAGE_REGION=""
 STAGE_ACCOUNT=""
 STAGE_PROFILE=""
 STAGE_CLOUDFRONT_WAF=""
+STAGE_COOKIE_DOMAIN=""
 # Keyed by component name, e.g. coreApi. Already include any
 # <STAGE>_<COMPONENT>_* overrides set in this shell (resolveStage applies them).
 declare -A STAGE_DOMAINS=() STAGE_CERTIFICATES=()
@@ -351,6 +378,7 @@ while IFS='=' read -r key value; do
     cloudFrontWaf) STAGE_CLOUDFRONT_WAF="$value" ;;
     domains.*) STAGE_DOMAINS["${key#domains.}"]="$value" ;;
     certificate.*) STAGE_CERTIFICATES["${key#certificate.}"]="$value" ;;
+    cookieDomain) STAGE_COOKIE_DOMAIN="$value" ;;
   esac
 done < <(read_stages_config "$INFRA_PROJECT_PATH" "$TARGET_STAGE")
 
@@ -481,6 +509,9 @@ fi
 # NAME=value pairs to set, and names to remove, on the GitHub environment.
 DOMAIN_VARIABLES=()
 DOMAIN_VARIABLES_TO_DELETE=()
+# Keyed by component name; the domain(s) actually entered below, so the
+# cookie-domain prompt after the loop can default off of them.
+declare -A RESOLVED_DOMAINS=()
 echo "Each component can be served from a custom domain instead of its generated"
 echo "*.execute-api.amazonaws.com / *.cloudfront.net hostname (leave blank for none)."
 echo "API certificates must be in $AWS_REGION; portal and media certificates, served"
@@ -535,6 +566,7 @@ for spec in \
     echo "$domain_error" >&2
     [[ "$ASSUME_YES" == false ]] || exit 1
   done
+  RESOLVED_DOMAINS["$component"]="$domains"
 
   if [[ -z "$domains" ]]; then
     [[ -z "$current_domains" ]] || DOMAIN_VARIABLES_TO_DELETE+=("$domain_variable")
@@ -586,6 +618,47 @@ for spec in \
 
   DOMAIN_VARIABLES+=("$domain_variable=$domains" "$certificate_variable=$certificate")
 done
+
+# HLS video playback authorizes via CloudFront signed cookies, which need a
+# domain shared between Instructor API (which issues them) and Lesson media
+# (which serves the video) -- only meaningful once Lesson media itself has a
+# custom domain configured above.
+if [[ -n "${RESOLVED_DOMAINS[lessonMedia]:-}" ]]; then
+  cookie_domain_variable="${STAGE_ENV_PREFIX}LESSON_MEDIA_COOKIE_DOMAIN"
+  current_cookie_domain=""
+  if [[ "$READ_GITHUB_VARIABLES" == true ]]; then
+    current_cookie_domain="$(github_environment_variable "$cookie_domain_variable")"
+  fi
+  cookie_domain_default="${STAGE_COOKIE_DOMAIN:-$current_cookie_domain}"
+  if [[ -z "$cookie_domain_default" && -n "${RESOLVED_DOMAINS[instructorApi]:-}" ]]; then
+    cookie_domain_default="$(common_domain_suffix \
+      "${RESOLVED_DOMAINS[instructorApi]}" \
+      "${RESOLVED_DOMAINS[lessonMedia]%%,*}")"
+  fi
+
+  echo ""
+  echo "HLS playback needs a domain shared by Instructor API and Lesson media"
+  echo "(e.g. example.com for instructor-api.example.com and"
+  echo "lesson-media.example.com) -- a cookie can only be set for the issuing"
+  echo "domain or one of its parents."
+  while true; do
+    ask_optional cookie_domain "Shared cookie domain for HLS playback" "$cookie_domain_default"
+    cookie_domain="${cookie_domain,,}"
+    cookie_domain_error=""
+    if [[ -n "$cookie_domain" && ! "$cookie_domain" =~ ^([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$ ]]; then
+      cookie_domain_error="Not a valid domain name: $cookie_domain"
+    fi
+    [[ -n "$cookie_domain_error" ]] || break
+    echo "$cookie_domain_error" >&2
+    [[ "$ASSUME_YES" == false ]] || exit 1
+  done
+
+  if [[ -n "$cookie_domain" ]]; then
+    DOMAIN_VARIABLES+=("$cookie_domain_variable=$cookie_domain")
+  elif [[ -n "$current_cookie_domain" ]]; then
+    DOMAIN_VARIABLES_TO_DELETE+=("$cookie_domain_variable")
+  fi
+fi
 
 cleanup() {
   rm -f "${DEPLOY_TRUST_POLICY_FILE:-}" \
