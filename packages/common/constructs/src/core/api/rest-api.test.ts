@@ -60,7 +60,9 @@ const aliasOutputs = (stack: Stack) =>
     ),
   );
 
-describe('RestApi', () => {
+// Synthesizing a stack takes well under a second in isolation but can pass
+// Vitest's 5s default when CI runs every project's tests in parallel.
+describe('RestApi', { timeout: 30_000 }, () => {
   it("outputs the custom domain's API Gateway alias target when configured", () => {
     const { stack } = buildApi('api.example.com');
     const [domainNameId] = Object.keys(
