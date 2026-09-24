@@ -91,7 +91,13 @@ function HlsVideoPlayer({
       return;
     }
 
-    const hls = new Hls();
+    // Auth is via CloudFront signed cookies (set on instructor-api's own
+    // domain), so hls.js's own cross-origin requests need to send them too.
+    const hls = new Hls({
+      xhrSetup: (xhr) => {
+        xhr.withCredentials = true;
+      },
+    });
     hls.loadSource(url);
     hls.attachMedia(video);
     return () => hls.destroy();

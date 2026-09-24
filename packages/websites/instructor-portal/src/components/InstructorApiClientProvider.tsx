@@ -56,6 +56,12 @@ export const InstructorApiClientProvider: FC<PropsWithChildren> = ({
             headers: {
               Authorization: `Bearer ${user?.access_token}`,
             },
+            // createVideoUrl sets CloudFront signed cookies cross-subdomain
+            // (instructor-api's own domain) for HLS playback -- without
+            // `credentials: 'include'`, the browser won't store cross-origin
+            // Set-Cookie response headers at all.
+            fetch: (url, options) =>
+              fetch(url, { ...options, credentials: 'include' }),
           }),
         }),
       ],
