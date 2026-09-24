@@ -1,0 +1,303 @@
+/**
+ * Copyright Wattle LMS Contributors. All Rights Reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+// @vitest-environment node
+import { spawnSync } from 'node:child_process';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { afterEach, describe, expect, it } from 'vitest';
+
+const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url));
+const SCRIPT = join(REPO_ROOT, 'scripts/setup-stage.sh');
+const REPOSITORY = 'AlexTo/wattle-lms';
+const IMMUTABLE_PREFIX = 'repo:AlexTo@296212/wattle-lms@1340223666';
+
+/** How the stub `gh` answers the OIDC subject customization request. */
+type OidcSettings =
+  | { kind: 'response'; useDefault: boolean; prefix?: string }
+  | { kind: 'request-fails' }
+  | { kind: 'no-gh' };
+
+// Records every call and keeps each policy document it's handed, so tests can
+// assert what the script would have sent to AWS without touching AWS. ACM
+// answers come from ACM_CERTIFICATES (list-certificates rows, all of key type
+// ACM_KEY_TYPE, default RSA_2048) and ACM_DESCRIBE (describe-certificate
+// output), tab-separated like --output text. Like ACM, list-certificates only
+// returns RSA_1024/RSA_2048 certificates unless --includes keyTypes says
+// otherwise.
+const AWS_STUB = `#!/usr/bin/env bash
+echo "aws $*" >> "$OUT/calls.log"
+case "$1 $2" in
+  "sts get-caller-identity") echo "arn:aws:sts::111122223333:assumed-role/Admin/test"; exit;;
+  "acm list-certificates")
+    key_types="RSA_1024,RSA_2048"
+    for arg in "$@"; do case "$arg" in keyTypes=*) key_types="\${arg#keyTypes=}";; esac; done
+    if [[ -n "\${ACM_CERTIFICATES:-}" && ",$key_types," == *",\${ACM_KEY_TYPE:-RSA_2048},"* ]]; then
+      printf '%b\\n' "$ACM_CERTIFICATES"
+    fi
+    exit;;
+  "acm describe-certificate") [[ -n "\${ACM_DESCRIBE:-}" ]] || { echo "ResourceNotFoundException" >&2; exit 254; }; printf '%b\\n' "$ACM_DESCRIBE"; exit;;
+  "configure get") echo "ap-southeast-2"; exit;;
+  "configure list-profiles") exit;;
+  "ssm get-parameter") exit 0;;
+  "iam get-open-id-connect-provider"|"iam get-role"|"iam get-policy") exit 1;;
+esac
+for arg in "$@"; do
+  case "$arg" in file://*) cp "\${arg#file://}" "$OUT/$(basename "\${arg#file://}" | sed 's/\\.[A-Za-z0-9]\\{6\\}\\.json$/.json/')";; esac
+done
+`;
+
+const ghStub = (settings: OidcSettings): string => {
+  const oidcResponse =
+    settings.kind === 'response'
+      ? `printf '%s\\t%s\\n' ${settings.useDefault} '${settings.prefix ?? ''}'; exit 0`
+      : `echo "connection reset" >&2; exit 1`;
+  return `#!/usr/bin/env bash
+echo "gh $*" >> "$OUT/calls.log"
+[[ "$1" == auth ]] && exit ${settings.kind === 'no-gh' ? 1 : 0}
+if [[ "$*" == *actions/oidc/customization/sub* ]]; then ${oidcResponse}; fi
+exit 0
+`;
+};
+
+const tempDirs: string[] = [];
+afterEach(() => {
+  for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true });
+});
+
+const runSetup = (settings: OidcSettings, env: Record<string, string> = {}) => {
+  const dir = mkdtempSync(join(tmpdir(), 'setup-stage-'));
+  tempDirs.push(dir);
+  const bin = join(dir, 'bin');
+  const out = join(dir, 'out');
+  mkdirSync(bin);
+  mkdirSync(out);
+  writeFileSync(join(bin, 'aws'), AWS_STUB);
+  writeFileSync(join(bin, 'gh'), ghStub(settings));
+  chmodSync(join(bin, 'aws'), 0o755);
+  chmodSync(join(bin, 'gh'), 0o755);
+
+  const result = spawnSync('bash', [SCRIPT, '--yes', 'wattle-development'], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      PATH: `${bin}:${process.env.PATH}`,
+      OUT: out,
+      GITHUB_REPOSITORY: REPOSITORY,
+      AWS_PROFILE: '',
+      ...env,
+    },
+  });
+
+  const calls = existsSync(join(out, 'calls.log'))
+    ? readFileSync(join(out, 'calls.log'), 'utf8').split('\n')
+    : [];
+  const trustFile = join(out, 'github-deploy-wattle-development.trust.json');
+  const trustedSubject = existsSync(trustFile)
+    ? JSON.parse(readFileSync(trustFile, 'utf8')).Statement[0].Condition
+        .StringEquals['token.actions.githubusercontent.com:sub']
+    : undefined;
+  return {
+    status: result.status,
+    output: `${result.stdout}${result.stderr}`,
+    iamCalls: calls.filter((call) => call.startsWith('aws iam ')),
+    ghVariableCalls: calls.filter((call) => call.startsWith('gh variable ')),
+    trustedSubject,
+  };
+};
+
+describe('setup-stage.sh OIDC subject', { timeout: 60_000 }, () => {
+  it("trusts the repository's immutable subject prefix", () => {
+    const { trustedSubject } = runSetup({
+      kind: 'response',
+      useDefault: true,
+      prefix: IMMUTABLE_PREFIX,
+    });
+
+    expect(trustedSubject).toBe(
+      `${IMMUTABLE_PREFIX}:environment:wattle-development`,
+    );
+  });
+
+  it('trusts repo:<owner>/<repo> when GitHub reports no prefix', () => {
+    const { trustedSubject } = runSetup({ kind: 'response', useDefault: true });
+
+    expect(trustedSubject).toBe(
+      `repo:${REPOSITORY}:environment:wattle-development`,
+    );
+  });
+
+  it('stops before touching IAM when the settings request fails', () => {
+    const { status, output, iamCalls, trustedSubject } = runSetup({
+      kind: 'request-fails',
+    });
+
+    expect(status).not.toBe(0);
+    expect(output).toContain("Couldn't read");
+    expect(iamCalls).toEqual([]);
+    expect(trustedSubject).toBeUndefined();
+  });
+
+  it('stops before touching IAM for a custom subject claim template', () => {
+    const { status, output, iamCalls } = runSetup({
+      kind: 'response',
+      useDefault: false,
+    });
+
+    expect(status).not.toBe(0);
+    expect(output).toContain('custom OIDC subject claim template');
+    expect(iamCalls).toEqual([]);
+  });
+
+  it('warns and assumes the default prefix without an authenticated gh', () => {
+    const { output, trustedSubject } = runSetup({ kind: 'no-gh' });
+
+    expect(output).toContain('assuming the default prefix');
+    expect(trustedSubject).toBe(
+      `repo:${REPOSITORY}:environment:wattle-development`,
+    );
+  });
+
+  it('uses GITHUB_OIDC_SUBJECT_PREFIX without asking GitHub', () => {
+    const { trustedSubject } = runSetup(
+      { kind: 'request-fails' },
+      { GITHUB_OIDC_SUBJECT_PREFIX: 'repo:someone/fork' },
+    );
+
+    expect(trustedSubject).toBe(
+      'repo:someone/fork:environment:wattle-development',
+    );
+  });
+});
+
+const CERTIFICATE_ARN =
+  'arn:aws:acm:us-east-1:111122223333:certificate/11111111-2222-3333-4444-555555555555';
+const REGIONAL_CERTIFICATE_ARN =
+  'arn:aws:acm:ap-southeast-2:111122223333:certificate/66666666-7777-8888-9999-000000000000';
+const GH_READY: OidcSettings = { kind: 'response', useDefault: true };
+
+describe('setup-stage.sh custom domains', { timeout: 60_000 }, () => {
+  it('sets no domain variables when no domains are configured', () => {
+    const { status, ghVariableCalls } = runSetup(GH_READY);
+
+    expect(status).toBe(0);
+    expect(ghVariableCalls.filter((call) => call.includes('DOMAIN'))).toEqual(
+      [],
+    );
+  });
+
+  it('stores a domain with the issued certificate found for it', () => {
+    const { status, ghVariableCalls } = runSetup(GH_READY, {
+      WATTLE_DEVELOPMENT_CORE_API_DOMAIN_NAME: 'api.example.com',
+      ACM_CERTIFICATES: `${REGIONAL_CERTIFICATE_ARN}\\t*.example.com,example.com`,
+      ACM_DESCRIBE: 'ISSUED\\tRSA-2048\\t*.example.com,example.com',
+    });
+
+    expect(status).toBe(0);
+    expect(ghVariableCalls).toContain(
+      `gh variable set WATTLE_DEVELOPMENT_CORE_API_DOMAIN_NAME --repo ${REPOSITORY} --env wattle-development --body api.example.com`,
+    );
+    expect(ghVariableCalls).toContain(
+      `gh variable set WATTLE_DEVELOPMENT_CORE_API_CERTIFICATE_ARN --repo ${REPOSITORY} --env wattle-development --body ${REGIONAL_CERTIFICATE_ARN}`,
+    );
+  });
+
+  it('finds ECDSA certificates, which ACM only lists when asked for', () => {
+    const { status, ghVariableCalls } = runSetup(GH_READY, {
+      WATTLE_DEVELOPMENT_CORE_API_DOMAIN_NAME: 'api.example.com',
+      ACM_CERTIFICATES: `${REGIONAL_CERTIFICATE_ARN}\\t*.example.com`,
+      ACM_KEY_TYPE: 'EC_prime256v1',
+      ACM_DESCRIBE: 'ISSUED\\tEC-prime256v1\\t*.example.com',
+    });
+
+    expect(status).toBe(0);
+    expect(ghVariableCalls).toContain(
+      `gh variable set WATTLE_DEVELOPMENT_CORE_API_CERTIFICATE_ARN --repo ${REPOSITORY} --env wattle-development --body ${REGIONAL_CERTIFICATE_ARN}`,
+    );
+  });
+
+  it('rejects an RSA key over 2048 bits for an API', () => {
+    const { status, output, iamCalls } = runSetup(GH_READY, {
+      WATTLE_DEVELOPMENT_CORE_API_DOMAIN_NAME: 'api.example.com',
+      WATTLE_DEVELOPMENT_CORE_API_CERTIFICATE_ARN: REGIONAL_CERTIFICATE_ARN,
+      ACM_DESCRIBE: 'ISSUED\\tRSA-4096\\t*.example.com',
+    });
+
+    expect(status).not.toBe(0);
+    expect(output).toContain("doesn't support");
+    expect(iamCalls).toEqual([]);
+  });
+
+  it('stops before touching IAM when no issued certificate covers a domain', () => {
+    const { status, output, iamCalls, ghVariableCalls } = runSetup(GH_READY, {
+      WATTLE_DEVELOPMENT_CORE_API_DOMAIN_NAME: 'api.example.com',
+      ACM_CERTIFICATES: `${REGIONAL_CERTIFICATE_ARN}\\tother.example.org`,
+    });
+
+    expect(status).not.toBe(0);
+    expect(output).toContain('No issued certificate');
+    expect(iamCalls).toEqual([]);
+    expect(ghVariableCalls).toEqual([]);
+  });
+
+  it('stores comma-separated CloudFront domains', () => {
+    const { status, ghVariableCalls } = runSetup(GH_READY, {
+      WATTLE_DEVELOPMENT_STUDENT_PORTAL_DOMAIN_NAMES:
+        'example.com, www.example.com',
+      WATTLE_DEVELOPMENT_STUDENT_PORTAL_CERTIFICATE_ARN: CERTIFICATE_ARN,
+      ACM_DESCRIBE: 'ISSUED\\tRSA-2048\\texample.com,*.example.com',
+    });
+
+    expect(status).toBe(0);
+    expect(ghVariableCalls).toContain(
+      `gh variable set WATTLE_DEVELOPMENT_STUDENT_PORTAL_DOMAIN_NAMES --repo ${REPOSITORY} --env wattle-development --body example.com,www.example.com`,
+    );
+  });
+
+  it('rejects a CloudFront certificate outside us-east-1 before touching IAM', () => {
+    const { status, output, iamCalls } = runSetup(GH_READY, {
+      WATTLE_DEVELOPMENT_LESSON_MEDIA_DOMAIN_NAMES: 'media.example.com',
+      WATTLE_DEVELOPMENT_LESSON_MEDIA_CERTIFICATE_ARN: REGIONAL_CERTIFICATE_ARN,
+      ACM_DESCRIBE: 'ISSUED\\tRSA-2048\\t*.example.com',
+    });
+
+    expect(status).not.toBe(0);
+    expect(output).toContain('must be in us-east-1');
+    expect(iamCalls).toEqual([]);
+  });
+
+  it("rejects a certificate that doesn't cover every domain", () => {
+    const { status, output, iamCalls } = runSetup(GH_READY, {
+      WATTLE_DEVELOPMENT_ADMIN_PORTAL_DOMAIN_NAMES: 'admin.lms.example.com',
+      WATTLE_DEVELOPMENT_ADMIN_PORTAL_CERTIFICATE_ARN: CERTIFICATE_ARN,
+      // A wildcard covers exactly one label.
+      ACM_DESCRIBE: 'ISSUED\\tRSA-2048\\t*.example.com',
+    });
+
+    expect(status).not.toBe(0);
+    expect(output).toContain("doesn't cover");
+    expect(iamCalls).toEqual([]);
+  });
+
+  it('rejects more than one domain for an API', () => {
+    const { status, output } = runSetup(GH_READY, {
+      WATTLE_DEVELOPMENT_INSTRUCTOR_API_DOMAIN_NAME:
+        'a.example.com,b.example.com',
+    });
+
+    expect(status).not.toBe(0);
+    expect(output).toContain('takes a single domain');
+  });
+});

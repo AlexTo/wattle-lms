@@ -65,7 +65,7 @@
       "inputs": [
         "default",
         "^default",
-        "{workspaceRoot}/scripts/setup-github-oidc.sh"
+        "{workspaceRoot}/scripts/setup-stage.sh"
       ]
     }
   }
