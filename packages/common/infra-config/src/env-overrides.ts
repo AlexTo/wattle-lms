@@ -73,6 +73,7 @@ const COMPONENT_FIELDS: Record<
     retainOnDelete: 'boolean',
     domainNames: 'string[]',
     certificateArn: 'string',
+    cookieDomain: 'string',
   },
 };
 

@@ -77,6 +77,14 @@ export interface MediaBucketProps {
    * When provided, viewers are required to use TLS 1.2 or later.
    */
   readonly certificate?: ICertificate;
+  /**
+   * `Domain=` attribute for the CloudFront signed cookies issued for HLS
+   * video playback. Must be a shared parent domain of `domainNames` here
+   * and instructor-api's own custom domain (which is what actually issues
+   * the cookies) -- a cookie can only be set for the issuing domain or one
+   * of its parents.
+   */
+  readonly cookieDomain?: string;
 }
 
 /**
@@ -104,6 +112,7 @@ export class MediaBucket extends Construct {
       removalPolicy = RemovalPolicy.RETAIN,
       domainNames,
       certificate,
+      cookieDomain,
     }: MediaBucketProps,
   ) {
     super(scope, id);
@@ -164,8 +173,13 @@ export class MediaBucket extends Construct {
       'CorsResponseHeadersPolicy',
       {
         corsBehavior: {
-          accessControlAllowCredentials: false,
-          accessControlAllowHeaders: ['*'],
+          // hls.js's own fetches carry the CloudFront signed cookies, so
+          // its cross-origin requests need credentials allowed under CORS.
+          // A literal '*' isn't allowed here alongside credentials -- an
+          // explicit list is required, so this only covers what a video
+          // player's GET/HEAD requests actually need.
+          accessControlAllowCredentials: true,
+          accessControlAllowHeaders: ['range', 'content-type'],
           accessControlAllowMethods: ['GET', 'HEAD'],
           accessControlAllowOrigins: Lazy.list({
             produce: () => this.allowedOrigins,
@@ -231,6 +245,7 @@ export class MediaBucket extends Construct {
           : this.cloudFrontDistribution.domainName,
       cloudFrontKeyPairId: signingPublicKey.publicKeyId,
       cloudFrontPrivateKeySecretArn: this.signingKeyPairSecret.secretArn,
+      cookieDomain,
     });
 
     // Always the generated *.cloudfront.net hostname, even with a custom

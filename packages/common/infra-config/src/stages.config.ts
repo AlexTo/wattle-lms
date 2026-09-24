@@ -25,6 +25,10 @@ import type { StagesConfig } from './stages.types.js';
 // domains are picked up automatically as API CORS origins and Cognito
 // callback/logout URLs. DNS records pointing each domain at its API Gateway /
 // CloudFront target aren't managed by the stack and need creating separately.
+//
+// HLS video playback additionally needs a shared parent domain for signed
+// cookies, independent of the certificate/domainNames above:
+//     WATTLE_DEVELOPMENT_LESSON_MEDIA_COOKIE_DOMAIN      example.com
 export default {
   projects: {
     'packages/infra': {

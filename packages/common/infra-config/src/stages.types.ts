@@ -162,6 +162,19 @@ export type LessonMediaComponentConfig = {
   domainNames?: string[];
   /** ACM certificate ARN for the custom domain names. Must be in us-east-1. */
   certificateArn?: string;
+  /**
+   * `Domain=` attribute for the CloudFront signed cookies issued when an
+   * instructor plays back a video's HLS output. Must be a shared parent
+   * domain of both `domainNames` here and `instructorApi.domainName` (e.g.
+   * `alexto.net` when those are `lesson-media.alexto.net` and
+   * `instructor-api.alexto.net`) -- a cookie can only be set for the
+   * issuing domain or one of its parents, and instructor-api is what
+   * issues these cookies. Required for HLS playback to work at all: the
+   * manifest, rendition playlists, and segments are separate CloudFront
+   * requests that only a cookie (not a signed URL) can authorize
+   * uniformly. See https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-choosing-signed-urls-cookies.html
+   */
+  cookieDomain?: string;
 };
 
 /**

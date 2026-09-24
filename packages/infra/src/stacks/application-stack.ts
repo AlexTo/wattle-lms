@@ -298,6 +298,7 @@ export class ApplicationStack extends Stack {
         : RemovalPolicy.DESTROY,
       domainNames: lessonMediaConfig?.domainNames,
       certificate: lessonMediaCertificate,
+      cookieDomain: lessonMediaConfig?.cookieDomain,
     });
     if (!lessonMediaKmsEnabled) {
       suppressRules(
